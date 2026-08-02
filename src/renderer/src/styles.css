@@ -1225,3 +1225,53 @@ body,
   padding: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); display: none; z-index: 40;
 }
 .mode-trigger:hover .mode-submenu { display: block; }
+
+/* ---- models list table ---- */
+.add-model-btn { margin-bottom: 14px; }
+.info-banner {
+  display: flex; align-items: center; gap: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--text); border-radius: 10px;
+  padding: 10px 14px; font-size: 13px; margin-bottom: 16px;
+}
+.info-icon {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-style: italic; flex-shrink: 0;
+}
+.empty-models {
+  text-align: center; color: var(--text-dim); padding: 40px 0; font-size: 14px;
+}
+.model-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+}
+.model-table th, .model-table td {
+  text-align: left; padding: 12px 16px; font-size: 14px;
+}
+.model-table th {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-dim); font-weight: 600;
+  background: var(--bg-elev2);
+}
+.model-table tbody tr { border-top: 1px solid var(--border); }
+.model-table .col-actions {
+  text-align: right; white-space: nowrap; width: 1%;
+}
+.model-table .col-actions .icon-btn { width: auto; padding: 4px 8px; }
+.model-name { font-weight: 500; }
+.default-tag {
+  margin-left: 8px; font-size: 10px; background: var(--accent); color: #fff;
+  padding: 1px 7px; border-radius: 10px; vertical-align: middle;
+}
+.switch.small { width: 36px; height: 20px; }
+.switch.small .knob { width: 14px; height: 14px; }
+.switch.small.on .knob { transform: translateX(16px); }
+.back-btn {
+  background: none; border: none; color: var(--accent); cursor: pointer;
+  font-size: 14px; padding: 0 0 8px; font-family: inherit;
+}
+.back-btn:hover { text-decoration: underline; }

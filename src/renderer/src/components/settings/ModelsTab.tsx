@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ConfiguredModel,
-  ModelInfo,
+  ModelConfig,
   ProviderKind,
   Settings as SettingsType,
   VerifyResult,
 } from "../../../../shared/types";
 import {
-  modelsForProvider,
+  MODEL_CATALOG,
   PROVIDER_PRESETS,
 } from "../../../../shared/providers";
 
@@ -19,8 +19,6 @@ interface Props {
   onSettingsChange: (patch: Partial<SettingsType>) => void;
 }
 
-type ConnectionState = "idle" | "testing" | "connected" | "failed";
-
 export function ModelsTab({
   settings,
   apiKey,
@@ -28,336 +26,152 @@ export function ModelsTab({
   onChange,
   onSettingsChange,
 }: Props): React.ReactElement {
-  const [provider, setProvider] = useState<ProviderKind>(settings.model.provider);
-  const [catalog, setCatalog] = useState<ModelInfo[]>([]);
-  const [state, setState] = useState<ConnectionState>("idle");
-  const [result, setResult] = useState<VerifyResult | null>(null);
-  const [newModel, setNewModel] = useState("");
+  const [editing, setEditing] = useState<ConfiguredModel | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    void window.deepwork.models.catalog().then(setCatalog);
-  }, []);
+  const configured = settings.configuredModels ?? [];
+  // Ensure the active settings model is always represented in the list.
+  const effectiveList = withActiveModel(settings, configured);
 
-  useEffect(() => {
-    setProvider(settings.model.provider);
-    setState("idle");
-    setResult(null);
-  }, [settings.model.provider]);
-
-  const preset = PROVIDER_PRESETS[provider];
-  const needsKey = provider !== "ollama";
-  const isOllama = provider === "ollama";
-
-  // Configured models for this provider, plus catalog suggestions not yet added.
-  const configuredForProvider = useMemo(
-    () => settings.configuredModels.filter((m) => m.provider === provider),
-    [settings.configuredModels, provider],
-  );
-  const configuredIds = new Set(configuredForProvider.map((m) => m.id));
-  const suggestions = useMemo(
-    () =>
-      modelsForProvider(provider).filter((m) => !configuredIds.has(m.id)),
-    [provider, configuredIds],
-  );
-
-  // The model config being edited. If the user picked a different provider
-  // than the active one, use an in-memory draft until they save.
-  const modelConfig =
-    settings.model.provider === provider
-      ? settings.model
-      : {
-          ...settings.model,
-          provider,
-          baseUrl: preset.baseUrl,
-          model:
-            configuredForProvider.find((m) => m.isDefault)?.id ??
-            preset.defaultModel,
-        };
-
-  const selectProvider = (p: ProviderKind): void => {
-    setProvider(p);
-    setState("idle");
-    setResult(null);
-    // Persist the provider switch so save/apply uses it.
-    const pre = PROVIDER_PRESETS[p];
-    onChange({
-      provider: p,
-      baseUrl: pre.baseUrl,
-      model:
-        settings.configuredModels.find((m) => m.provider === p && m.isDefault)?.id ??
-        pre.defaultModel,
-    });
+  const startCreate = (): void => {
+    setEditing(null);
+    setCreating(true);
+  };
+  const startEdit = (m: ConfiguredModel): void => {
+    setCreating(false);
+    setEditing(m);
+  };
+  const closeEditor = (): void => {
+    setEditing(null);
+    setCreating(false);
   };
 
-  const patchSettings = (models: ConfiguredModel[]): void => {
-    onSettingsChange({ configuredModels: models });
-  };
-
-  const upsertModel = (id: string, patch?: Partial<ConfiguredModel>): void => {
-    const all = settings.configuredModels.filter(
-      (m) => !(m.provider === provider && m.id === id),
+  if (creating || editing) {
+    return (
+      <ModelEditor
+        settings={settings}
+        apiKey={apiKey}
+        onApiKey={onApiKey}
+        editing={editing}
+        creating={creating}
+        onChange={onChange}
+        onSettingsChange={onSettingsChange}
+        onClose={closeEditor}
+      />
     );
-    const current = settings.configuredModels.find(
-      (m) => m.provider === provider && m.id === id,
-    );
-    all.push({
-      id,
-      provider,
-      enabled: current?.enabled ?? true,
-      isDefault: current?.isDefault,
-      ...patch,
-    });
-    patchSettings(all);
-  };
+  }
 
   const removeModel = (id: string): void => {
-    const all = settings.configuredModels.filter(
-      (m) => !(m.provider === provider && m.id === id),
-    );
-    patchSettings(all);
-  };
-
-  const setDefault = (id: string): void => {
-    const all = settings.configuredModels.map((m) =>
-      m.provider === provider ? { ...m, isDefault: m.id === id } : m,
-    );
-    patchSettings(all);
-    onChange({ model: id });
-  };
-
-  const toggleEnabled = (id: string, enabled: boolean): void => {
-    upsertModel(id, { enabled });
-  };
-
-  const addModel = (): void => {
-    const id = newModel.trim();
-    if (!id || configuredIds.has(id)) return;
-    const all = [
-      ...settings.configuredModels,
-      { id, provider, enabled: true, isDefault: configuredForProvider.length === 0 },
-    ];
-    patchSettings(all);
-    if (configuredForProvider.length === 0) onChange({ model: id });
-    setNewModel("");
-  };
-
-  const runTest = async (): Promise<void> => {
-    setState("testing");
-    setResult(null);
-    if (needsKey) await window.deepwork.settings.setKey(provider, apiKey.trim());
-    const r = await window.deepwork.models.verify({
-      provider,
-      model: modelConfig.model,
-      baseUrl: modelConfig.baseUrl,
-      workspaceDir: settings.model.workspaceDir,
+    onSettingsChange({
+      configuredModels: configured.filter((m) => m.id !== id),
     });
-    setResult(r);
-    if (r.ok) {
-      setState("connected");
-      // Auto-add verified/reported models for this provider (deduped).
-      if (r.models && r.models.length) {
-        const existing = new Set(settings.configuredModels.map((m) => `${m.provider}:${m.id}`));
-        const added: ConfiguredModel[] = [];
-        for (const id of r.models) {
-          if (!existing.has(`${provider}:${id}`)) {
-            added.push({
-              id,
-              provider,
-              enabled: added.length < 8,
-              isDefault: settings.configuredModels.filter((m) => m.provider === provider).length === 0 && added.length === 0,
-            });
-          }
-        }
-        if (added.length) {
-          onSettingsChange({ configuredModels: [...settings.configuredModels, ...added] });
-        }
-      }
-    } else {
-      setState("failed");
-    }
   };
 
-  const removeKey = async (): Promise<void> => {
-    await window.deepwork.settings.setKey(provider, "");
-    onApiKey("");
-    setState("idle");
-    setResult(null);
+  const toggleModel = (id: string, enabled: boolean): void => {
+    onSettingsChange({
+      configuredModels: configured.map((m) =>
+        m.id === id ? { ...m, enabled } : m,
+      ),
+    });
   };
 
-  const connected = state === "connected" || (result?.ok && state !== "failed");
+  const setDefault = (m: ConfiguredModel): void => {
+    onSettingsChange({
+      configuredModels: configured.map((x) => ({
+        ...x,
+        isDefault: x.id === m.id,
+      })),
+      model: { ...settings.model, provider: m.provider, model: shortId(m.id) },
+    });
+  };
 
   return (
     <div className="settings-section">
       <h2>模型</h2>
-      <p className="section-desc">配置提供方、密钥和可用模型。勾选的模型会出现在输入框的模型选择器中。</p>
 
-      <div className="setting-card">
-        <div className="provider-picker">
-          <div className="provider-current">
-            <span className="provider-name">{preset.label}</span>
-            {connected ? (
-              <span className="conn-ok">✓ Connected</span>
-            ) : state === "failed" ? (
-              <span className="conn-err">Connection failed</span>
-            ) : null}
-          </div>
-          <div className="provider-grid compact">
-            {Object.values(PROVIDER_PRESETS).map((p) => (
-              <button
-                key={p.kind}
-                className={`provider-chip ${provider === p.kind ? "active" : ""}`}
-                onClick={() => selectProvider(p.kind)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <h3>模型管理</h3>
+      <p className="section-desc">
+        配置 API key 并添加可用模型，勾选启用后会出现在输入框的模型选择器中。
+      </p>
+
+      <button className="btn primary add-model-btn" onClick={startCreate}>
+        + 添加模型
+      </button>
+
+      <div className="info-banner">
+        <span className="info-icon">i</span>
+        添加的模型在本地 DeepWork 中使用，需要对应的 API key 或兼容端点。
       </div>
 
-      {needsKey && (
-        <div className="setting-card">
-          <div className="setting-label" style={{ marginBottom: 8 }}>{preset.label} API key</div>
-          <div className="row" style={{ alignItems: "stretch" }}>
-            <div className={`key-input ${connected ? "saved" : ""} ${state === "failed" ? "err" : ""}`}>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => {
-                  onApiKey(e.target.value);
-                  setState("idle");
-                }}
-                placeholder={preset.keyPlaceholder}
-              />
-              {connected && <span className="badge ok">✓ Tested &amp; saved</span>}
-            </div>
-            <button className="btn" onClick={runTest} disabled={state === "testing"}>
-              {state === "testing" ? "Testing…" : "Test"}
-            </button>
-          </div>
-          {result && !result.ok && (
-            <div className="setting-hint" style={{ color: "var(--danger)", marginTop: 8 }}>
-              ✕ {result.message}
-            </div>
-          )}
-          {preset.envKey && (
-            <div className="setting-hint">
-              也可通过环境变量 {preset.envKey} 提供；留空则使用已保存的密钥。
-            </div>
-          )}
-          {apiKey && (
-            <button className="link-danger" onClick={removeKey}>Remove key…</button>
-          )}
+      {effectiveList.length === 0 ? (
+        <div className="empty-models">
+          还没有配置模型。点击「添加模型」开始。
         </div>
+      ) : (
+        <table className="model-table">
+          <thead>
+            <tr>
+              <th>模型</th>
+              <th>服务商</th>
+              <th className="col-actions">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {effectiveList.map((m) => {
+              const preset = PROVIDER_PRESETS[m.provider];
+              const isDefault =
+                m.isDefault ||
+                (settings.model.provider === m.provider &&
+                  settings.model.model === shortId(m.id) &&
+                  !configured.some((x) => x.isDefault));
+              return (
+                <tr key={m.id}>
+                  <td>
+                    <span className="model-name">{shortId(m.id)}</span>
+                    {isDefault && <span className="default-tag">默认</span>}
+                  </td>
+                  <td>{preset?.label ?? m.provider}</td>
+                  <td className="col-actions">
+                    <button
+                      className="icon-btn"
+                      title="编辑"
+                      onClick={() => startEdit(m)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="icon-btn"
+                      title="删除"
+                      onClick={() => removeModel(m.id)}
+                    >
+                      🗑
+                    </button>
+                    <label className="switch small" title="启用">
+                      <input
+                        type="checkbox"
+                        checked={m.enabled}
+                        onChange={(e) => toggleModel(m.id, e.target.checked)}
+                      />
+                      <span className="knob" />
+                    </label>
+                    {!isDefault && (
+                      <button
+                        className="btn small ghost"
+                        onClick={() => setDefault(m)}
+                      >
+                        设为默认
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
 
-      {!isOllama && (
-        <div className="setting-card">
-          <div className="setting-label" style={{ marginBottom: 8 }}>Custom endpoint (可选)</div>
-          <input
-            value={modelConfig.baseUrl ?? ""}
-            onChange={(e) => onChange({ baseUrl: e.target.value })}
-            placeholder={preset.baseUrl || "https://api.example.com/v1"}
-          />
-          <p className="setting-hint">
-            用于 Azure OpenAI、OpenRouter、vLLM 或任何 OpenAI 兼容服务。留空使用默认端点。
-          </p>
-        </div>
-      )}
-
-      {isOllama && (
-        <div className="setting-card">
-          <div className="setting-label" style={{ marginBottom: 8 }}>Ollama 地址</div>
-          <input
-            value={modelConfig.baseUrl ?? ""}
-            onChange={(e) => onChange({ baseUrl: e.target.value })}
-            placeholder={preset.baseUrl}
-          />
-        </div>
-      )}
-
-      <h3>MODELS</h3>
-      <p className="section-desc">勾选的模型会显示在输入框的模型选择器中；default 标记为新会话的默认模型。</p>
-
-      <div className="setting-card">
-        {configuredForProvider.length === 0 && suggestions.length === 0 && (
-          <p className="setting-hint">还没有模型。先 Test 连接以自动获取，或在下方手动添加。</p>
-        )}
-
-        {configuredForProvider.map((m) => {
-          const info = catalog.find((c) => c.id === m.id);
-          return (
-            <div key={m.id} className="model-row">
-              <label className="model-check">
-                <input
-                  type="checkbox"
-                  checked={m.enabled}
-                  onChange={(e) => toggleEnabled(m.id, e.target.checked)}
-                />
-                <span>{info?.label ?? m.id}</span>
-              </label>
-              <div className="model-actions">
-                {m.isDefault ? (
-                  <span className="default-badge">default</span>
-                ) : (
-                  <button className="btn small ghost" onClick={() => setDefault(m.id)}>
-                    设为默认
-                  </button>
-                )}
-                <button
-                  className="icon-btn"
-                  title="Remove"
-                  onClick={() => removeModel(m.id)}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        {suggestions.length > 0 && (
-          <>
-            <div className="setting-sep" />
-            <div className="setting-hint">推荐模型</div>
-            {suggestions.map((m) => (
-              <div key={m.id} className="model-row">
-                <label className="model-check">
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    onChange={() => upsertModel(m.id, { enabled: true })}
-                  />
-                  <span>
-                    {m.label}
-                    {m.recommended ? " ★" : ""}
-                  </span>
-                </label>
-                <span className="model-tags">
-                  {m.vision && <em>👁</em>}
-                  <em>{Math.round(m.contextWindow / 1000)}k</em>
-                </span>
-              </div>
-            ))}
-          </>
-        )}
-
-        <div className="setting-sep" />
-        <div className="row">
-          <input
-            value={newModel}
-            onChange={(e) => setNewModel(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addModel()}
-            placeholder="Add another model…"
-          />
-          <button className="btn primary" onClick={addModel}>
-            Add
-          </button>
-        </div>
-      </div>
-
-      <div className="setting-card">
-        <div className="setting-label">工作区目录</div>
+      <div className="setting-card" style={{ marginTop: 24 }}>
+        <div className="setting-label">默认工作区目录</div>
         <div className="row" style={{ marginTop: 8 }}>
           <input
             value={settings.model.workspaceDir}
@@ -378,4 +192,216 @@ export function ModelsTab({
       </div>
     </div>
   );
+}
+
+/* ---- editor ---- */
+
+function ModelEditor({
+  settings,
+  apiKey,
+  onApiKey,
+  editing,
+  creating,
+  onChange,
+  onSettingsChange,
+  onClose,
+}: {
+  settings: SettingsType;
+  apiKey: string;
+  onApiKey: (k: string) => void;
+  editing: ConfiguredModel | null;
+  creating: boolean;
+  onChange: (patch: Partial<ModelConfig>) => void;
+  onSettingsChange: (patch: Partial<SettingsType>) => void;
+  onClose: () => void;
+}): React.ReactElement {
+  const [provider, setProvider] = useState<ProviderKind>(
+    editing?.provider ?? settings.model.provider,
+  );
+  const [modelId, setModelId] = useState(
+    editing ? shortId(editing.id) : "",
+  );
+  const [baseUrl, setBaseUrl] = useState(settings.model.baseUrl ?? "");
+  const [verifying, setVerifying] = useState(false);
+  const [result, setResult] = useState<VerifyResult | null>(null);
+
+  const preset = PROVIDER_PRESETS[provider];
+  const needsKey = provider !== "ollama";
+  const suggestions = MODEL_CATALOG.filter((m) => m.provider === provider);
+
+  // When switching provider, update base URL to preset default.
+  useEffect(() => {
+    if (creating) setBaseUrl(PROVIDER_PRESETS[provider]?.baseUrl ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
+
+  const verify = async (): Promise<void> => {
+    setVerifying(true);
+    setResult(null);
+    if (needsKey) await window.deepwork.settings.setKey(provider, apiKey.trim());
+    const cfg: ModelConfig = {
+      provider,
+      model: modelId || preset.defaultModel,
+      baseUrl: baseUrl || undefined,
+      workspaceDir: settings.model.workspaceDir,
+    };
+    setResult(await window.deepwork.models.verify(cfg));
+    setVerifying(false);
+  };
+
+  const save = (): void => {
+    const id = modelId.trim() || preset.defaultModel;
+    if (!id) return;
+    if (needsKey && apiKey.trim()) {
+      void window.deepwork.settings.setKey(provider, apiKey.trim());
+    }
+    const entry: ConfiguredModel = {
+      id: `${provider}:${id}`,
+      provider,
+      enabled: editing?.enabled ?? true,
+      isDefault: editing?.isDefault ?? settings.configuredModels.length === 0,
+    };
+    const others = settings.configuredModels.filter(
+      (m) => m.id !== entry.id,
+    );
+    onSettingsChange({
+      configuredModels: [...others, entry],
+      model: {
+        ...settings.model,
+        provider,
+        model: id,
+        ...(baseUrl ? { baseUrl } : {}),
+      },
+    });
+    onClose();
+  };
+
+  return (
+    <div className="settings-section">
+      <button className="back-btn" onClick={onClose}>
+        ‹ 模型
+      </button>
+      <h2>{creating ? "添加模型" : "编辑模型"}</h2>
+
+      <div className="setting-card">
+        <div className="field">
+          <label>服务商</label>
+          <div className="provider-grid">
+            {Object.values(PROVIDER_PRESETS).map((p) => (
+              <button
+                key={p.kind}
+                className={`provider-chip ${provider === p.kind ? "active" : ""}`}
+                onClick={() => setProvider(p.kind)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <label>模型 ID</label>
+          <input
+            list="deepwork-model-edit-list"
+            value={modelId}
+            onChange={(e) => setModelId(e.target.value)}
+            placeholder={preset.defaultModel}
+            spellCheck={false}
+          />
+          <datalist id="deepwork-model-edit-list">
+            {suggestions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </datalist>
+          <p className="setting-hint">
+            可从建议中选择，或直接输入服务商支持的任意模型名称。
+          </p>
+        </div>
+
+        {!needsKey ? (
+          <div className="field">
+            <label>Ollama 地址</label>
+            <input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={preset.baseUrl}
+            />
+          </div>
+        ) : (
+          <div className="field">
+            <label>
+              {preset.label} API Key
+              {preset.envKey ? `（也可通过环境变量 ${preset.envKey} 提供）` : ""}
+            </label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => onApiKey(e.target.value)}
+              placeholder={preset.keyPlaceholder}
+            />
+          </div>
+        )}
+
+        <div className="field">
+          <label>Custom endpoint（可选）</label>
+          <input
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder={preset.baseUrl || "https://api.example.com/v1"}
+          />
+          <p className="setting-hint">
+            用于 OpenRouter、vLLM、火山 Ark 等 OpenAI 兼容服务；留空使用默认端点。
+          </p>
+        </div>
+
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn" onClick={verify} disabled={verifying}>
+            {verifying ? "验证中…" : "测试连接"}
+          </button>
+          <button className="btn primary" onClick={save}>
+            保存
+          </button>
+          {result && (
+            <span style={{ color: result.ok ? "var(--ok)" : "var(--danger)" }}>
+              {result.ok ? "✓ " : "✕ "}
+              {result.message}
+            </span>
+          )}
+        </div>
+        {result?.models && result.models.length > 0 && (
+          <div className="setting-hint" style={{ marginTop: 8 }}>
+            可用模型：{result.models.slice(0, 8).join(", ")}
+            {result.models.length > 8 ? "…" : ""}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---- helpers ---- */
+
+function shortId(id: string): string {
+  return id.includes(":") ? id.split(":").slice(1).join(":") : id;
+}
+
+/** Make sure the list always includes the active settings model. */
+function withActiveModel(
+  settings: SettingsType,
+  configured: ConfiguredModel[],
+): ConfiguredModel[] {
+  const activeId = `${settings.model.provider}:${settings.model.model}`;
+  if (configured.some((m) => m.id === activeId)) return configured;
+  // Synthesize an entry for the active model so it appears in the list.
+  return [
+    ...configured,
+    {
+      id: activeId,
+      provider: settings.model.provider,
+      enabled: true,
+      isDefault: true,
+    },
+  ];
 }
