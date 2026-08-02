@@ -2,6 +2,7 @@ import { ipcMain, type BrowserWindow, dialog, shell, app } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { agentManager } from "../agent/manager";
+import { getDb } from "../storage/db";
 import { approvals } from "../security/approvals";
 import { verifyModelConfig } from "../agent/model";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
@@ -13,11 +14,13 @@ import {
   renameSession,
   deleteSession,
   setSessionGroup,
+  setSessionWorkspace,
+  getSession,
   renameGroup,
   deleteGroup,
   createGroup,
   listGroups,
-  DEFAULT_GROUP,
+  groupForWorkspace,
 } from "../storage/sessions";
 import {
   listSkills,
@@ -52,8 +55,10 @@ import type {
 export function registerIpc(getWin: () => BrowserWindow | null): void {
   // ---- sessions ----
   ipcMain.handle("sessions:list", () => listSessions());
-  ipcMain.handle("sessions:create", (_e, title?: string, group?: string) =>
-    createSession(title, group),
+  ipcMain.handle(
+    "sessions:create",
+    (_e, title?: string, workspaceDir?: string) =>
+      createSession(title, workspaceDir),
   );
   ipcMain.handle("sessions:rename", (_e, id: string, title: string) =>
     renameSession(id, title),
@@ -63,6 +68,21 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     setSessionGroup(id, group),
   );
   ipcMain.handle("sessions:groups", () => listGroups());
+  ipcMain.handle(
+    "sessions:setWorkspace",
+    (_e, id: string, workspaceDir: string) => setSessionWorkspace(id, workspaceDir),
+  );
+  /** Recently used workspace folders (for the new-task folder picker). */
+  ipcMain.handle("sessions:recentFolders", () => {
+    const rows = getDb()
+      .prepare(
+        `SELECT workspace_dir, MAX(updated_at) AS latest
+         FROM sessions WHERE workspace_dir IS NOT NULL AND workspace_dir != ''
+         GROUP BY workspace_dir ORDER BY latest DESC LIMIT 8`,
+      )
+      .all() as Array<{ workspace_dir: string }>;
+    return rows.map((r) => ({ path: r.workspace_dir, name: groupForWorkspace(r.workspace_dir) }));
+  });
   ipcMain.handle("sessions:renameGroup", (_e, oldName: string, newName: string) =>
     renameGroup(oldName, newName),
   );
@@ -113,19 +133,32 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
 
   // ---- chat ----
-  ipcMain.handle("chat:history", (_e, sessionId: string) =>
-    agentManager.getHistory(sessionId),
-  );
+  ipcMain.handle("chat:history", async (_e, sessionId: string) => {
+    const s = getSession(sessionId);
+    agentManager.setSessionWorkspace(sessionId, s?.workspaceDir);
+    return agentManager.getHistory(sessionId);
+  });
 
   ipcMain.handle(
     "chat:send",
-    async (event, sessionId: string, text: string, attachments?: Attachment[]) => {
+    async (
+      event,
+      sessionId: string,
+      text: string,
+      attachments?: Attachment[],
+      workspaceDir?: string,
+    ) => {
       const sender = event.sender;
       const push = (e: DeepWorkEvent) => {
         if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
       };
       try {
-        for await (const e of agentManager.runTurn(sessionId, text, attachments)) {
+        for await (const e of agentManager.runTurn(
+          sessionId,
+          text,
+          attachments,
+          workspaceDir,
+        )) {
           push(e);
         }
       } catch (err) {

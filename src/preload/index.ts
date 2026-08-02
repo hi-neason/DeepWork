@@ -22,14 +22,18 @@ import type { ProviderPreset } from "../shared/providers";
 const api = {
   sessions: {
     list: (): Promise<Session[]> => ipcRenderer.invoke("sessions:list"),
-    create: (title?: string, group?: string): Promise<Session> =>
-      ipcRenderer.invoke("sessions:create", title, group),
+    create: (title?: string, workspaceDir?: string): Promise<Session> =>
+      ipcRenderer.invoke("sessions:create", title, workspaceDir),
     rename: (id: string, title: string): Promise<void> =>
       ipcRenderer.invoke("sessions:rename", id, title),
     delete: (id: string): Promise<void> => ipcRenderer.invoke("sessions:delete", id),
     setGroup: (id: string, group: string): Promise<void> =>
       ipcRenderer.invoke("sessions:setGroup", id, group),
+    setWorkspace: (id: string, workspaceDir: string): Promise<void> =>
+      ipcRenderer.invoke("sessions:setWorkspace", id, workspaceDir),
     groups: (): Promise<string[]> => ipcRenderer.invoke("sessions:groups"),
+    recentFolders: (): Promise<{ path: string; name: string }[]> =>
+      ipcRenderer.invoke("sessions:recentFolders"),
     renameGroup: (oldName: string, newName: string): Promise<void> =>
       ipcRenderer.invoke("sessions:renameGroup", oldName, newName),
     deleteGroup: (name: string): Promise<void> =>
@@ -75,8 +79,9 @@ const api = {
       sessionId: string,
       text: string,
       attachments?: Attachment[],
+      workspaceDir?: string,
     ): Promise<void> =>
-      ipcRenderer.invoke("chat:send", sessionId, text, attachments),
+      ipcRenderer.invoke("chat:send", sessionId, text, attachments, workspaceDir),
     cancel: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke("chat:cancel", sessionId),
     regenerate: (sessionId: string): Promise<void> =>

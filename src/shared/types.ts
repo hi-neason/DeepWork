@@ -125,6 +125,8 @@ export interface Session {
   updatedAt: number;
   /** Group/folder this task belongs to (default group: "默认"). */
   group: string;
+  /** Per-session workspace directory; groups sessions and scopes the agent. */
+  workspaceDir?: string;
 }
 
 /** A skill (SKILL.md) managed in the local skills directory. */

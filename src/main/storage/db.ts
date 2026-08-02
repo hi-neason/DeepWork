@@ -75,10 +75,13 @@ function migrate(d: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_runs_automation ON automation_runs(automation_id);
   `);
 
-  // Migration: add group_name to pre-existing sessions tables.
+  // Migration: add group_name / workspace_dir to pre-existing sessions tables.
   const cols = d.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === "group_name")) {
     d.exec("ALTER TABLE sessions ADD COLUMN group_name TEXT NOT NULL DEFAULT '默认'");
+  }
+  if (!cols.some((c) => c.name === "workspace_dir")) {
+    d.exec("ALTER TABLE sessions ADD COLUMN workspace_dir TEXT");
   }
 
   // Persisted groups (order + rename). A session's group is denormalized onto

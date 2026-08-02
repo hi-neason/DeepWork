@@ -235,21 +235,29 @@ export function App(): React.ReactElement {
     await refreshSessions();
   };
 
-  const send = async (text: string, attachments?: File[]): Promise<void> => {
+  const send = async (
+    text: string,
+    attachments?: File[],
+    workspaceDir?: string,
+  ): Promise<void> => {
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
     let sid = sessionId;
     if (!sid) {
-      const s = await window.deepwork.sessions.create();
+      const s = await window.deepwork.sessions.create(undefined, workspaceDir);
       await refreshSessions();
       setSessionId(s.id);
       sid = s.id;
+    } else if (workspaceDir) {
+      // Bind the chosen folder to this session.
+      await window.deepwork.sessions.setWorkspace(sid, workspaceDir);
+      await refreshSessions();
     }
     dispatch({ type: "user", text });
     // Convert File attachments to data-transfer objects the main side can use.
     const atts = attachments && attachments.length > 0
       ? await Promise.all(attachments.map(fileToAttachment))
       : undefined;
-    await window.deepwork.chat.send(sid, text, atts);
+    await window.deepwork.chat.send(sid, text, atts, workspaceDir);
   };
 
   const cancel = (): void => {

@@ -1,6 +1,7 @@
 import { getDb } from "./db";
 import type { Session } from "../../shared/types";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 
 export const DEFAULT_GROUP = "默认";
 
@@ -10,6 +11,14 @@ interface SessionRow {
   created_at: number;
   updated_at: number;
   group_name: string;
+  workspace_dir: string | null;
+}
+
+/** Group label derived from a workspace folder: its basename. */
+export function groupForWorkspace(workspaceDir?: string | null): string {
+  if (!workspaceDir) return DEFAULT_GROUP;
+  const base = path.basename(workspaceDir.replace(/[/\\]+$/, ""));
+  return base || DEFAULT_GROUP;
 }
 
 function rowToSession(r: SessionRow): Session {
@@ -18,36 +27,52 @@ function rowToSession(r: SessionRow): Session {
     title: r.title,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-    group: r.group_name || DEFAULT_GROUP,
+    group: r.group_name || groupForWorkspace(r.workspace_dir),
+    workspaceDir: r.workspace_dir ?? undefined,
   };
 }
 
 export function listSessions(): Session[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, title, created_at, updated_at, group_name
+      `SELECT id, title, created_at, updated_at, group_name, workspace_dir
        FROM sessions ORDER BY updated_at DESC`,
     )
     .all() as SessionRow[];
   return rows.map(rowToSession);
 }
 
-export function createSession(title = "New chat", group = DEFAULT_GROUP): Session {
+export function getSession(id: string): Session | null {
+  const row = getDb()
+    .prepare(
+      `SELECT id, title, created_at, updated_at, group_name, workspace_dir
+       FROM sessions WHERE id = ?`,
+    )
+    .get(id) as SessionRow | undefined;
+  return row ? rowToSession(row) : null;
+}
+
+export function createSession(
+  title = "New chat",
+  workspaceDir?: string,
+): Session {
   const now = Date.now();
+  const group = groupForWorkspace(workspaceDir);
   const s: Session = {
     id: randomUUID(),
     title,
     createdAt: now,
     updatedAt: now,
-    group: group || DEFAULT_GROUP,
+    group,
+    workspaceDir: workspaceDir || undefined,
   };
   getDb()
     .prepare(
-      `INSERT INTO sessions (id, title, created_at, updated_at, group_name)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(s.id, s.title, s.createdAt, s.updatedAt, s.group);
-  ensureGroup(s.group);
+    .run(s.id, s.title, s.createdAt, s.updatedAt, group, workspaceDir ?? null);
+  ensureGroup(group);
   return s;
 }
 
@@ -71,7 +96,16 @@ export function setSessionGroup(id: string, group: string): void {
   ensureGroup(g);
 }
 
-/** Rename a group across all its sessions. */
+export function setSessionWorkspace(id: string, workspaceDir: string): void {
+  const group = groupForWorkspace(workspaceDir);
+  getDb()
+    .prepare(
+      "UPDATE sessions SET workspace_dir = ?, group_name = ?, updated_at = ? WHERE id = ?",
+    )
+    .run(workspaceDir, group, Date.now(), id);
+  ensureGroup(group);
+}
+
 export function renameGroup(oldName: string, newName: string): void {
   const next = newName?.trim();
   if (!next || next === oldName) return;
@@ -82,7 +116,6 @@ export function renameGroup(oldName: string, newName: string): void {
   ensureGroup(next);
 }
 
-/** Delete a group, moving its sessions into the default group. */
 export function deleteGroup(name: string): void {
   if (name === DEFAULT_GROUP) return;
   getDb()
@@ -99,15 +132,10 @@ function ensureGroup(name: string): void {
     .run(name, Date.now(), Date.now());
 }
 
-/** Create an empty group (persisted even with no sessions). */
 export function createGroup(name: string): void {
   ensureGroup(name.trim() || DEFAULT_GROUP);
 }
 
-/**
- * Distinct groups in display order: the default group first, then groups with
- * an explicit ordering row, then any others seen on sessions (newest activity).
- */
 export function listGroups(): string[] {
   const groups = new Set<string>([DEFAULT_GROUP]);
   const ordered = getDb()

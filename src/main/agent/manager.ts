@@ -10,6 +10,8 @@ import {
   createSummarizationMiddleware,
   createSkillsMiddleware,
 } from "deepagents";
+import { StateSchema } from "@langchain/langgraph";
+import { z } from "zod";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { RemoveMessage, HumanMessage } from "@langchain/core/messages";
 import type { DeepAgent } from "deepagents";
@@ -136,8 +138,27 @@ export class AgentManager {
   private aborters = new Map<string, AbortController>();
   /** First-run timestamp per session — used to bound artifact scanning. */
   private sessionStartedAt = new Map<string, number>();
+  /** Per-session workspace root. */
+  private sessionWorkspace = new Map<string, string>();
+  /** Cache of one LocalShellBackend per workspace root. */
+  private backends = new Map<string, LocalShellBackend>();
   /** Sessions running without an interactive user (scheduled automations). */
   private unattended = new Set<string>();
+
+  private backendFor(root: string): LocalShellBackend {
+    const key = root || app.getPath("home");
+    let b = this.backends.get(key);
+    if (!b) {
+      b = new LocalShellBackend({ rootDir: key, virtualMode: false });
+      this.backends.set(key, b);
+    }
+    return b;
+  }
+
+  /** Resolve the workspace for a session (session override or settings default). */
+  resolveWorkspace(sessionId: string, fallback: string): string {
+    return this.sessionWorkspace.get(sessionId) || fallback;
+  }
 
   async ensureAgent(): Promise<void> {
     if (this.agent) return;
@@ -174,6 +195,7 @@ export class AgentManager {
     annotateRisk("write_todos", "read");
 
     const scopeKey = workspaceDir;
+    const self = this;
     const approvalMiddleware = createApprovalMiddleware({
       getAlwaysAllow: () => this.alwaysAllow,
       onAlwaysAllow: (name) => this.alwaysAllow.add(name),
@@ -210,13 +232,20 @@ export class AgentManager {
       ...mcpTools,
     ];
 
+    // Per-session workspace state. The backend factory reads `workspaceDir`
+    // from the thread state so different sessions can operate in different
+    // folders; sessions with no override fall back to the settings workspace.
+    const defaultWorkspace = workspaceDir;
+    const stateSchema = new StateSchema({
+      workspaceDir: z.string().optional().default(defaultWorkspace),
+    });
+
     this.agent = createDeepAgent({
       model,
       tools: tools as StructuredToolInterface[],
-      backend: new LocalShellBackend({
-        rootDir: workspaceDir,
-        virtualMode: false,
-      }),
+      stateSchema,
+      backend: (runtime: any) =>
+        self.backendFor(runtime?.state?.workspaceDir || defaultWorkspace),
       checkpointer: this.checkpointer,
       middleware: [summarization, skills, createContextMiddleware(), approvalMiddleware],
       systemPrompt: SYSTEM_PROMPT,
@@ -250,18 +279,28 @@ export class AgentManager {
     }
   }
 
+  /** Register a session's workspace (loaded when the session is selected). */
+  setSessionWorkspace(sessionId: string, workspaceDir?: string): void {
+    if (workspaceDir) this.sessionWorkspace.set(sessionId, workspaceDir);
+    else this.sessionWorkspace.delete(sessionId);
+  }
+
   /** Run a turn from a new user message. */
   async *runTurn(
     sessionId: string,
     userText: string,
     attachments?: Attachment[],
+    workspaceDir?: string,
   ): AsyncGenerator<DeepWorkEvent> {
     const content = buildUserContent(userText, attachments);
     if (!this.sessionStartedAt.has(sessionId)) {
       this.sessionStartedAt.set(sessionId, Date.now());
     }
+    if (workspaceDir) this.sessionWorkspace.set(sessionId, workspaceDir);
+    const ws = this.sessionWorkspace.get(sessionId);
     const result = yield* this.runStream(sessionId, {
       messages: [{ role: "user", content }],
+      ...(ws ? { workspaceDir: ws } : {}),
     });
     // Unlock the input immediately. Title generation is a follow-up model call;
     // do it after turn_completed so the user can type the next message without
@@ -464,7 +503,9 @@ export class AgentManager {
    */
   private collectArtifacts(sessionId?: string): ArtifactFile[] {
     const settings = loadSettings();
-    const root = settings.model.workspaceDir;
+    const root =
+      (sessionId ? this.sessionWorkspace.get(sessionId) : undefined) ||
+      settings.model.workspaceDir;
     if (!root || root === app.getPath("home")) return [];
     const since =
       (sessionId ? this.sessionStartedAt.get(sessionId) : undefined) ?? Date.now();

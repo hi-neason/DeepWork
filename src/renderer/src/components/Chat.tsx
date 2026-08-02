@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
 import type { PermissionMode, TodoItem, UpdateStatus } from "../../../shared/types";
 import { Markdown } from "./Markdown";
 import { TodoPanel } from "./TodoPanel";
+
+interface RecentFolder {
+  path: string;
+  name: string;
+}
 
 interface Props {
   sessionId: string | null;
@@ -11,7 +16,8 @@ interface Props {
   artifactsCount: number;
   updateStatus: UpdateStatus;
   permissionMode: PermissionMode;
-  onSend: (text: string, attachments?: File[]) => void;
+  workspaceDir?: string;
+  onSend: (text: string, attachments?: File[], workspaceDir?: string) => void;
   onCancel: () => void;
   onRegenerate: () => void;
   onSetMode: (mode: PermissionMode) => void;
@@ -27,6 +33,7 @@ export function Chat({
   artifactsCount,
   updateStatus,
   permissionMode,
+  workspaceDir,
   onSend,
   onCancel,
   onRegenerate,
@@ -38,9 +45,30 @@ export function Chat({
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showModeMenu, setShowModeMenu] = useState(false);
+  const [showFolderMenu, setShowFolderMenu] = useState(false);
+  const [recent, setRecent] = useState<RecentFolder[]>([]);
+  // Workspace chosen for a brand-new session (before it is created).
+  const [pendingWorkspace, setPendingWorkspace] = useState<string | undefined>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const activeWorkspace = workspaceDir ?? pendingWorkspace;
+  const folderLabel = useMemo(() => {
+    if (!activeWorkspace) return "选择文件夹（可选）";
+    const parts = activeWorkspace.split(/[/\\]/).filter(Boolean);
+    return parts[parts.length - 1] || activeWorkspace;
+  }, [activeWorkspace]);
+
+  useEffect(() => {
+    void window.deepwork.sessions.recentFolders().then(setRecent);
+  }, [sessionId]);
+
+  // A picked folder only applies to a brand-new session; once a session exists
+  // its workspace is fixed, so clear the pending pick on session change.
+  useEffect(() => {
+    setPendingWorkspace(undefined);
+  }, [sessionId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -58,7 +86,25 @@ export function Chat({
     if ((!text && attachments.length === 0) || chat.streaming) return;
     setInput("");
     setAttachments([]);
-    void onSend(text, attachments);
+    void onSend(text, attachments, activeWorkspace);
+    setPendingWorkspace(undefined);
+  };
+
+  const pickFolder = async (): Promise<void> => {
+    const dir = await window.deepwork.settings.pickDirectory();
+    if (dir) setPendingWorkspace(dir);
+    setShowFolderMenu(false);
+    void window.deepwork.sessions.recentFolders().then(setRecent);
+  };
+
+  const chooseRecent = (p: string): void => {
+    setPendingWorkspace(p);
+    setShowFolderMenu(false);
+  };
+
+  const clearFolder = (): void => {
+    setPendingWorkspace(undefined);
+    setShowFolderMenu(false);
   };
 
   const onPickFiles = (files: FileList | null): void => {
@@ -210,6 +256,66 @@ export function Chat({
             }}
             onPaste={paste}
           />
+          <div className="composer-workspace">
+            <span className="ws-local" title="Local runtime">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+              本地
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+            <div className="ws-picker-wrap">
+              <button
+                className={`ws-picker ${activeWorkspace ? "active" : ""}`}
+                onClick={() => setShowFolderMenu((v) => !v)}
+                title={activeWorkspace ?? "Choose a folder (optional)"}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                <span className="ws-picker-label">{folderLabel}</span>
+                {activeWorkspace && (
+                  <span
+                    className="ws-clear"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearFolder();
+                    }}
+                  >
+                    ✕
+                  </span>
+                )}
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              {showFolderMenu && (
+                <div className="ws-menu" onMouseLeave={() => setShowFolderMenu(false)}>
+                  <div className="ws-menu-label">选择文件夹</div>
+                  <div className="ws-menu-item" onClick={pickFolder}>
+                    📂 浏览…
+                  </div>
+                  {recent.length > 0 && <div className="ws-menu-sep" />}
+                  {recent.length > 0 && <div className="ws-menu-label">最近</div>}
+                  {recent.map((r) => (
+                    <div
+                      key={r.path}
+                      className={`ws-menu-item ${activeWorkspace === r.path ? "checked" : ""}`}
+                      title={r.path}
+                      onClick={() => chooseRecent(r.path)}
+                    >
+                      <div>
+                        <div className="ws-recent-name">{r.name}</div>
+                        <div className="ws-recent-path">{r.path}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {activeWorkspace && (
+                    <>
+                      <div className="ws-menu-sep" />
+                      <div className="ws-menu-item danger" onClick={clearFolder}>
+                        ✕ 不使用文件夹
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
           <div className="composer-bar">
             <div className="composer-left">
               <button
