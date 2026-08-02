@@ -151,7 +151,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   // ---- chat ----
   ipcMain.handle("chat:history", async (_e, sessionId: string) => {
     const s = getSession(sessionId);
-    agentManager.setSessionWorkspace(sessionId, s?.workspaceDir);
+    agentManager.setSessionRoot(sessionId, s?.rootDir);
     agentManager.setSessionModel(sessionId, s?.model);
     return agentManager.getHistory(sessionId);
   });
@@ -172,11 +172,16 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       };
       try {
         if (modelId) setSessionModel(sessionId, modelId);
+        // The agent operates in the session's own folder (<base>/<id>).
+        // For a brand-new session createSession already created it; for an
+        // existing session resolve its stored root_dir.
+        const s = getSession(sessionId);
+        const root = s?.rootDir;
         for await (const e of agentManager.runTurn(
           sessionId,
           text,
           attachments,
-          workspaceDir,
+          root,
           modelId,
         )) {
           push(e);

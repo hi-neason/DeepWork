@@ -152,8 +152,10 @@ export interface Session {
   updatedAt: number;
   /** Group/folder this task belongs to (default group: "默认"). */
   group: string;
-  /** Per-session workspace directory; groups sessions and scopes the agent. */
+  /** Base workspace folder chosen for the task (groups sessions by name). */
   workspaceDir?: string;
+  /** Per-session working directory: <workspaceDir>/<sessionId>. */
+  rootDir?: string;
   /** Per-session model override (provider:model or just model id). */
   model?: string;
 }

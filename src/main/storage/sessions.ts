@@ -2,6 +2,8 @@ import { getDb } from "./db";
 import type { Session } from "../../shared/types";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import fs from "node:fs";
+import { DEFAULT_WORKSPACE_DIR, sessionRootDir } from "../config/paths";
 
 export const DEFAULT_GROUP = "默认";
 
@@ -12,6 +14,7 @@ interface SessionRow {
   updated_at: number;
   group_name: string;
   workspace_dir: string | null;
+  root_dir: string | null;
   model: string | null;
 }
 
@@ -30,6 +33,7 @@ function rowToSession(r: SessionRow): Session {
     updatedAt: r.updated_at,
     group: r.group_name || groupForWorkspace(r.workspace_dir),
     workspaceDir: r.workspace_dir ?? undefined,
+    rootDir: r.root_dir ?? undefined,
     model: r.model ?? undefined,
   };
 }
@@ -37,7 +41,7 @@ function rowToSession(r: SessionRow): Session {
 export function listSessions(): Session[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, model
+      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model
        FROM sessions ORDER BY updated_at DESC`,
     )
     .all() as SessionRow[];
@@ -47,7 +51,7 @@ export function listSessions(): Session[] {
 export function getSession(id: string): Session | null {
   const row = getDb()
     .prepare(
-      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, model
+      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model
        FROM sessions WHERE id = ?`,
     )
     .get(id) as SessionRow | undefined;
@@ -60,22 +64,41 @@ export function createSession(
   model?: string,
 ): Session {
   const now = Date.now();
-  const group = groupForWorkspace(workspaceDir);
+  const id = randomUUID();
+  const base = workspaceDir && workspaceDir.trim() ? workspaceDir : DEFAULT_WORKSPACE_DIR;
+  const rootDir = sessionRootDir(id, base);
+  const group = groupForWorkspace(base);
+  // Each session gets its own folder under the workspace base.
+  try {
+    fs.mkdirSync(rootDir, { recursive: true });
+  } catch (err) {
+    console.error("Failed to create session directory:", err);
+  }
   const s: Session = {
-    id: randomUUID(),
+    id,
     title,
     createdAt: now,
     updatedAt: now,
     group,
-    workspaceDir: workspaceDir || undefined,
+    workspaceDir: base,
+    rootDir,
     model: model || undefined,
   };
   getDb()
     .prepare(
-      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir, model)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(s.id, s.title, s.createdAt, s.updatedAt, group, workspaceDir ?? null, model ?? null);
+    .run(
+      s.id,
+      s.title,
+      s.createdAt,
+      s.updatedAt,
+      group,
+      s.workspaceDir ?? null,
+      rootDir,
+      model ?? null,
+    );
   ensureGroup(group);
   return s;
 }
@@ -101,12 +124,19 @@ export function setSessionGroup(id: string, group: string): void {
 }
 
 export function setSessionWorkspace(id: string, workspaceDir: string): void {
-  const group = groupForWorkspace(workspaceDir);
+  const base = workspaceDir && workspaceDir.trim() ? workspaceDir : DEFAULT_WORKSPACE_DIR;
+  const rootDir = sessionRootDir(id, base);
+  const group = groupForWorkspace(base);
+  try {
+    fs.mkdirSync(rootDir, { recursive: true });
+  } catch (err) {
+    console.error("Failed to create session directory:", err);
+  }
   getDb()
     .prepare(
-      "UPDATE sessions SET workspace_dir = ?, group_name = ?, updated_at = ? WHERE id = ?",
+      "UPDATE sessions SET workspace_dir = ?, root_dir = ?, group_name = ?, updated_at = ? WHERE id = ?",
     )
-    .run(workspaceDir, group, Date.now(), id);
+    .run(base, rootDir, group, Date.now(), id);
   ensureGroup(group);
 }
 

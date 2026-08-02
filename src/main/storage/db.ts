@@ -36,6 +36,7 @@ function migrate(d: Database.Database): void {
       updated_at INTEGER NOT NULL,
       group_name TEXT NOT NULL DEFAULT '默认',
       workspace_dir TEXT,
+      root_dir TEXT,
       model TEXT
     );
 
@@ -91,6 +92,7 @@ function migrate(d: Database.Database): void {
   // Backfill columns on databases created by older builds.
   addColumn("sessions", "group_name", "TEXT NOT NULL DEFAULT '默认'");
   addColumn("sessions", "workspace_dir", "TEXT");
+  addColumn("sessions", "root_dir", "TEXT");
   addColumn("sessions", "model", "TEXT");
 
   // Persisted groups (order + rename). A session's group is denormalized onto

@@ -341,9 +341,12 @@ export class AgentManager {
     }
   }
 
-  /** Register a session's workspace (loaded when the session is selected). */
-  setSessionWorkspace(sessionId: string, workspaceDir?: string): void {
-    if (workspaceDir) this.sessionWorkspace.set(sessionId, workspaceDir);
+  /**
+   * Register a session's working directory (its per-session root folder,
+   * <base>/<sessionId>). Loaded when the session is selected.
+   */
+  setSessionRoot(sessionId: string, rootDir?: string): void {
+    if (rootDir) this.sessionWorkspace.set(sessionId, rootDir);
     else this.sessionWorkspace.delete(sessionId);
   }
 
