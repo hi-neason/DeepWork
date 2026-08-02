@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
 import type {
   ConfiguredModel,
-  PermissionMode,
   TodoItem,
   UpdateStatus,
 } from "../../../shared/types";
@@ -20,7 +19,6 @@ interface Props {
   todos: TodoItem[];
   artifactsCount: number;
   updateStatus: UpdateStatus;
-  permissionMode: PermissionMode;
   workspaceDir?: string;
   sessionModel?: string;
   enabledModels: ConfiguredModel[];
@@ -33,8 +31,9 @@ interface Props {
   ) => void;
   onCancel: () => void;
   onRegenerate: () => void;
-  onSetMode: (mode: PermissionMode) => void;
   onSetModel: (modelId: string) => void;
+  onRefreshModels: () => void | Promise<void>;
+  onAddModel: () => void;
   onNewSession: () => void;
   onToggleArtifacts: () => void;
   onInstallUpdate: () => void;
@@ -46,7 +45,6 @@ export function Chat({
   todos,
   artifactsCount,
   updateStatus,
-  permissionMode,
   workspaceDir,
   sessionModel,
   enabledModels,
@@ -54,15 +52,15 @@ export function Chat({
   onSend,
   onCancel,
   onRegenerate,
-  onSetMode,
   onSetModel,
+  onRefreshModels,
+  onAddModel,
   onNewSession,
   onToggleArtifacts,
   onInstallUpdate,
 }: Props): React.ReactElement {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [showFolderMenu, setShowFolderMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [recent, setRecent] = useState<RecentFolder[]>([]);
@@ -377,7 +375,10 @@ export function Chat({
               <div className="model-picker-wrap">
                 <button
                   className="model-picker"
-                  onClick={() => setShowModelMenu((v) => !v)}
+                  onClick={() => {
+                    void onRefreshModels();
+                    setShowModelMenu((v) => !v);
+                  }}
                   title="选择模型"
                 >
                   <span className="model-dot" />
@@ -388,7 +389,7 @@ export function Chat({
                   <div className="model-menu" onMouseLeave={() => setShowModelMenu(false)}>
                     {enabledModels.length === 0 && (
                       <div className="model-menu-empty">
-                        还没有可用模型。请在「设置 → 模型」中添加或测试连接。
+                        还没有可用模型。
                       </div>
                     )}
                     {enabledModels.map((m) => (
@@ -403,42 +404,13 @@ export function Chat({
                     ))}
                     <div className="model-menu-sep" />
                     <div
-                      className="model-menu-item mode-trigger"
-                      onClick={() => setShowModeMenu((v) => !v)}
+                      className="model-menu-item add-model"
+                      onClick={() => {
+                        setShowModelMenu(false);
+                        onAddModel();
+                      }}
                     >
-                      <span>审批模式：{permissionMode === "manual" ? "手动" : permissionMode === "auto" ? "自动" : "计划"}</span>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18" /></svg>
-                      {showModeMenu && (
-                        <div className="mode-submenu">
-                          <ModeOption
-                            active={permissionMode === "manual"}
-                            label="手动"
-                            desc="任何写/执行操作前询问"
-                            onClick={() => {
-                              onSetMode("manual");
-                              setShowModeMenu(false);
-                            }}
-                          />
-                          <ModeOption
-                            active={permissionMode === "auto"}
-                            label="自动"
-                            desc="自动放行写/命令（GUI 仍询问）"
-                            onClick={() => {
-                              onSetMode("auto");
-                              setShowModeMenu(false);
-                            }}
-                          />
-                          <ModeOption
-                            active={permissionMode === "plan"}
-                            label="计划"
-                            desc="只读：先出计划，批准后执行"
-                            onClick={() => {
-                              onSetMode("plan");
-                              setShowModeMenu(false);
-                            }}
-                          />
-                        </div>
-                      )}
+                      <span>+ 新增模型</span>
                     </div>
                   </div>
                 )}
@@ -462,25 +434,6 @@ export function Chat({
         </div>
       </div>
     </>
-  );
-}
-
-function ModeOption({
-  active,
-  label,
-  desc,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  desc: string;
-  onClick: () => void;
-}): React.ReactElement {
-  return (
-    <div className={`mode-opt ${active ? "active" : ""}`} onClick={onClick}>
-      <div className="mode-opt-label">{label}</div>
-      <div className="mode-opt-desc">{desc}</div>
-    </div>
   );
 }
 

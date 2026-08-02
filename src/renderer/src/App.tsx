@@ -5,6 +5,7 @@ import type {
   HistoryItem,
   Session,
   Settings as AppSettings,
+  SettingsTab,
   TodoItem,
   UpdateStatus,
 } from "../../shared/types";
@@ -160,6 +161,7 @@ export function App(): React.ReactElement {
   const [chat, dispatch] = useReducer(reducer, initialChat);
   const [approval, setApproval] = useState<DeepWorkEvent | null>(null);
   const [view, setView] = useState<ViewKey>("chat");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactFile[]>([]);
@@ -200,24 +202,18 @@ export function App(): React.ReactElement {
     needsOnboarding && sessions.length === 0 && view === "chat";
 
   const selectedSession = sessions.find((s) => s.id === sessionId);
-  // Models available in the picker: those enabled in settings, falling back to
-  // the default settings model so there's always something to pick.
-  const enabledModels = useMemo(() => {
-    const configured = settings?.configuredModels ?? [];
-    const enabled = configured.filter((m) => m.enabled);
-    if (enabled.length > 0) return enabled;
-    if (settings) {
-      return [
-        {
-          id: `${settings.model.provider}:${settings.model.model}`,
-          provider: settings.model.provider,
-          enabled: true,
-          isDefault: true,
-        },
-      ];
-    }
-    return [];
-  }, [settings]);
+  // Models shown in the picker: exactly the enabled, configured models.
+  // Empty when none are configured (the picker shows an empty state).
+  const enabledModels = useMemo(
+    () => (settings?.configuredModels ?? []).filter((m) => m.enabled),
+    [settings],
+  );
+
+  // Re-read settings from disk so newly added/edited models appear in the
+  // picker without restarting. Called when the picker is opened.
+  const refreshModels = useCallback(async (): Promise<void> => {
+    await refreshSettings();
+  }, [refreshSettings]);
 
   // Global keyboard shortcuts.
   useEffect(() => {
@@ -252,6 +248,12 @@ export function App(): React.ReactElement {
     });
     return off;
   }, [sessionId, refreshSessions]);
+
+  // When returning to chat from settings/connectors, reload settings so newly
+  // added models and appearance changes show up immediately.
+  useEffect(() => {
+    if (view === "chat") void refreshSettings();
+  }, [view, refreshSettings]);
 
   const newSession = async (): Promise<void> => {
     const s = await window.deepwork.sessions.create();
@@ -332,13 +334,6 @@ export function App(): React.ReactElement {
     await window.deepwork.chat.regenerate(sessionId);
   };
 
-  const setMode = async (mode: "manual" | "auto" | "plan"): Promise<void> => {
-    if (!settings) return;
-    const updated = { ...settings, permissionMode: mode };
-    setSettings(updated);
-    await window.deepwork.settings.save(updated);
-  };
-
   const respondApproval = async (decision: "allow" | "deny" | "always_allow"): Promise<void> => {
     if (approval && approval.type === "approval_requested") {
       await window.deepwork.approval.respond(approval.id, decision);
@@ -393,7 +388,11 @@ export function App(): React.ReactElement {
       />
       <main className="main">
         {view === "settings" ? (
-          <Settings onClose={() => setView("chat")} updateStatus={updateStatus} />
+          <Settings
+            onClose={() => setView("chat")}
+            updateStatus={updateStatus}
+            initialTab={settingsTab}
+          />
         ) : view === "connectors" ? (
           <Connectors onClose={() => setView("chat")} />
         ) : view === "automations" ? (
@@ -405,15 +404,18 @@ export function App(): React.ReactElement {
             todos={todos}
             artifactsCount={artifacts.length}
             updateStatus={updateStatus}
-            permissionMode={settings?.permissionMode ?? "manual"}
             sessionModel={selectedSession?.model}
             enabledModels={enabledModels}
             showReasoning={settings?.showReasoning ?? true}
             onSend={send}
             onCancel={cancel}
             onRegenerate={regenerate}
-            onSetMode={setMode}
             onSetModel={setSessionModel}
+            onRefreshModels={refreshModels}
+            onAddModel={() => {
+              setSettingsTab("models");
+              setView("settings");
+            }}
             onNewSession={newSession}
             onToggleArtifacts={() => setShowArtifacts((v) => !v)}
             onInstallUpdate={() => window.deepwork.updates.install()}
