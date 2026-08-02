@@ -3,9 +3,14 @@ import type { Settings } from "../../../../shared/types";
 interface Props {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
+  onModelChange: (patch: Partial<Settings["model"]>) => void;
 }
 
-export function GeneralTab({ settings, onChange }: Props): React.ReactElement {
+export function GeneralTab({ settings, onChange, onModelChange }: Props): React.ReactElement {
+  const pickWorkspace = async (): Promise<void> => {
+    const dir = await window.deepwork.settings.pickDirectory();
+    if (dir) onModelChange({ workspaceDir: dir });
+  };
   return (
     <div className="settings-section">
       <h2>通用</h2>
@@ -64,6 +69,21 @@ export function GeneralTab({ settings, onChange }: Props): React.ReactElement {
             <span>大</span>
           </div>
         </div>
+      </div>
+
+      <div className="setting-card">
+        <div className="setting-label">默认工作区目录</div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <input
+            value={settings.model.workspaceDir}
+            onChange={(e) => onModelChange({ workspaceDir: e.target.value })}
+            placeholder="默认为 ~/DeepWork/workspace"
+          />
+          <button className="btn" onClick={pickWorkspace}>
+            浏览
+          </button>
+        </div>
+        <p className="setting-hint">未在新建任务时指定文件夹的会话将使用此目录。</p>
       </div>
 
       <div className="setting-card">

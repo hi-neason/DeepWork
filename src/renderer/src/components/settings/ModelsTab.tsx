@@ -169,27 +169,6 @@ export function ModelsTab({
           </tbody>
         </table>
       )}
-
-      <div className="setting-card" style={{ marginTop: 24 }}>
-        <div className="setting-label">默认工作区目录</div>
-        <div className="row" style={{ marginTop: 8 }}>
-          <input
-            value={settings.model.workspaceDir}
-            onChange={(e) => onChange({ workspaceDir: e.target.value })}
-            placeholder="默认为 ~/DeepWork/workspace"
-          />
-          <button
-            className="btn"
-            onClick={async () => {
-              const dir = await window.deepwork.settings.pickDirectory();
-              if (dir) onChange({ workspaceDir: dir });
-            }}
-          >
-            浏览
-          </button>
-        </div>
-        <p className="setting-hint">未在新建任务时指定文件夹的会话将使用此目录。</p>
-      </div>
     </div>
   );
 }

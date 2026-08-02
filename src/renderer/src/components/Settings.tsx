@@ -87,7 +87,13 @@ export function Settings({
         </div>
 
         <div className="settings-scroll">
-          {tab === "general" && <GeneralTab settings={settings} onChange={update} />}
+          {tab === "general" && (
+            <GeneralTab
+              settings={settings}
+              onChange={update}
+              onModelChange={updateModel}
+            />
+          )}
           {tab === "models" && (
             <ModelsTab
               settings={settings}
