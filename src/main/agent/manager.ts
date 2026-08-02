@@ -142,11 +142,14 @@ export class AgentManager {
     const { replyText } = yield* this.runStream(sessionId, {
       messages: [{ role: "user", content: userText }],
     });
+    // Unlock the input immediately. Title generation is a follow-up model call;
+    // do it after turn_completed so the user can type the next message without
+    // waiting for the title.
+    yield { type: "turn_completed" };
     if (replyText.trim()) {
       const title = await this.maybeGenerateTitle(sessionId, userText, replyText);
       if (title) yield { type: "session_renamed", title };
     }
-    yield { type: "turn_completed" };
   }
 
   /**
