@@ -22,7 +22,8 @@ function migrate(d: Database.Database): void {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '默认'
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -72,6 +73,23 @@ function migrate(d: Database.Database): void {
       session_id TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_runs_automation ON automation_runs(automation_id);
+  `);
+
+  // Migration: add group_name to pre-existing sessions tables.
+  const cols = d.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "group_name")) {
+    d.exec("ALTER TABLE sessions ADD COLUMN group_name TEXT NOT NULL DEFAULT '默认'");
+  }
+
+  // Persisted groups (order + rename). A session's group is denormalized onto
+  // the session row so listing is a single query; this table just remembers
+  // group ordering and empty groups.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS session_groups (
+      name TEXT PRIMARY KEY,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
   `);
 }
 

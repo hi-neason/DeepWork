@@ -8,13 +8,14 @@ import type {
   TodoItem,
   UpdateStatus,
 } from "../../shared/types";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, type ViewKey } from "./components/Sidebar";
 import { Chat } from "./components/Chat";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { Settings } from "./components/Settings";
 import { Onboarding } from "./components/Onboarding";
 import { ArtifactsPanel } from "./components/ArtifactsPanel";
 import { AutomationsView } from "./components/AutomationsView";
+import { Connectors } from "./components/Connectors";
 import { fileToAttachment } from "./lib/attachments";
 
 type ToolRecord = {
@@ -147,7 +148,7 @@ export function App(): React.ReactElement {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chat, dispatch] = useReducer(reducer, initialChat);
   const [approval, setApproval] = useState<DeepWorkEvent | null>(null);
-  const [view, setView] = useState<"chat" | "settings" | "automations">("chat");
+  const [view, setView] = useState<ViewKey>("chat");
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactFile[]>([]);
@@ -280,6 +281,26 @@ export function App(): React.ReactElement {
     await refreshSettings();
   };
 
+  const moveToGroup = async (id: string, group: string): Promise<void> => {
+    await window.deepwork.sessions.setGroup(id, group);
+    await refreshSessions();
+  };
+
+  const renameGroup = async (oldName: string, newName: string): Promise<void> => {
+    await window.deepwork.sessions.renameGroup(oldName, newName);
+    await refreshSessions();
+  };
+
+  const deleteGroup = async (name: string): Promise<void> => {
+    await window.deepwork.sessions.deleteGroup(name);
+    await refreshSessions();
+  };
+
+  const createGroup = async (name: string): Promise<void> => {
+    await window.deepwork.sessions.createGroup(name);
+    await refreshSessions();
+  };
+
   if (showOnboarding && settings) {
     return <Onboarding settings={settings} onDone={finishOnboarding} />;
   }
@@ -289,16 +310,22 @@ export function App(): React.ReactElement {
       <Sidebar
         sessions={sessions}
         activeId={sessionId}
+        activeView={view}
         onNew={newSession}
         onSelect={selectSession}
         onDelete={deleteSession}
         onRename={renameSessionById}
-        onOpenSettings={() => setView("settings")}
-        onOpenAutomations={() => setView("automations")}
+        onOpenView={setView}
+        onMoveToGroup={moveToGroup}
+        onRenameGroup={renameGroup}
+        onDeleteGroup={deleteGroup}
+        onCreateGroup={createGroup}
       />
       <main className="main">
         {view === "settings" ? (
           <Settings onClose={() => setView("chat")} />
+        ) : view === "connectors" ? (
+          <Connectors onClose={() => setView("chat")} />
         ) : view === "automations" ? (
           <AutomationsView onClose={() => setView("chat")} />
         ) : (

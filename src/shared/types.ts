@@ -123,7 +123,22 @@ export interface Session {
   title: string;
   createdAt: number;
   updatedAt: number;
+  /** Group/folder this task belongs to (default group: "默认"). */
+  group: string;
 }
+
+/** A skill (SKILL.md) managed in the local skills directory. */
+export interface Skill {
+  /** Directory / skill id (kebab-case). */
+  name: string;
+  description: string;
+  /** The markdown body after the frontmatter. */
+  body: string;
+  enabled: boolean;
+  updatedAt: number;
+}
+
+export type SessionSort = "recent" | "title" | "created";
 
 export type RiskLevel = "read" | "write" | "exec" | "external";
 

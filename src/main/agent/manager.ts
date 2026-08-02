@@ -6,7 +6,9 @@ import {
   createDeepAgent,
   LocalShellBackend,
   StateBackend,
+  FilesystemBackend,
   createSummarizationMiddleware,
+  createSkillsMiddleware,
 } from "deepagents";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { RemoveMessage, HumanMessage } from "@langchain/core/messages";
@@ -39,6 +41,7 @@ import { touchSession } from "../storage/sessions";
 import { WEB_TOOLS } from "../tools/web";
 import { createTodosTool } from "../tools/todos";
 import { createMemoryTools } from "../tools/memory";
+import { skillsSourcePath } from "../skills/store";
 
 const GUI_TOOLS = [
   screenshotTool.tool,
@@ -189,6 +192,16 @@ export class AgentManager {
       trimTokensToSummarize: 4000,
     });
 
+    // Skills: each subdirectory of userData/skills is a SKILL.md, loaded
+    // progressively (catalog at startup, full content on demand).
+    const skills = createSkillsMiddleware({
+      backend: new FilesystemBackend({
+        rootDir: skillsSourcePath(),
+        virtualMode: true,
+      }),
+      sources: ["/"],
+    });
+
     const tools: StructuredToolInterface[] = [
       ...GUI_TOOLS,
       ...WEB_TOOLS,
@@ -205,7 +218,7 @@ export class AgentManager {
         virtualMode: false,
       }),
       checkpointer: this.checkpointer,
-      middleware: [summarization, createContextMiddleware(), approvalMiddleware],
+      middleware: [summarization, skills, createContextMiddleware(), approvalMiddleware],
       systemPrompt: SYSTEM_PROMPT,
     });
   }

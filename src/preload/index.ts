@@ -13,6 +13,7 @@ import type {
   ProviderKind,
   Session,
   Settings,
+  Skill,
   UpdateStatus,
   VerifyResult,
 } from "../shared/types";
@@ -21,11 +22,31 @@ import type { ProviderPreset } from "../shared/providers";
 const api = {
   sessions: {
     list: (): Promise<Session[]> => ipcRenderer.invoke("sessions:list"),
-    create: (title?: string): Promise<Session> =>
-      ipcRenderer.invoke("sessions:create", title),
+    create: (title?: string, group?: string): Promise<Session> =>
+      ipcRenderer.invoke("sessions:create", title, group),
     rename: (id: string, title: string): Promise<void> =>
       ipcRenderer.invoke("sessions:rename", id, title),
     delete: (id: string): Promise<void> => ipcRenderer.invoke("sessions:delete", id),
+    setGroup: (id: string, group: string): Promise<void> =>
+      ipcRenderer.invoke("sessions:setGroup", id, group),
+    groups: (): Promise<string[]> => ipcRenderer.invoke("sessions:groups"),
+    renameGroup: (oldName: string, newName: string): Promise<void> =>
+      ipcRenderer.invoke("sessions:renameGroup", oldName, newName),
+    deleteGroup: (name: string): Promise<void> =>
+      ipcRenderer.invoke("sessions:deleteGroup", name),
+    createGroup: (name: string): Promise<void> =>
+      ipcRenderer.invoke("sessions:createGroup", name),
+  },
+  skills: {
+    list: (): Promise<Skill[]> => ipcRenderer.invoke("skills:list"),
+    create: (input: { name: string; description?: string; body?: string }): Promise<Skill> =>
+      ipcRenderer.invoke("skills:create", input),
+    update: (
+      name: string,
+      patch: Partial<{ description: string; body: string; enabled: boolean }>,
+    ): Promise<Skill> => ipcRenderer.invoke("skills:update", name, patch),
+    delete: (name: string): Promise<void> => ipcRenderer.invoke("skills:delete", name),
+    rebuild: (): Promise<void> => ipcRenderer.invoke("skills:rebuild"),
   },
   settings: {
     get: (): Promise<Settings> => ipcRenderer.invoke("settings:get"),

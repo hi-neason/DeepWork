@@ -12,7 +12,19 @@ import {
   createSession,
   renameSession,
   deleteSession,
+  setSessionGroup,
+  renameGroup,
+  deleteGroup,
+  createGroup,
+  listGroups,
+  DEFAULT_GROUP,
 } from "../storage/sessions";
+import {
+  listSkills,
+  createSkill,
+  updateSkill,
+  deleteSkill,
+} from "../skills/store";
 import {
   loadSettings,
   saveSettings,
@@ -40,11 +52,37 @@ import type {
 export function registerIpc(getWin: () => BrowserWindow | null): void {
   // ---- sessions ----
   ipcMain.handle("sessions:list", () => listSessions());
-  ipcMain.handle("sessions:create", (_e, title?: string) => createSession(title));
+  ipcMain.handle("sessions:create", (_e, title?: string, group?: string) =>
+    createSession(title, group),
+  );
   ipcMain.handle("sessions:rename", (_e, id: string, title: string) =>
     renameSession(id, title),
   );
   ipcMain.handle("sessions:delete", (_e, id: string) => deleteSession(id));
+  ipcMain.handle("sessions:setGroup", (_e, id: string, group: string) =>
+    setSessionGroup(id, group),
+  );
+  ipcMain.handle("sessions:groups", () => listGroups());
+  ipcMain.handle("sessions:renameGroup", (_e, oldName: string, newName: string) =>
+    renameGroup(oldName, newName),
+  );
+  ipcMain.handle("sessions:deleteGroup", (_e, name: string) => deleteGroup(name));
+  ipcMain.handle("sessions:createGroup", (_e, name: string) => createGroup(name));
+
+  // ---- skills ----
+  ipcMain.handle("skills:list", () => listSkills());
+  ipcMain.handle(
+    "skills:create",
+    (_e, input: { name: string; description?: string; body?: string }) =>
+      createSkill(input),
+  );
+  ipcMain.handle(
+    "skills:update",
+    (_e, name: string, patch: Partial<{ description: string; body: string; enabled: boolean }>) =>
+      updateSkill(name, patch),
+  );
+  ipcMain.handle("skills:delete", (_e, name: string) => deleteSkill(name));
+  ipcMain.handle("skills:rebuild", () => agentManager.rebuild());
 
   // ---- settings / keys ----
   ipcMain.handle("settings:get", () => loadSettings());
