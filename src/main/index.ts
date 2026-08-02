@@ -4,6 +4,12 @@ import { fileURLToPath } from "node:url";
 import { registerIpc } from "./ipc/register";
 import { getDb } from "./storage/db";
 import { agentManager } from "./agent/manager";
+import { loadClaudeCodeEnv } from "./config/ccEnv";
+
+// Reuse Claude Code's ANTHROPIC_* env (endpoint/auth token/model) at runtime.
+// This must run before the agent/model layer is first used. No secrets are
+// hardcoded or stored by DeepWork.
+loadClaudeCodeEnv();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

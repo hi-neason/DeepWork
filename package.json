@@ -16,6 +16,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@langchain/anthropic": "^1.5.2",
     "@langchain/core": "^1.2.4",
     "@langchain/langgraph": "^1.4.8",
@@ -26,7 +27,7 @@
     "@langchain/openai": "^1.5.5",
     "@nut-tree-fork/libnut": "^4.2.6",
     "@nut-tree-fork/nut-js": "^4.2.6",
-    "better-sqlite3": "^13.0.2",
+    "better-sqlite3": "^12.10.0",
     "deepagents": "^1.12.1",
     "langchain": "^1.5.4",
     "zod": "^4.4.3"
@@ -64,7 +65,10 @@
       "@nut-tree-fork/libnut",
       "electron",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "better-sqlite3": "^12.10.0"
+    }
   }
 }
 
