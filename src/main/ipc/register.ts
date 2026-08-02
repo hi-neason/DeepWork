@@ -42,6 +42,10 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   ipcMain.handle("settings:rebuildAgent", () => agentManager.rebuild());
 
   // ---- chat ----
+  ipcMain.handle("chat:history", (_e, sessionId: string) =>
+    agentManager.getHistory(sessionId),
+  );
+
   ipcMain.handle("chat:send", async (event, sessionId: string, text: string) => {
     const win = getWin();
     const sender = event.sender;

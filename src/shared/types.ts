@@ -63,3 +63,16 @@ export interface ChatMessage {
   content: string;
   createdAt: number;
 }
+
+/** A reconstructed item from a session's persisted history. */
+export interface HistoryItem {
+  kind: "msg" | "tool";
+  role?: "user" | "assistant";
+  content?: string;
+  id?: string;
+  name?: string;
+  argsPreview?: string;
+  status?: "running" | "done";
+  outputPreview?: string;
+  isError?: boolean;
+}

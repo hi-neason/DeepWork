@@ -10,6 +10,7 @@ import { createChatModel } from "./model";
 import { createApprovalMiddleware, registerTurnEmitter, unregisterTurnEmitter } from "./middleware";
 import { approvals } from "../security/approvals";
 import { McpManager } from "../mcp/manager";
+import type { HistoryItem } from "../../shared/types";
 import { screenshotTool } from "../tools/gui";
 import {
   mouseMoveTool,
@@ -213,6 +214,73 @@ export class AgentManager {
 
   respondApproval(toolCallId: string, decision: "allow" | "deny" | "always_allow"): void {
     approvals.respond(toolCallId, decision);
+  }
+
+  /**
+   * Reconstruct a coarse chat timeline from the persisted checkpointer state
+   * for a thread, so switching sessions shows prior messages. Tool call/result
+   * pairs are collapsed into a single tool record.
+   */
+  async getHistory(sessionId: string): Promise<{ timeline: HistoryItem[] }> {
+    await this.ensureAgent();
+    if (!this.agent) return { timeline: [] };
+    const config = { configurable: { thread_id: sessionId } };
+    // DeepAgent's getState typing is narrow; the runtime returns a full state.
+    const state: any = await (this.agent as any).getState(config);
+    const messages: any[] = state?.values?.messages ?? [];
+
+    const timeline: HistoryItem[] = [];
+    const toolResults = new Map<string, string>();
+    for (const m of messages) {
+      const role = m._getType?.() ?? m.getType?.();
+      if (role === "human") {
+        timeline.push({ kind: "msg", role: "user", content: stringContent(m.content) });
+      } else if (role === "ai" || role === "AIMessageChunk") {
+        const text = stringContent(m.content);
+        if (text) timeline.push({ kind: "msg", role: "assistant", content: text });
+        for (const tc of m.tool_calls ?? []) {
+          if (!tc?.id) continue;
+          timeline.push({
+            kind: "tool",
+            id: tc.id,
+            name: tc.name,
+            argsPreview: preview(tc.args),
+            status: "done" as const,
+            outputPreview: toolResults.get(tc.id),
+          });
+        }
+      } else if (role === "tool") {
+        if (m.tool_call_id) toolResults.set(m.tool_call_id, preview(m.content));
+      }
+    }
+    // Backfill outputs onto tool items that were emitted before their result.
+    for (const item of timeline) {
+      if (item.kind === "tool" && item.id && !item.outputPreview) {
+        const out = toolResults.get(item.id);
+        if (out) item.outputPreview = out;
+      }
+    }
+    return { timeline };
+  }
+}
+
+function stringContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((b) => b?.type === "text" && typeof b.text === "string")
+      .map((b) => b.text)
+      .join("");
+  }
+  return "";
+}
+
+function preview(v: unknown): string {
+  try {
+    const s = typeof v === "string" ? v : JSON.stringify(v);
+    return s.length > 300 ? s.slice(0, 300) + "…" : s;
+  } catch {
+    return String(v);
   }
 }
 

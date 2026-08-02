@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   ApprovalDecision,
   DeepWorkEvent,
+  HistoryItem,
   ModelConfig,
   McpServerConfig,
   Session,
@@ -29,6 +30,8 @@ const api = {
     rebuildAgent: (): Promise<void> => ipcRenderer.invoke("settings:rebuildAgent"),
   },
   chat: {
+    history: (sessionId: string): Promise<{ timeline: HistoryItem[] }> =>
+      ipcRenderer.invoke("chat:history", sessionId),
     send: (sessionId: string, text: string): Promise<void> =>
       ipcRenderer.invoke("chat:send", sessionId, text),
     onEvent: (sessionId: string, cb: (e: DeepWorkEvent) => void): (() => void) => {

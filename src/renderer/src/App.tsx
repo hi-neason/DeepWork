@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from "react";
-import type { DeepWorkEvent, Session } from "../../shared/types";
+import type { DeepWorkEvent, HistoryItem, Session } from "../../shared/types";
 import { Sidebar } from "./components/Sidebar";
 import { Chat } from "./components/Chat";
 import { ApprovalModal } from "./components/ApprovalModal";
@@ -30,10 +30,33 @@ const initialChat: ChatState = { timeline: [], tools: {}, streaming: false };
 type Action =
   | { type: "user"; text: string }
   | { type: "event"; event: DeepWorkEvent }
+  | { type: "history"; timeline: HistoryItem[] }
   | { type: "reset" };
 
 function reducer(state: ChatState, action: Action): ChatState {
   if (action.type === "reset") return { ...initialChat };
+  if (action.type === "history") {
+    const timeline: TimelineEntry[] = [];
+    const tools: Record<string, ToolRecord> = {};
+    for (const item of action.timeline) {
+      if (item.kind === "msg" && item.role && item.content) {
+        timeline.push({ kind: "msg", role: item.role, content: item.content });
+      } else if (item.kind === "tool" && item.id) {
+        timeline.push({ kind: "tool", id: item.id });
+        if (item.name) {
+          tools[item.id] = {
+            id: item.id,
+            name: item.name,
+            argsPreview: item.argsPreview ?? "",
+            outputPreview: item.outputPreview,
+            isError: item.isError,
+            status: item.status ?? "done",
+          };
+        }
+      }
+    }
+    return { timeline, tools, streaming: false };
+  }
   if (action.type === "user") {
     return {
       ...state,
@@ -128,11 +151,11 @@ export function App(): React.ReactElement {
     dispatch({ type: "reset" });
   };
 
-  const selectSession = (id: string): void => {
+  const selectSession = async (id: string): Promise<void> => {
     setSessionId(id);
     dispatch({ type: "reset" });
-    // History is retained in the checkpointer by thread_id; we don't reload it
-    // into the UI yet (MVP), but the agent sees prior context.
+    const { timeline } = await window.deepwork.chat.history(id);
+    dispatch({ type: "history", timeline });
   };
 
   const deleteSession = async (id: string): Promise<void> => {
