@@ -569,22 +569,33 @@ body,
   color: var(--text);
   cursor: pointer;
   font-size: 13px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn:hover {
+  background: color-mix(in srgb, var(--bg-elev2) 80%, var(--text) 8%);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--text) 20%);
 }
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
+  color: #fff;
 }
+.btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+/* System-style secondary button: light surface, dark label, hairline border. */
 .btn.secondary {
-  background: var(--bg-elev2);
-  border-color: var(--border);
-  color: #ffffff;
+  background: var(--bg-elev);
+  color: var(--text);
 }
 .btn.secondary:hover {
-  background: color-mix(in srgb, var(--bg-elev2) 80%, #fff);
+  background: var(--bg-elev2);
 }
 .btn.danger {
   background: var(--danger);
   border-color: var(--danger);
+  color: #fff;
 }
 
 /* settings */
@@ -1156,9 +1167,14 @@ body,
 }
 
 .kbd {
-  background: var(--bg-elev2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 3px 8px; font-family: ui-monospace, monospace;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 7px;
+  padding: 3px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
+  color: var(--text);
 }
 
 /* theme-independent scrollbar polish */
