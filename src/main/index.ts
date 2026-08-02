@@ -7,6 +7,7 @@ import { agentManager } from "./agent/manager";
 import { loadClaudeCodeEnv } from "./config/ccEnv";
 import { loadSettings } from "./storage/settings";
 import { ensureDirs } from "./config/paths";
+import { applyOpenAtLogin, setKeepAwake } from "./system";
 import { TRAY_ICON_16, TRAY_ICON_36 } from "./trayIcon";
 
 // Reuse Claude Code's ANTHROPIC_* env (endpoint/auth token/model) at runtime.
@@ -137,6 +138,11 @@ app.whenReady().then(() => {
   registerIpc(() => win);
   createWindow();
   createTray();
+
+  // Apply OS-level preferences.
+  const s = loadSettings();
+  applyOpenAtLogin(s.openAtLogin);
+  setKeepAwake(s.keepAwake);
 
   // Initialize the agent in the background so first message is snappy.
   // A missing API key is expected on first run; the user configures it via onboarding.

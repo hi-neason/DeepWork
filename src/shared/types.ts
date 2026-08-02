@@ -114,9 +114,33 @@ export interface Settings {
   trayEnabled: boolean;
   /** Automatically download/install updates. */
   autoUpdate: boolean;
+  /** Launch automatically when the user signs in. */
+  openAtLogin: boolean;
+  /** Keep the machine awake while a turn/automation is running. */
+  keepAwake: boolean;
+  /** UI theme. */
+  theme: "light" | "dark" | "auto";
+  /** Interface language (BCP-47-ish tag). */
+  language: "zh-CN" | "en-US";
+  /** UI font scale: 0.9 (small) .. 1.3 (large). 1 = default. */
+  fontScale: number;
+  /** Send message telemetry/error reports (no-op unless enabled). */
+  telemetry: boolean;
+  /** Show reasoning/thinking blocks inline instead of hiding them. */
+  showReasoning: boolean;
   /** Global memory entries injected into the system prompt (denormalized for renderer). */
   memories: MemoryItem[];
 }
+
+/** Settings sections shown in the settings sidebar. */
+export type SettingsTab =
+  | "general"
+  | "models"
+  | "connectors"
+  | "memory"
+  | "automations"
+  | "shortcuts"
+  | "about";
 
 export interface Session {
   id: string;

@@ -64,6 +64,11 @@ const api = {
     rebuildAgent: (): Promise<void> => ipcRenderer.invoke("settings:rebuildAgent"),
     setOnboarded: (onboarded: boolean): Promise<void> =>
       ipcRenderer.invoke("settings:setOnboarded", onboarded),
+    applySystem: (): Promise<void> => ipcRenderer.invoke("settings:applySystem"),
+  },
+  app: {
+    dataPath: (): Promise<string> => ipcRenderer.invoke("app:dataPath"),
+    revealData: (): Promise<void> => ipcRenderer.invoke("app:revealData"),
   },
   models: {
     catalog: (): Promise<ModelInfo[]> => ipcRenderer.invoke("models:catalog"),

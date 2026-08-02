@@ -17,6 +17,7 @@ import { ArtifactsPanel } from "./components/ArtifactsPanel";
 import { AutomationsView } from "./components/AutomationsView";
 import { Connectors } from "./components/Connectors";
 import { fileToAttachment } from "./lib/attachments";
+import { applyAppearance, watchSystemTheme } from "./lib/theme";
 
 type ToolRecord = {
   id: string;
@@ -28,7 +29,7 @@ type ToolRecord = {
 };
 
 export type TimelineEntry =
-  | { kind: "msg"; role: "user" | "assistant"; content: string }
+  | { kind: "msg"; role: "user" | "assistant"; content: string; reasoning?: string }
   | { kind: "tool"; id: string };
 
 export type ChatState = {
@@ -105,8 +106,18 @@ function reducer(state: ChatState, action: Action): ChatState {
       timeline.push({ kind: "msg", role: "assistant", content: e.text });
       return { ...state, timeline };
     }
-    case "reasoning_delta":
+    case "reasoning_delta": {
+      const timeline = [...state.timeline];
+      for (let i = timeline.length - 1; i >= 0; i--) {
+        const item = timeline[i];
+        if (item.kind === "msg" && item.role === "assistant") {
+          timeline[i] = { ...item, reasoning: (item.reasoning ?? "") + e.text };
+          return { ...state, timeline };
+        }
+        if (item.kind === "msg" && item.role === "user") break;
+      }
       return state;
+    }
     case "tool_call_started": {
       const tools = {
         ...state.tools,
@@ -164,6 +175,7 @@ export function App(): React.ReactElement {
     const s = await window.deepwork.settings.get();
     setSettings(s);
     setNeedsOnboarding(!s.onboarded);
+    applyAppearance(s);
   }, []);
 
   useEffect(() => {
@@ -171,14 +183,33 @@ export function App(): React.ReactElement {
       await Promise.all([refreshSessions(), refreshSettings()]);
     })();
     const off = window.deepwork.updates.onStatus(setUpdateStatus);
+    const offTheme = watchSystemTheme(() => {
+      if (settings) applyAppearance(settings);
+    });
     void window.deepwork.updates.check();
-    return off;
+    return () => {
+      off();
+      offTheme();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSessions, refreshSettings]);
 
   // Onboarding only greets genuinely new installs: not yet onboarded AND no
   // existing sessions (so upgraded users aren't forced through it).
   const showOnboarding =
     needsOnboarding && sessions.length === 0 && view === "chat";
+
+  // Global keyboard shortcuts.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        void newSession();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Subscribe to agent events for the active session.
   useEffect(() => {
@@ -331,7 +362,12 @@ export function App(): React.ReactElement {
       />
       <main className="main">
         {view === "settings" ? (
-          <Settings onClose={() => setView("chat")} />
+          <Settings
+            onClose={() => setView("chat")}
+            updateStatus={updateStatus}
+            onOpenConnectors={() => setView("connectors")}
+            onOpenAutomations={() => setView("automations")}
+          />
         ) : view === "connectors" ? (
           <Connectors onClose={() => setView("chat")} />
         ) : view === "automations" ? (
@@ -344,6 +380,7 @@ export function App(): React.ReactElement {
             artifactsCount={artifacts.length}
             updateStatus={updateStatus}
             permissionMode={settings?.permissionMode ?? "manual"}
+            showReasoning={settings?.showReasoning ?? true}
             onSend={send}
             onCancel={cancel}
             onRegenerate={regenerate}

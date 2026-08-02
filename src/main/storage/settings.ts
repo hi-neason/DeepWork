@@ -23,6 +23,13 @@ const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   trayEnabled: true,
   autoUpdate: true,
+  openAtLogin: false,
+  keepAwake: true,
+  theme: "dark",
+  language: "zh-CN",
+  fontScale: 1,
+  telemetry: false,
+  showReasoning: true,
   memories: [],
 };
 

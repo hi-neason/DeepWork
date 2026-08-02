@@ -17,6 +17,7 @@ interface Props {
   updateStatus: UpdateStatus;
   permissionMode: PermissionMode;
   workspaceDir?: string;
+  showReasoning?: boolean;
   onSend: (text: string, attachments?: File[], workspaceDir?: string) => void;
   onCancel: () => void;
   onRegenerate: () => void;
@@ -34,6 +35,7 @@ export function Chat({
   updateStatus,
   permissionMode,
   workspaceDir,
+  showReasoning = true,
   onSend,
   onCancel,
   onRegenerate,
@@ -179,6 +181,12 @@ export function Chat({
                   <div key={i} className={`msg ${item.role}`}>
                     <div className="role">{item.role}</div>
                     <div className="bubble">
+                      {isAssistant && showReasoning && item.reasoning && (
+                        <details className="reasoning">
+                          <summary>思考过程</summary>
+                          <div className="reasoning-body">{item.reasoning}</div>
+                        </details>
+                      )}
                       {isAssistant ? <Markdown content={item.content} /> : item.content}
                     </div>
                     {isAssistant && (

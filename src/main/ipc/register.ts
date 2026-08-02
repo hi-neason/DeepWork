@@ -3,6 +3,8 @@ import path from "node:path";
 import fs from "node:fs";
 import { agentManager } from "../agent/manager";
 import { getDb } from "../storage/db";
+import { applyOpenAtLogin, setKeepAwake } from "../system";
+import { DEEPWORK_ROOT } from "../config/paths";
 import { approvals } from "../security/approvals";
 import { verifyModelConfig } from "../agent/model";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
@@ -124,6 +126,15 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     s.onboarded = onboarded;
     saveSettings(s);
   });
+  ipcMain.handle("settings:applySystem", () => {
+    const s = loadSettings();
+    applyOpenAtLogin(s.openAtLogin);
+    setKeepAwake(s.keepAwake);
+  });
+  ipcMain.handle("app:revealData", () => {
+    shell.openPath(DEEPWORK_ROOT);
+  });
+  ipcMain.handle("app:dataPath", () => DEEPWORK_ROOT);
 
   // ---- model catalog / verification ----
   ipcMain.handle("models:catalog", (): ModelInfo[] => MODEL_CATALOG);
