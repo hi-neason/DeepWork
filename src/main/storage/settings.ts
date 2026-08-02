@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS: Settings = {
     workspaceDir: "",
   },
   mcpServers: [],
+  approvalMode: "manual",
   alwaysAllowTools: [],
 };
 

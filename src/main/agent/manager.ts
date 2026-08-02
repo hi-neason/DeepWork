@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { app } from "electron";
 import { createDeepAgent, LocalShellBackend } from "deepagents";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import { RemoveMessage } from "@langchain/core/messages";
 import type { DeepAgent } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
@@ -109,6 +110,7 @@ export class AgentManager {
     const approvalMiddleware = createApprovalMiddleware(
       () => this.alwaysAllow,
       (name) => this.alwaysAllow.add(name),
+      () => loadSettings().approvalMode === "auto",
     );
 
     this.agent = createDeepAgent({
@@ -132,11 +134,30 @@ export class AgentManager {
     await this.ensureAgent();
   }
 
-  /** Run a turn, emitting normalized DeepWorkEvents. */
+  /** Run a turn from a new user message. */
   async *runTurn(
     sessionId: string,
     userText: string,
   ): AsyncGenerator<DeepWorkEvent> {
+    const { replyText } = yield* this.runStream(sessionId, {
+      messages: [{ role: "user", content: userText }],
+    });
+    if (replyText.trim()) {
+      const title = await this.maybeGenerateTitle(sessionId, userText, replyText);
+      if (title) yield { type: "session_renamed", title };
+    }
+    yield { type: "turn_completed" };
+  }
+
+  /**
+   * Core streaming loop. Invokes the agent with the given input, normalizes
+   * token/tool events into DeepWorkEvents, and resolves with the assistant's
+   * aggregated reply text.
+   */
+  private async *runStream(
+    sessionId: string,
+    input: Record<string, unknown>,
+  ): AsyncGenerator<DeepWorkEvent, { replyText: string }, void> {
     await this.ensureAgent();
     if (!this.agent) throw new Error("Agent not initialized");
 
@@ -156,42 +177,32 @@ export class AgentManager {
       recursionLimit: 50,
     };
 
-    // Collect the assistant's reply so we can derive a title after the turn.
-    let assistantReply = "";
-
-    // Drive the stream in the background. Tool call lifecycle events are
-    // emitted by the approval middleware; here we only forward token deltas.
+    let replyText = "";
     const consumed = (async () => {
-      const stream = await this.agent!.stream(
-        { messages: [{ role: "user", content: userText }] },
-        { streamMode: "messages", subgraphs: false, ...config },
-      );
+      const stream = await this.agent!.stream(input, {
+        streamMode: "messages",
+        subgraphs: false,
+        ...config,
+      });
       for await (const chunk of stream as AsyncIterable<[any, any]>) {
         const [msg] = chunk;
         if (!msg) continue;
-        // model.stream() yields AI messages whose getType() is "ai"; LangGraph
-        // may also yield "AIMessageChunk". Accept either, ignore others.
         const type = msg.getType?.() ?? msg._getType?.();
         if (type !== "ai" && type !== "AIMessageChunk") continue;
-
-        // Some providers (e.g. Volcengine Ark with extended thinking) stream
-        // content as an array of blocks ([{type:"thinking",...},{type:"text",...}])
-        // rather than a plain string. Extract both.
         const reasoning = extractReasoning(msg.content, msg.additional_kwargs);
         if (reasoning) {
           emitter.emit("event", { type: "reasoning_delta", text: reasoning });
         }
         const text = extractText(msg.content);
         if (text) {
-          assistantReply += text;
+          replyText += text;
           emitter.emit("event", { type: "message_delta", text });
         }
       }
     })();
 
     try {
-      // Race-free pump: arm the waiter before deciding to wait, so an event
-      // arriving between the queue check and the await is not lost.
+      // Race-free pump: arm the waiter before deciding to wait.
       // eslint-disable-next-line no-constant-condition
       while (true) {
         if (queue.length > 0) {
@@ -211,24 +222,53 @@ export class AgentManager {
       }
       await consumed;
       touchSession(sessionId);
-
-      // Auto-generate a title from the first exchange (best effort).
-      if (assistantReply.trim()) {
-        const title = await this.maybeGenerateTitle(sessionId, userText, assistantReply);
-        if (title) yield { type: "session_renamed", title };
-      }
-
-      yield { type: "turn_completed" };
     } catch (err) {
       yield { type: "turn_error", message: err instanceof Error ? err.message : String(err) };
     } finally {
       emitter.removeListener("event", onEvent);
       unregisterTurnEmitter(sessionId);
     }
+    return { replyText };
   }
 
   respondApproval(toolCallId: string, decision: "allow" | "deny" | "always_allow"): void {
     approvals.respond(toolCallId, decision);
+  }
+
+  /**
+   * Regenerate: drop the last human message and everything after it from the
+   * checkpointer, then re-send that human message for a fresh response.
+   */
+  async *regenerate(sessionId: string): AsyncGenerator<DeepWorkEvent> {
+    await this.ensureAgent();
+    if (!this.agent) throw new Error("Agent not initialized");
+    const config = { configurable: { thread_id: sessionId } };
+    const state: any = await (this.agent as any).getState(config);
+    const messages: any[] = state?.values?.messages ?? [];
+    let lastHuman = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const t = messages[i]._getType?.() ?? messages[i].getType?.();
+      if (t === "human") {
+        lastHuman = i;
+        break;
+      }
+    }
+    if (lastHuman < 0) {
+      yield { type: "turn_error", message: "Nothing to regenerate." };
+      return;
+    }
+    const lastHumanMsg = messages[lastHuman];
+    const humanText = stringContent(lastHumanMsg.content);
+    // Remove the last human message and everything that followed.
+    const toRemove = messages
+      .slice(lastHuman)
+      .filter((m) => m?.id)
+      .map((m) => new RemoveMessage({ id: m.id }));
+    if (toRemove.length > 0) {
+      await (this.agent as any).updateState(config, { messages: toRemove });
+    }
+    yield* this.runStream(sessionId, { messages: [{ role: "user", content: humanText }] });
+    yield { type: "turn_completed" };
   }
 
   /**

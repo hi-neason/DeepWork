@@ -34,6 +34,8 @@ const api = {
       ipcRenderer.invoke("chat:history", sessionId),
     send: (sessionId: string, text: string): Promise<void> =>
       ipcRenderer.invoke("chat:send", sessionId, text),
+    regenerate: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke("chat:regenerate", sessionId),
     onEvent: (sessionId: string, cb: (e: DeepWorkEvent) => void): (() => void) => {
       const listener = (_e: unknown, sid: string, event: DeepWorkEvent) => {
         if (sid === sessionId) cb(event);

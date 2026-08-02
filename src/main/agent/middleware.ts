@@ -49,6 +49,7 @@ function previewContent(content: unknown): string {
 export function createApprovalMiddleware(
   getAlwaysAllow: () => Set<string>,
   onAlwaysAllow: (toolName: string) => void,
+  isAutoMode: () => boolean,
 ) {
   return createMiddleware({
     name: "deepwork_approval",
@@ -64,7 +65,11 @@ export function createApprovalMiddleware(
 
       let decision: ApprovalDecision = "allow";
       const alwaysAllowed = getAlwaysAllow();
+      // In auto mode, non-GUI write/exec/external tools run without prompting.
+      // GUI tools always require per-use approval regardless of mode.
+      const autoAllowed = isAutoMode() && !GUI_TOOLS.has(toolCall.name);
       const mustAsk =
+        !autoAllowed &&
         needsApproval(risk, toolCall.name) &&
         (GUI_TOOLS.has(toolCall.name) || !alwaysAllowed.has(toolCall.name));
       if (mustAsk) {

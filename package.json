@@ -30,6 +30,8 @@
     "better-sqlite3": "^12.10.0",
     "deepagents": "^1.12.1",
     "langchain": "^1.5.4",
+    "react-markdown": "^9",
+    "remark-gfm": "^4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -50,14 +52,24 @@
   "build": {
     "appId": "ai.deepwork.app",
     "productName": "DeepWork",
-    "files": ["out/**/*", "package.json"],
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*",
       "node_modules/@nut-tree-fork/**/*"
     ],
-    "mac": { "target": "dmg", "category": "public.app-category.productivity" },
-    "win": { "target": "nsis" },
-    "linux": { "target": "AppImage" }
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -71,4 +83,3 @@
     }
   }
 }
-

@@ -1,5 +1,11 @@
 import { useEffect, useReducer, useState } from "react";
-import type { DeepWorkEvent, HistoryItem, Session } from "../../shared/types";
+import type {
+  ApprovalMode,
+  DeepWorkEvent,
+  HistoryItem,
+  Session,
+  Settings as AppSettings,
+} from "../../shared/types";
 import { Sidebar } from "./components/Sidebar";
 import { Chat } from "./components/Chat";
 import { ApprovalModal } from "./components/ApprovalModal";
@@ -31,10 +37,23 @@ type Action =
   | { type: "user"; text: string }
   | { type: "event"; event: DeepWorkEvent }
   | { type: "history"; timeline: HistoryItem[] }
+  | { type: "reset_to_user" }
   | { type: "reset" };
 
 function reducer(state: ChatState, action: Action): ChatState {
   if (action.type === "reset") return { ...initialChat };
+  if (action.type === "reset_to_user") {
+    // Drop trailing assistant/tool items so a regenerate can re-stream them.
+    const timeline = [...state.timeline];
+    while (
+      timeline.length > 0 &&
+      !(timeline[timeline.length - 1].kind === "msg" &&
+        (timeline[timeline.length - 1] as any).role === "user")
+    ) {
+      timeline.pop();
+    }
+    return { ...state, timeline, tools: {}, streaming: true, error: undefined };
+  }
   if (action.type === "history") {
     const timeline: TimelineEntry[] = [];
     const tools: Record<string, ToolRecord> = {};
@@ -123,13 +142,19 @@ export function App(): React.ReactElement {
   const [chat, dispatch] = useReducer(reducer, initialChat);
   const [approval, setApproval] = useState<DeepWorkEvent | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
 
   const refreshSessions = async (): Promise<void> => {
     setSessions(await window.deepwork.sessions.list());
   };
 
+  const refreshSettings = async (): Promise<void> => {
+    setSettings(await window.deepwork.settings.get());
+  };
+
   useEffect(() => {
     void refreshSessions();
+    void refreshSettings();
   }, []);
 
   // Subscribe to agent events for the active session.
@@ -188,6 +213,22 @@ export function App(): React.ReactElement {
     await window.deepwork.chat.send(sid, text);
   };
 
+  const regenerate = async (): Promise<void> => {
+    if (!sessionId) return;
+    // Drop the trailing assistant message/tool results from the UI, then re-run.
+    dispatch({ type: "reset_to_user" });
+    await window.deepwork.chat.regenerate(sessionId);
+  };
+
+  const toggleApprovalMode = async (): Promise<void> => {
+    if (!settings) return;
+    const next: ApprovalMode = settings.approvalMode === "auto" ? "manual" : "auto";
+    const updated = { ...settings, approvalMode: next };
+    setSettings(updated);
+    await window.deepwork.settings.save(updated);
+    // Mode is read live by the middleware; no agent rebuild required.
+  };
+
   const respondApproval = async (decision: "allow" | "deny" | "always_allow"): Promise<void> => {
     if (approval && approval.type === "approval_requested") {
       await window.deepwork.approval.respond(approval.id, decision);
@@ -208,12 +249,21 @@ export function App(): React.ReactElement {
       />
       <main className="main">
         {showSettings ? (
-          <Settings onClose={() => setShowSettings(false)} />
+          <Settings
+            onClose={() => {
+              setShowSettings(false);
+              void refreshSettings();
+            }}
+          />
         ) : (
           <Chat
             sessionId={sessionId}
             chat={chat}
+            mcpServers={settings?.mcpServers ?? []}
+            approvalMode={settings?.approvalMode ?? "manual"}
             onSend={send}
+            onRegenerate={regenerate}
+            onToggleMode={toggleApprovalMode}
             onNewSession={newSession}
           />
         )}

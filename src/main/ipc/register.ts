@@ -47,13 +47,29 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
 
   ipcMain.handle("chat:send", async (event, sessionId: string, text: string) => {
-    const win = getWin();
     const sender = event.sender;
     const push = (e: DeepWorkEvent) => {
       if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
     };
     try {
       for await (const e of agentManager.runTurn(sessionId, text)) {
+        push(e);
+      }
+    } catch (err) {
+      push({
+        type: "turn_error",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  ipcMain.handle("chat:regenerate", async (event, sessionId: string) => {
+    const sender = event.sender;
+    const push = (e: DeepWorkEvent) => {
+      if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
+    };
+    try {
+      for await (const e of agentManager.regenerate(sessionId)) {
         push(e);
       }
     } catch (err) {

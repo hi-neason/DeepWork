@@ -1,14 +1,29 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
+import type { ApprovalMode, McpServerConfig } from "../../../shared/types";
+import { Markdown } from "./Markdown";
 
 interface Props {
   sessionId: string | null;
   chat: ChatState;
+  mcpServers: McpServerConfig[];
+  approvalMode: ApprovalMode;
   onSend: (text: string) => void;
+  onRegenerate: () => void;
+  onToggleMode: () => void;
   onNewSession: () => void;
 }
 
-export function Chat({ sessionId, chat, onSend, onNewSession }: Props): React.ReactElement {
+export function Chat({
+  sessionId,
+  chat,
+  mcpServers,
+  approvalMode,
+  onSend,
+  onRegenerate,
+  onToggleMode,
+  onNewSession,
+}: Props): React.ReactElement {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -23,7 +38,16 @@ export function Chat({ sessionId, chat, onSend, onNewSession }: Props): React.Re
     void onSend(text);
   };
 
-  const placeholder = sessionId ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)" : "Ask anything — a new chat starts automatically";
+  const copy = (content: string): void => {
+    void navigator.clipboard?.writeText(content);
+  };
+
+  const enabledMcp = useMemo(() => mcpServers.filter((m) => m.enabled), [mcpServers]);
+  const canRegenerate = !chat.streaming && chat.timeline.some((t) => t.kind === "msg" && t.role === "assistant");
+
+  const placeholder = sessionId
+    ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)"
+    : "Ask anything — a new chat starts automatically";
 
   return (
     <>
@@ -42,10 +66,23 @@ export function Chat({ sessionId, chat, onSend, onNewSession }: Props): React.Re
         ) : (
           chat.timeline.map((item, i) => {
             if (item.kind === "msg") {
+              const isAssistant = item.role === "assistant";
               return (
                 <div key={i} className={`msg ${item.role}`}>
                   <div className="role">{item.role}</div>
-                  <div className="bubble">{item.content}</div>
+                  <div className="bubble">
+                    {isAssistant ? <Markdown content={item.content} /> : item.content}
+                  </div>
+                  {isAssistant && (
+                    <div className="msg-actions">
+                      <button title="Copy" onClick={() => copy(item.content)}>
+                        ⧉
+                      </button>
+                      <button title="Regenerate" onClick={onRegenerate} disabled={!canRegenerate}>
+                        ↻
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -92,7 +129,26 @@ export function Chat({ sessionId, chat, onSend, onNewSession }: Props): React.Re
             }}
           />
           <button onClick={submit} disabled={chat.streaming || !input.trim()}>
-            Send
+            ↑
+          </button>
+        </div>
+        <div className="composer-toolbar">
+          <div className="tools">
+            <span className="chip" title="Screen capture & GUI control">🖥 GUI</span>
+            {enabledMcp.length > 0 && (
+              <span className="chip" title="Enabled MCP plugins">
+                🧩 {enabledMcp.length} MCP
+              </span>
+            )}
+          </div>
+          <div className="spacer" />
+          <button
+            className={`mode-toggle ${approvalMode === "auto" ? "auto" : ""}`}
+            onClick={onToggleMode}
+            title="Toggle approval mode"
+          >
+            <span className="dot" />
+            {approvalMode === "auto" ? "Auto Mode" : "Manual Mode"}
           </button>
         </div>
       </div>

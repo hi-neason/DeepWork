@@ -2,6 +2,8 @@
 
 export type ProviderKind = "anthropic" | "openai" | "ollama";
 
+export type ApprovalMode = "manual" | "auto";
+
 export interface ModelConfig {
   provider: ProviderKind;
   /** Model id, e.g. "claude-sonnet-4-5" or "gpt-4o" or "qwen2.5" */
@@ -26,6 +28,11 @@ export interface McpServerConfig {
 export interface Settings {
   model: ModelConfig;
   mcpServers: McpServerConfig[];
+  /**
+   * "manual" (default): ask before write/exec/external tools; GUI tools always ask.
+   * "auto": auto-approve write/exec/external tools; GUI tools still require per-use approval.
+   */
+  approvalMode: ApprovalMode;
   /** Tools that should never require approval in this session */
   alwaysAllowTools: string[];
 }
