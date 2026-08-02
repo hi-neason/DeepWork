@@ -362,12 +362,7 @@ export function App(): React.ReactElement {
       />
       <main className="main">
         {view === "settings" ? (
-          <Settings
-            onClose={() => setView("chat")}
-            updateStatus={updateStatus}
-            onOpenConnectors={() => setView("connectors")}
-            onOpenAutomations={() => setView("automations")}
-          />
+          <Settings onClose={() => setView("chat")} updateStatus={updateStatus} />
         ) : view === "connectors" ? (
           <Connectors onClose={() => setView("chat")} />
         ) : view === "automations" ? (

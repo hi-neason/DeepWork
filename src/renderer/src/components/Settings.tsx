@@ -13,16 +13,12 @@ interface Props {
   onClose: () => void;
   initialTab?: SettingsTab;
   updateStatus?: UpdateStatus;
-  onOpenConnectors?: () => void;
-  onOpenAutomations?: () => void;
 }
 
 const TABS: Array<{ id: SettingsTab; label: string; icon: string }> = [
   { id: "general", label: "通用", icon: "⚙" },
   { id: "models", label: "模型", icon: "◇" },
-  { id: "connectors", label: "Connectors", icon: "🧩" },
   { id: "memory", label: "记忆", icon: "🧠" },
-  { id: "automations", label: "自动化", icon: "⏰" },
   { id: "shortcuts", label: "快捷键 / 关于", icon: "?" },
 ];
 
@@ -30,8 +26,6 @@ export function Settings({
   onClose,
   initialTab = "general",
   updateStatus,
-  onOpenConnectors,
-  onOpenAutomations,
 }: Props): React.ReactElement {
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -65,18 +59,6 @@ export function Settings({
     setTimeout(() => setSaved(false), 1500);
   };
 
-  const selectTab = (t: SettingsTab): void => {
-    if (t === "connectors") {
-      onOpenConnectors?.();
-      return;
-    }
-    if (t === "automations") {
-      onOpenAutomations?.();
-      return;
-    }
-    setTab(t);
-  };
-
   return (
     <div className="settings-shell">
       <aside className="settings-nav">
@@ -85,7 +67,7 @@ export function Settings({
           <button
             key={t.id}
             className={`settings-nav-item ${tab === t.id ? "active" : ""}`}
-            onClick={() => selectTab(t.id)}
+            onClick={() => setTab(t.id)}
           >
             <span className="nav-icon">{t.icon}</span>
             {t.label}
