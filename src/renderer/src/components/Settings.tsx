@@ -81,7 +81,7 @@ export function Settings({
       <div className="settings-content">
         <div className="settings-save-bar">
           {saved && <span style={{ color: "var(--ok)" }}>已保存 ✓</span>}
-          <button className="btn primary" onClick={save}>
+          <button className="btn secondary" onClick={save}>
             保存并应用
           </button>
         </div>

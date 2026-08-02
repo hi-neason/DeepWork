@@ -94,7 +94,7 @@ export function ModelsTab({
         配置 API key 并添加可用模型，勾选启用后会出现在输入框的模型选择器中。
       </p>
 
-      <button className="btn primary add-model-btn" onClick={startCreate}>
+      <button className="btn secondary add-model-btn" onClick={startCreate}>
         + 添加模型
       </button>
 

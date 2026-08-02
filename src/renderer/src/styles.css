@@ -574,6 +574,14 @@ body,
   background: var(--accent);
   border-color: var(--accent);
 }
+.btn.secondary {
+  background: var(--bg-elev2);
+  border-color: var(--border);
+  color: #ffffff;
+}
+.btn.secondary:hover {
+  background: color-mix(in srgb, var(--bg-elev2) 80%, #fff);
+}
 .btn.danger {
   background: var(--danger);
   border-color: var(--danger);
@@ -616,6 +624,30 @@ body,
   display: flex;
   gap: 8px;
 }
+
+/* Consistent inputs anywhere in settings (inside cards or plain rows). */
+.settings-section input[type="text"],
+.settings-section input[type="password"],
+.settings-section input[type="search"],
+.settings-section input:not([type]),
+.settings-section select,
+.setting-card input,
+.setting-card select {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.settings-section input:focus,
+.settings-section select:focus,
+.setting-card input:focus {
+  border-color: var(--accent);
+}
+.setting-card .row input { flex: 1; min-width: 0; }
 
 /* ---- Markdown rendering ---- */
 .markdown { line-height: 1.6; word-break: break-word; }
