@@ -30,6 +30,38 @@ const GUI_TOOLS = [
   keyboardPressTool.tool,
 ];
 
+/** Pull concatenated text from a message content that may be a string or an array of blocks. */
+function extractText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    let out = "";
+    for (const block of content) {
+      if (block?.type === "text" && typeof block.text === "string") out += block.text;
+    }
+    return out;
+  }
+  return "";
+}
+
+/** Pull reasoning/thinking text from content blocks or additional_kwargs. */
+function extractReasoning(content: unknown, additional: Record<string, unknown> | undefined): string {
+  if (typeof additional?.reasoning === "string") return additional.reasoning;
+  if (Array.isArray(content)) {
+    let out = "";
+    for (const block of content) {
+      if (
+        block &&
+        (block.type === "thinking" || block.type === "reasoning") &&
+        typeof block.thinking === "string"
+      ) {
+        out += block.thinking;
+      }
+    }
+    return out;
+  }
+  return "";
+}
+
 /**
  * Builds and owns the deepagents agent. Rebuilt when settings (model / MCP /
  * workspace) change. Runs a single turn at a time per session.
@@ -129,34 +161,44 @@ export class AgentManager {
       for await (const chunk of stream as AsyncIterable<[any, any]>) {
         const [msg] = chunk;
         if (!msg) continue;
-        const reasoning = msg.additional_kwargs?.reasoning;
-        if (typeof reasoning === "string" && reasoning) {
+        // model.stream() yields AI messages whose getType() is "ai"; LangGraph
+        // may also yield "AIMessageChunk". Accept either, ignore others.
+        const type = msg.getType?.() ?? msg._getType?.();
+        if (type !== "ai" && type !== "AIMessageChunk") continue;
+
+        // Some providers (e.g. Volcengine Ark with extended thinking) stream
+        // content as an array of blocks ([{type:"thinking",...},{type:"text",...}])
+        // rather than a plain string. Extract both.
+        const reasoning = extractReasoning(msg.content, msg.additional_kwargs);
+        if (reasoning) {
           emitter.emit("event", { type: "reasoning_delta", text: reasoning });
         }
-        if (
-          typeof msg.content === "string" &&
-          msg.content &&
-          (msg.getType?.() === "AIMessageChunk" || msg._getType?.() === "AIMessageChunk")
-        ) {
-          emitter.emit("event", { type: "message_delta", text: msg.content });
+        const text = extractText(msg.content);
+        if (text) {
+          emitter.emit("event", { type: "message_delta", text });
         }
       }
     })();
 
     try {
+      // Race-free pump: arm the waiter before deciding to wait, so an event
+      // arriving between the queue check and the await is not lost.
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        if (queue.length === 0) {
-          const done = await Promise.race([
-            consumed.then(() => true, () => true),
-            new Promise<boolean>((res) => {
-              waiter = () => res(false);
-            }),
-          ]);
-          waiter = null;
-          if (done && queue.length === 0) break;
+        if (queue.length > 0) {
+          yield queue.shift()!;
+          continue;
         }
-        while (queue.length > 0) yield queue.shift()!;
+        let resolveWait: (v: false) => void = () => {};
+        waiter = () => resolveWait(false);
+        const done = await Promise.race([
+          consumed.then(() => true),
+          new Promise<false>((res) => {
+            resolveWait = res;
+          }),
+        ]);
+        waiter = null;
+        if (done && queue.length === 0) break;
       }
       await consumed;
       touchSession(sessionId);
