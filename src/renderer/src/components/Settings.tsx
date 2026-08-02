@@ -1,5 +1,14 @@
-import { useEffect, useState } from "react";
-import type { McpServerConfig, Settings as SettingsType } from "../../../shared/types";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  McpServerConfig,
+  MemoryItem,
+  Settings as SettingsType,
+  VerifyResult,
+} from "../../../shared/types";
+import {
+  modelsForProvider,
+  PROVIDER_PRESETS,
+} from "../../../shared/providers";
 
 interface Props {
   onClose: () => void;
@@ -7,23 +16,54 @@ interface Props {
 
 export function Settings({ onClose }: Props): React.ReactElement {
   const [settings, setSettings] = useState<SettingsType | null>(null);
-  const [anthropicKey, setAnthropicKey] = useState("");
-  const [openaiKey, setOpenaiKey] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [saved, setSaved] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+  const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [newMemory, setNewMemory] = useState("");
 
   useEffect(() => {
     void (async () => {
       const s = await window.deepwork.settings.get();
       setSettings(s);
-      setAnthropicKey(await window.deepwork.settings.getKey("anthropic"));
-      setOpenaiKey(await window.deepwork.settings.getKey("openai"));
+      setApiKey(await window.deepwork.settings.getKey(s.model.provider));
+      setMemories(await window.deepwork.memories.list());
     })();
   }, []);
 
+  const models = useMemo(
+    () => (settings ? modelsForProvider(settings.model.provider) : []),
+    [settings],
+  );
+
   if (!settings) return <div className="settings">Loading…</div>;
+
+  const preset = PROVIDER_PRESETS[settings.model.provider];
+  const needsKey = settings.model.provider !== "ollama";
+  const needsBaseUrl =
+    settings.model.provider !== "ollama" &&
+    (settings.model.provider === "openai" ||
+      settings.model.provider === "custom" ||
+      settings.model.provider === "openrouter");
 
   const update = (patch: Partial<SettingsType["model"]>): void => {
     setSettings({ ...settings, model: { ...settings.model, ...patch } });
+  };
+
+  const switchProvider = (provider: SettingsType["model"]["provider"]): void => {
+    const p = PROVIDER_PRESETS[provider];
+    setSettings({
+      ...settings,
+      model: {
+        ...settings.model,
+        provider,
+        model: p.defaultModel || settings.model.model,
+        baseUrl: p.baseUrl,
+      },
+    });
+    setVerifyResult(null);
+    void window.deepwork.settings.getKey(provider).then(setApiKey);
   };
 
   const addMcp = (): void => {
@@ -50,13 +90,34 @@ export function Settings({ onClose }: Props): React.ReactElement {
     setSettings({ ...settings, mcpServers: settings.mcpServers.filter((m) => m.id !== id) });
   };
 
+  const verify = async (): Promise<void> => {
+    setVerifying(true);
+    setVerifyResult(null);
+    if (needsKey) await window.deepwork.settings.setKey(settings.model.provider, apiKey.trim());
+    const r = await window.deepwork.models.verify(settings.model);
+    setVerifyResult(r);
+    setVerifying(false);
+  };
+
   const save = async (): Promise<void> => {
     await window.deepwork.settings.save(settings);
-    await window.deepwork.settings.setKey("anthropic", anthropicKey.trim());
-    await window.deepwork.settings.setKey("openai", openaiKey.trim());
+    if (needsKey) await window.deepwork.settings.setKey(settings.model.provider, apiKey.trim());
     await window.deepwork.settings.rebuildAgent();
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+
+  const addMemory = async (): Promise<void> => {
+    const text = newMemory.trim();
+    if (!text) return;
+    const m = await window.deepwork.memories.add(text);
+    setMemories((prev) => [...prev, m]);
+    setNewMemory("");
+  };
+
+  const removeMemory = async (id: string): Promise<void> => {
+    await window.deepwork.memories.remove(id);
+    setMemories((prev) => prev.filter((m) => m.id !== id));
   };
 
   return (
@@ -73,65 +134,85 @@ export function Settings({ onClose }: Props): React.ReactElement {
         <label>Provider</label>
         <select
           value={settings.model.provider}
-          onChange={(e) => update({ provider: e.target.value as SettingsType["model"]["provider"] })}
+          onChange={(e) =>
+            switchProvider(e.target.value as SettingsType["model"]["provider"])
+          }
         >
-          <option value="anthropic">Anthropic</option>
-          <option value="openai">OpenAI (compatible)</option>
-          <option value="ollama">Ollama (local)</option>
+          {Object.values(PROVIDER_PRESETS).map((p) => (
+            <option key={p.kind} value={p.kind}>
+              {p.label}
+            </option>
+          ))}
         </select>
       </div>
       <div className="field">
         <label>Model ID</label>
+        {models.length > 0 && (
+          <select
+            value={models.some((m) => m.id === settings.model.model) ? settings.model.model : ""}
+            onChange={(e) => update({ model: e.target.value })}
+          >
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+                {m.recommended ? " ★" : ""}
+              </option>
+            ))}
+          </select>
+        )}
         <input
+          style={{ marginTop: 8 }}
           value={settings.model.model}
           onChange={(e) => update({ model: e.target.value })}
-          placeholder="claude-sonnet-4-5"
+          placeholder={preset.defaultModel}
         />
       </div>
-      {settings.model.provider !== "ollama" && (
-        <div className="field">
-          <label>Base URL (optional, for OpenAI-compatible endpoints)</label>
-          <input
-            value={settings.model.baseUrl ?? ""}
-            onChange={(e) => update({ baseUrl: e.target.value })}
-            placeholder="https://api.openai.com/v1"
-          />
-        </div>
-      )}
-      {settings.model.provider === "ollama" && (
+      {settings.model.provider === "ollama" ? (
         <div className="field">
           <label>Ollama URL</label>
           <input
             value={settings.model.baseUrl ?? ""}
             onChange={(e) => update({ baseUrl: e.target.value })}
-            placeholder="http://localhost:11434"
+            placeholder={preset.baseUrl}
           />
         </div>
-      )}
+      ) : needsBaseUrl ? (
+        <div className="field">
+          <label>Base URL</label>
+          <input
+            value={settings.model.baseUrl ?? ""}
+            onChange={(e) => update({ baseUrl: e.target.value })}
+            placeholder={preset.baseUrl}
+          />
+        </div>
+      ) : null}
 
       <h3>API keys</h3>
-      {settings.model.provider === "anthropic" && (
+      {needsKey && (
         <div className="field">
-          <label>Anthropic API key</label>
+          <label>
+            {preset.label} API key
+            {preset.envKey ? ` (or set ${preset.envKey})` : ""}
+          </label>
           <input
             type="password"
-            value={anthropicKey}
-            onChange={(e) => setAnthropicKey(e.target.value)}
-            placeholder="sk-ant-..."
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={preset.keyPlaceholder}
           />
         </div>
       )}
-      {settings.model.provider === "openai" && (
-        <div className="field">
-          <label>OpenAI API key</label>
-          <input
-            type="password"
-            value={openaiKey}
-            onChange={(e) => setOpenaiKey(e.target.value)}
-            placeholder="sk-..."
-          />
-        </div>
-      )}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+        <button className="btn" onClick={verify} disabled={verifying}>
+          {verifying ? "Verifying…" : "Test connection"}
+        </button>
+        {verifyResult && (
+          <span style={{ color: verifyResult.ok ? "var(--ok)" : "var(--danger)", fontSize: 13 }}>
+            {verifyResult.ok ? "✓ " : "✕ "}
+            {verifyResult.message}
+          </span>
+        )}
+      </div>
 
       <h3>Workspace</h3>
       <div className="field">
@@ -154,17 +235,55 @@ export function Settings({ onClose }: Props): React.ReactElement {
         </div>
       </div>
 
+      <h3>Long-term memory</h3>
+      <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: -4 }}>
+        Facts the agent remembers across all sessions.
+      </p>
+      <div className="memory-list">
+        {memories.map((m) => (
+          <div key={m.id} className="memory-item">
+            <span>{m.content}</span>
+            <button className="icon-btn" onClick={() => removeMemory(m.id)} title="Forget">
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="row" style={{ marginTop: 8 }}>
+        <input
+          value={newMemory}
+          onChange={(e) => setNewMemory(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void addMemory();
+          }}
+          placeholder="e.g. The user prefers concise answers in Chinese."
+        />
+        <button className="btn" onClick={addMemory}>
+          Add
+        </button>
+      </div>
+
+      <h3>Application</h3>
+      <label className="switch-row">
+        <input
+          type="checkbox"
+          checked={settings.trayEnabled}
+          onChange={(e) => setSettings({ ...settings, trayEnabled: e.target.checked })}
+        />
+        Show in menu bar / close to tray
+      </label>
+      <label className="switch-row">
+        <input
+          type="checkbox"
+          checked={settings.autoUpdate}
+          onChange={(e) => setSettings({ ...settings, autoUpdate: e.target.checked })}
+        />
+        Automatically download updates
+      </label>
+
       <h3>MCP plugins</h3>
       {settings.mcpServers.map((m) => (
-        <div
-          key={m.id}
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            padding: 12,
-            marginBottom: 10,
-          }}
-        >
+        <div key={m.id} className="mcp-card">
           <div className="field">
             <label>Label</label>
             <input value={m.label} onChange={(e) => updateMcp(m.id, { label: e.target.value })} />

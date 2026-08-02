@@ -1,15 +1,15 @@
 import { getDb } from "./db";
 import { safeStorage } from "electron";
-import type { Settings, ModelConfig, McpServerConfig } from "../../shared/types";
+import type {
+  Settings,
+  ModelConfig,
+  McpServerConfig,
+  ProviderKind,
+} from "../../shared/types";
+import { listAllMemories } from "./memories";
 
 const SETTINGS_KEY = "app_settings";
 const SECRET_PREFIX = "secret:";
-// API keys are stored separately and encrypted at rest with safeStorage.
-const KEYS = {
-  anthropic: "anthropic_api_key",
-  openai: "openai_api_key",
-  ollama: "",
-} as const;
 
 const DEFAULT_SETTINGS: Settings = {
   model: {
@@ -18,37 +18,52 @@ const DEFAULT_SETTINGS: Settings = {
     workspaceDir: "",
   },
   mcpServers: [],
-  approvalMode: "manual",
+  permissionMode: "manual",
   alwaysAllowTools: [],
+  onboarded: false,
+  trayEnabled: true,
+  autoUpdate: true,
+  memories: [],
 };
 
 export function loadSettings(): Settings {
   const row = getDb()
     .prepare("SELECT value FROM settings WHERE key = ?")
     .get(SETTINGS_KEY) as { value: string } | undefined;
-  if (!row) return structuredClone(DEFAULT_SETTINGS);
-  try {
-    const parsed = JSON.parse(row.value) as Settings;
-    return { ...structuredClone(DEFAULT_SETTINGS), ...parsed };
-  } catch {
-    return structuredClone(DEFAULT_SETTINGS);
+  let merged: Settings = structuredClone(DEFAULT_SETTINGS);
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.value) as Partial<Settings>;
+      merged = { ...merged, ...parsed };
+      // Migrate legacy approvalMode -> permissionMode.
+      if (!parsed.permissionMode && parsed.approvalMode) {
+        merged.permissionMode = parsed.approvalMode;
+      }
+    } catch {
+      // keep defaults
+    }
   }
+  // Always hydrate global memories from the durable store (single source of truth).
+  merged.memories = listAllMemories();
+  return merged;
 }
 
 export function saveSettings(settings: Settings): void {
+  // Memories are persisted separately; don't let a stale blob clobber them.
+  const { memories: _mem, ...rest } = settings;
   getDb()
     .prepare(
       "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
-    .run(SETTINGS_KEY, JSON.stringify(settings));
+    .run(SETTINGS_KEY, JSON.stringify(rest));
 }
 
-export function getApiKey(provider: keyof typeof KEYS): string {
-  const storageKey = KEYS[provider];
-  if (!storageKey) return "";
+/** Generic encrypted key per provider. */
+export function getApiKey(provider: ProviderKind | string): string {
+  const k = SECRET_PREFIX + "api_key:" + provider;
   const row = getDb()
     .prepare("SELECT value FROM settings WHERE key = ?")
-    .get(SECRET_PREFIX + storageKey) as { value: string } | undefined;
+    .get(k) as { value: string } | undefined;
   if (!row) return "";
   try {
     if (safeStorage.isEncryptionAvailable()) {
@@ -60,10 +75,8 @@ export function getApiKey(provider: keyof typeof KEYS): string {
   }
 }
 
-export function setApiKey(provider: keyof typeof KEYS, value: string): void {
-  const storageKey = KEYS[provider];
-  if (!storageKey) return;
-  const k = SECRET_PREFIX + storageKey;
+export function setApiKey(provider: ProviderKind | string, value: string): void {
+  const k = SECRET_PREFIX + "api_key:" + provider;
   if (!value) {
     getDb().prepare("DELETE FROM settings WHERE key = ?").run(k);
     return;

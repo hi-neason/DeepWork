@@ -1,58 +1,118 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatState } from "../App";
-import type { ApprovalMode, McpServerConfig } from "../../../shared/types";
+import type { PermissionMode, TodoItem, UpdateStatus } from "../../../shared/types";
 import { Markdown } from "./Markdown";
+import { TodoPanel } from "./TodoPanel";
 
 interface Props {
   sessionId: string | null;
   chat: ChatState;
-  mcpServers: McpServerConfig[];
-  approvalMode: ApprovalMode;
-  onSend: (text: string) => void;
+  todos: TodoItem[];
+  artifactsCount: number;
+  updateStatus: UpdateStatus;
+  permissionMode: PermissionMode;
+  onSend: (text: string, attachments?: File[]) => void;
+  onCancel: () => void;
   onRegenerate: () => void;
-  onToggleMode: () => void;
+  onSetMode: (mode: PermissionMode) => void;
   onNewSession: () => void;
+  onToggleArtifacts: () => void;
+  onInstallUpdate: () => void;
 }
 
 export function Chat({
   sessionId,
   chat,
-  mcpServers,
-  approvalMode,
+  todos,
+  artifactsCount,
+  updateStatus,
+  permissionMode,
   onSend,
+  onCancel,
   onRegenerate,
-  onToggleMode,
+  onSetMode,
   onNewSession,
+  onToggleArtifacts,
+  onInstallUpdate,
 }: Props): React.ReactElement {
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [chat]);
+  }, [chat, todos]);
+
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+  }, [input]);
 
   const submit = (): void => {
     const text = input.trim();
-    if (!text || chat.streaming) return;
+    if ((!text && attachments.length === 0) || chat.streaming) return;
     setInput("");
-    void onSend(text);
+    setAttachments([]);
+    void onSend(text, attachments);
+  };
+
+  const onPickFiles = (files: FileList | null): void => {
+    if (!files) return;
+    setAttachments((prev) => [...prev, ...Array.from(files)]);
+  };
+
+  const paste = (e: React.ClipboardEvent): void => {
+    const files = Array.from(e.clipboardData.files).filter((f) =>
+      f.type.startsWith("image/") || f.type === "application/pdf" || f.type.startsWith("text/"),
+    );
+    if (files.length) setAttachments((prev) => [...prev, ...files]);
   };
 
   const copy = (content: string): void => {
     void navigator.clipboard?.writeText(content);
   };
 
-  const enabledMcp = useMemo(() => mcpServers.filter((m) => m.enabled), [mcpServers]);
-  const canRegenerate = !chat.streaming && chat.timeline.some((t) => t.kind === "msg" && t.role === "assistant");
+  const canRegenerate =
+    !chat.streaming && chat.timeline.some((t) => t.kind === "msg" && t.role === "assistant");
+  const completedTodos = todos.filter((t) => t.status === "completed").length;
 
   const placeholder = sessionId
     ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)"
     : "Ask anything — a new chat starts automatically";
 
+  const modeLabel =
+    permissionMode === "auto" ? "Auto" : permissionMode === "plan" ? "Plan" : "Manual";
+
   return (
     <>
       <div className="topbar">
         <span className="title">{sessionId ? "Chat" : "DeepWork"}</span>
+        <div className="topbar-right">
+          {updateStatus.state === "available" && (
+            <span className="update-banner">Update available ({updateStatus.version})</span>
+          )}
+          {updateStatus.state === "downloading" && (
+            <span className="update-banner">Downloading update… {updateStatus.percent}%</span>
+          )}
+          {updateStatus.state === "downloaded" && (
+            <button className="btn primary small" onClick={onInstallUpdate}>
+              Restart to update
+            </button>
+          )}
+          <button
+            className="btn ghost small"
+            onClick={onToggleArtifacts}
+            disabled={artifactsCount === 0}
+            title="Artifacts produced in this session"
+          >
+            📦 {artifactsCount}
+          </button>
+        </div>
       </div>
       <div className="chat" ref={scrollRef}>
         {!sessionId ? (
@@ -64,47 +124,50 @@ export function Chat({
             </button>
           </div>
         ) : (
-          chat.timeline.map((item, i) => {
-            if (item.kind === "msg") {
-              const isAssistant = item.role === "assistant";
-              return (
-                <div key={i} className={`msg ${item.role}`}>
-                  <div className="role">{item.role}</div>
-                  <div className="bubble">
-                    {isAssistant ? <Markdown content={item.content} /> : item.content}
-                  </div>
-                  {isAssistant && (
-                    <div className="msg-actions">
-                      <button title="Copy" onClick={() => copy(item.content)}>
-                        ⧉
-                      </button>
-                      <button title="Regenerate" onClick={onRegenerate} disabled={!canRegenerate}>
-                        ↻
-                      </button>
+          <>
+            {todos.length > 0 && <TodoPanel todos={todos} completed={completedTodos} />}
+            {chat.timeline.map((item, i) => {
+              if (item.kind === "msg") {
+                const isAssistant = item.role === "assistant";
+                return (
+                  <div key={i} className={`msg ${item.role}`}>
+                    <div className="role">{item.role}</div>
+                    <div className="bubble">
+                      {isAssistant ? <Markdown content={item.content} /> : item.content}
                     </div>
-                  )}
+                    {isAssistant && (
+                      <div className="msg-actions">
+                        <button title="Copy" onClick={() => copy(item.content)}>
+                          ⧉
+                        </button>
+                        <button title="Regenerate" onClick={onRegenerate} disabled={!canRegenerate}>
+                          ↻
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              const t = chat.tools[item.id];
+              if (!t) return null;
+              return (
+                <div key={i} className={`tool-card ${t.isError ? "error" : ""}`}>
+                  <div className="inner">
+                    <div>
+                      {t.status === "running" ? "⏳ " : t.isError ? "✕ " : "✓ "}
+                      <span className="tname">{t.name}</span>
+                    </div>
+                    <div className="targs">{t.argsPreview}</div>
+                    {t.outputPreview && (
+                      <div className="targs" style={{ marginTop: 4 }}>
+                        → {t.outputPreview}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
-            }
-            const t = chat.tools[item.id];
-            if (!t) return null;
-            return (
-              <div key={i} className={`tool-card ${t.isError ? "error" : ""}`}>
-                <div className="inner">
-                  <div>
-                    {t.status === "running" ? "⏳ " : t.isError ? "✕ " : "✓ "}
-                    <span className="tname">{t.name}</span>
-                  </div>
-                  <div className="targs">{t.argsPreview}</div>
-                  {t.outputPreview && (
-                    <div className="targs" style={{ marginTop: 4 }}>
-                      → {t.outputPreview}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })
+            })}
+          </>
         )}
         {chat.error && (
           <div className="msg">
@@ -115,8 +178,25 @@ export function Chat({
         )}
       </div>
       <div className="composer">
+        {attachments.length > 0 && (
+          <div className="attachments">
+            {attachments.map((f, i) => (
+              <div key={i} className="att-chip" title={f.name}>
+                {f.type.startsWith("image/") ? "🖼" : f.type === "application/pdf" ? "📄" : "📎"}{" "}
+                <span className="att-name">{f.name}</span>
+                <button
+                  className="att-remove"
+                  onClick={() => setAttachments(attachments.filter((_, idx) => idx !== i))}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="composer-box">
           <textarea
+            ref={taRef}
             value={input}
             placeholder={placeholder}
             autoFocus
@@ -128,39 +208,118 @@ export function Chat({
                 submit();
               }
             }}
+            onPaste={paste}
           />
           <div className="composer-bar">
             <div className="composer-left">
-              <button className="icon-btn" title="Commands and skills (/)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M3 12h18"/></svg>
+              <button
+                className="icon-btn"
+                title="Attach image, PDF or text file"
+                onClick={() => fileRef.current?.click()}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8l-8.57 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
               </button>
-              <button className="icon-btn" title="Attach file">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8l-8.57 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept="image/*,application/pdf,.txt,.md,.json,.csv,.tsv,.log,.yml,.yaml,.toml,.ini,text/*"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  onPickFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
               <span className="cap-chip" title="Screen capture & GUI control">🖥</span>
-              {enabledMcp.length > 0 && (
-                <span className="cap-chip" title={`${enabledMcp.length} MCP plugins enabled`}>
-                  🧩 <span className="cap-count">+{enabledMcp.length}</span>
-                </span>
-              )}
+              <button
+                className="cap-chip clickable"
+                onClick={onToggleArtifacts}
+                disabled={artifactsCount === 0}
+                title="Artifacts panel"
+              >
+                📦 {artifactsCount}
+              </button>
             </div>
             <div className="composer-right">
-              <button
-                className={`mode-toggle ${approvalMode === "auto" ? "auto" : ""}`}
-                onClick={onToggleMode}
-                title="Toggle approval mode"
-              >
-                <span className="dot" />
-                {approvalMode === "auto" ? "Auto Mode" : "Manual Mode"}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <button className="send-btn" onClick={submit} disabled={chat.streaming || !input.trim()} title="Send">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-              </button>
+              <div className="mode-wrap">
+                <button
+                  className={`mode-toggle mode-${permissionMode}`}
+                  onClick={() => setShowModeMenu((v) => !v)}
+                  title="Approval mode"
+                >
+                  <span className="dot" />
+                  {modeLabel}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                </button>
+                {showModeMenu && (
+                  <div className="mode-menu" onMouseLeave={() => setShowModeMenu(false)}>
+                    <ModeOption
+                      active={permissionMode === "manual"}
+                      label="Manual"
+                      desc="Ask before any write/exec action"
+                      onClick={() => {
+                        onSetMode("manual");
+                        setShowModeMenu(false);
+                      }}
+                    />
+                    <ModeOption
+                      active={permissionMode === "auto"}
+                      label="Auto"
+                      desc="Auto-approve writes/commands (GUI still asks)"
+                      onClick={() => {
+                        onSetMode("auto");
+                        setShowModeMenu(false);
+                      }}
+                    />
+                    <ModeOption
+                      active={permissionMode === "plan"}
+                      label="Plan"
+                      desc="Read-only: plan first, execute on approval"
+                      onClick={() => {
+                        onSetMode("plan");
+                        setShowModeMenu(false);
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+              {chat.streaming ? (
+                <button className="send-btn stop" onClick={onCancel} title="Stop generating">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                </button>
+              ) : (
+                <button
+                  className="send-btn"
+                  onClick={submit}
+                  disabled={!input.trim() && attachments.length === 0}
+                  title="Send"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+function ModeOption({
+  active,
+  label,
+  desc,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  desc: string;
+  onClick: () => void;
+}): React.ReactElement {
+  return (
+    <div className={`mode-opt ${active ? "active" : ""}`} onClick={onClick}>
+      <div className="mode-opt-label">{label}</div>
+      <div className="mode-opt-desc">{desc}</div>
+    </div>
   );
 }

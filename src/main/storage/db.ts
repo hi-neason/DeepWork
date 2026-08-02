@@ -40,6 +40,38 @@ function migrate(d: Database.Database): void {
       decision TEXT,
       output_preview TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      scope_key TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_key);
+
+    CREATE TABLE IF NOT EXISTS automations (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      instructions TEXT NOT NULL,
+      schedule TEXT NOT NULL,
+      run_at TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      last_run_at INTEGER,
+      last_status TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS automation_runs (
+      id TEXT PRIMARY KEY,
+      automation_id TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      finished_at INTEGER,
+      status TEXT NOT NULL,
+      error TEXT,
+      session_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_runs_automation ON automation_runs(automation_id);
   `);
 }
 

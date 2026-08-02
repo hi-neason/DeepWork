@@ -9,6 +9,7 @@ interface Props {
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onOpenSettings: () => void;
+  onOpenAutomations: () => void;
 }
 
 interface MenuState {
@@ -25,6 +26,7 @@ export function Sidebar({
   onDelete,
   onRename,
   onOpenSettings,
+  onOpenAutomations,
 }: Props): React.ReactElement {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -142,6 +144,9 @@ export function Sidebar({
       )}
 
       <div className="sidebar-footer">
+        <div className="session-item" onClick={onOpenAutomations}>
+          ⏰ Automations
+        </div>
         <div className="session-item" onClick={onOpenSettings}>
           ⚙ Settings
         </div>
