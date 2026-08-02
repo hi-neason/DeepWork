@@ -1,15 +1,23 @@
-import { useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import type {
-  ApprovalMode,
+  ArtifactFile,
   DeepWorkEvent,
   HistoryItem,
   Session,
   Settings as AppSettings,
+  TodoItem,
+  UpdateStatus,
 } from "../../shared/types";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, type ViewKey } from "./components/Sidebar";
 import { Chat } from "./components/Chat";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { Settings } from "./components/Settings";
+import { Onboarding } from "./components/Onboarding";
+import { ArtifactsPanel } from "./components/ArtifactsPanel";
+import { AutomationsView } from "./components/AutomationsView";
+import { Connectors } from "./components/Connectors";
+import { fileToAttachment } from "./lib/attachments";
+import { applyAppearance, watchSystemTheme } from "./lib/theme";
 
 type ToolRecord = {
   id: string;
@@ -21,7 +29,7 @@ type ToolRecord = {
 };
 
 export type TimelineEntry =
-  | { kind: "msg"; role: "user" | "assistant"; content: string }
+  | { kind: "msg"; role: "user" | "assistant"; content: string; reasoning?: string }
   | { kind: "tool"; id: string };
 
 export type ChatState = {
@@ -43,7 +51,6 @@ type Action =
 function reducer(state: ChatState, action: Action): ChatState {
   if (action.type === "reset") return { ...initialChat };
   if (action.type === "reset_to_user") {
-    // Drop trailing assistant/tool items so a regenerate can re-stream them.
     const timeline = [...state.timeline];
     while (
       timeline.length > 0 &&
@@ -88,7 +95,6 @@ function reducer(state: ChatState, action: Action): ChatState {
   switch (e.type) {
     case "message_delta": {
       const timeline = [...state.timeline];
-      // Append to the trailing assistant message if present, otherwise add one.
       for (let i = timeline.length - 1; i >= 0; i--) {
         const item = timeline[i];
         if (item.kind === "msg" && item.role === "assistant") {
@@ -100,8 +106,18 @@ function reducer(state: ChatState, action: Action): ChatState {
       timeline.push({ kind: "msg", role: "assistant", content: e.text });
       return { ...state, timeline };
     }
-    case "reasoning_delta":
+    case "reasoning_delta": {
+      const timeline = [...state.timeline];
+      for (let i = timeline.length - 1; i >= 0; i--) {
+        const item = timeline[i];
+        if (item.kind === "msg" && item.role === "assistant") {
+          timeline[i] = { ...item, reasoning: (item.reasoning ?? "") + e.text };
+          return { ...state, timeline };
+        }
+        if (item.kind === "msg" && item.role === "user") break;
+      }
       return state;
+    }
     case "tool_call_started": {
       const tools = {
         ...state.tools,
@@ -129,6 +145,8 @@ function reducer(state: ChatState, action: Action): ChatState {
     }
     case "turn_completed":
       return { ...state, streaming: false };
+    case "turn_aborted":
+      return { ...state, streaming: false };
     case "turn_error":
       return { ...state, streaming: false, error: e.message };
     default:
@@ -141,25 +159,82 @@ export function App(): React.ReactElement {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chat, dispatch] = useReducer(reducer, initialChat);
   const [approval, setApproval] = useState<DeepWorkEvent | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState<ViewKey>("chat");
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [artifacts, setArtifacts] = useState<ArtifactFile[]>([]);
+  const [showArtifacts, setShowArtifacts] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle" });
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
-  const refreshSessions = async (): Promise<void> => {
+  const refreshSessions = useCallback(async (): Promise<void> => {
     setSessions(await window.deepwork.sessions.list());
-  };
+  }, []);
 
-  const refreshSettings = async (): Promise<void> => {
-    setSettings(await window.deepwork.settings.get());
-  };
+  const refreshSettings = useCallback(async (): Promise<void> => {
+    const s = await window.deepwork.settings.get();
+    setSettings(s);
+    setNeedsOnboarding(!s.onboarded);
+    applyAppearance(s);
+  }, []);
 
   useEffect(() => {
-    void refreshSessions();
-    void refreshSettings();
+    void (async () => {
+      await Promise.all([refreshSessions(), refreshSettings()]);
+    })();
+    const off = window.deepwork.updates.onStatus(setUpdateStatus);
+    const offTheme = watchSystemTheme(() => {
+      if (settings) applyAppearance(settings);
+    });
+    void window.deepwork.updates.check();
+    return () => {
+      off();
+      offTheme();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSessions, refreshSettings]);
+
+  // Onboarding only greets genuinely new installs: not yet onboarded AND no
+  // existing sessions (so upgraded users aren't forced through it).
+  const showOnboarding =
+    needsOnboarding && sessions.length === 0 && view === "chat";
+
+  const selectedSession = sessions.find((s) => s.id === sessionId);
+  // Models available in the picker: those enabled in settings, falling back to
+  // the default settings model so there's always something to pick.
+  const enabledModels = useMemo(() => {
+    const configured = settings?.configuredModels ?? [];
+    const enabled = configured.filter((m) => m.enabled);
+    if (enabled.length > 0) return enabled;
+    if (settings) {
+      return [
+        {
+          id: `${settings.model.provider}:${settings.model.model}`,
+          provider: settings.model.provider,
+          enabled: true,
+          isDefault: true,
+        },
+      ];
+    }
+    return [];
+  }, [settings]);
+
+  // Global keyboard shortcuts.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        void newSession();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   // Subscribe to agent events for the active session.
   useEffect(() => {
     if (!sessionId) return;
+    setTodos([]);
     const off = window.deepwork.chat.onEvent(sessionId, (event) => {
       if (event.type === "approval_requested") {
         setApproval(event);
@@ -167,20 +242,31 @@ export function App(): React.ReactElement {
       if (event.type === "session_renamed") {
         void refreshSessions();
       }
+      if (event.type === "todos_updated") {
+        setTodos(event.todos);
+      }
+      if (event.type === "artifacts_updated") {
+        setArtifacts((prev) => mergeArtifacts(prev, event.artifacts));
+      }
       dispatch({ type: "event", event });
     });
     return off;
-  }, [sessionId]);
+  }, [sessionId, refreshSessions]);
 
   const newSession = async (): Promise<void> => {
     const s = await window.deepwork.sessions.create();
     await refreshSessions();
     setSessionId(s.id);
+    setTodos([]);
+    setArtifacts([]);
+    setView("chat");
     dispatch({ type: "reset" });
   };
 
   const selectSession = async (id: string): Promise<void> => {
     setSessionId(id);
+    setView("chat");
+    setTodos([]);
     dispatch({ type: "reset" });
     const { timeline } = await window.deepwork.chat.history(id);
     dispatch({ type: "history", timeline });
@@ -200,33 +286,57 @@ export function App(): React.ReactElement {
     await refreshSessions();
   };
 
-  const send = async (text: string): Promise<void> => {
-    if (!text.trim()) return;
+  const send = async (
+    text: string,
+    attachments?: File[],
+    workspaceDir?: string,
+    modelId?: string,
+  ): Promise<void> => {
+    if (!text.trim() && (!attachments || attachments.length === 0)) return;
     let sid = sessionId;
     if (!sid) {
-      const s = await window.deepwork.sessions.create();
+      const s = await window.deepwork.sessions.create(
+        undefined,
+        workspaceDir,
+        modelId,
+      );
       await refreshSessions();
       setSessionId(s.id);
       sid = s.id;
+    } else if (workspaceDir || modelId) {
+      if (workspaceDir) await window.deepwork.sessions.setWorkspace(sid, workspaceDir);
+      if (modelId) await window.deepwork.sessions.setModel(sid, modelId);
+      await refreshSessions();
     }
     dispatch({ type: "user", text });
-    await window.deepwork.chat.send(sid, text);
+    const atts = attachments && attachments.length > 0
+      ? await Promise.all(attachments.map(fileToAttachment))
+      : undefined;
+    await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId);
+  };
+
+  const setSessionModel = async (modelId: string): Promise<void> => {
+    if (sessionId) {
+      await window.deepwork.sessions.setModel(sessionId, modelId);
+      await refreshSessions();
+    }
+  };
+
+  const cancel = (): void => {
+    if (sessionId) void window.deepwork.chat.cancel(sessionId);
   };
 
   const regenerate = async (): Promise<void> => {
     if (!sessionId) return;
-    // Drop the trailing assistant message/tool results from the UI, then re-run.
     dispatch({ type: "reset_to_user" });
     await window.deepwork.chat.regenerate(sessionId);
   };
 
-  const toggleApprovalMode = async (): Promise<void> => {
+  const setMode = async (mode: "manual" | "auto" | "plan"): Promise<void> => {
     if (!settings) return;
-    const next: ApprovalMode = settings.approvalMode === "auto" ? "manual" : "auto";
-    const updated = { ...settings, approvalMode: next };
+    const updated = { ...settings, permissionMode: mode };
     setSettings(updated);
     await window.deepwork.settings.save(updated);
-    // Mode is read live by the middleware; no agent rebuild required.
   };
 
   const respondApproval = async (decision: "allow" | "deny" | "always_allow"): Promise<void> => {
@@ -236,38 +346,89 @@ export function App(): React.ReactElement {
     setApproval(null);
   };
 
+  const finishOnboarding = async (): Promise<void> => {
+    await window.deepwork.settings.setOnboarded(true);
+    await refreshSettings();
+  };
+
+  const moveToGroup = async (id: string, group: string): Promise<void> => {
+    await window.deepwork.sessions.setGroup(id, group);
+    await refreshSessions();
+  };
+
+  const renameGroup = async (oldName: string, newName: string): Promise<void> => {
+    await window.deepwork.sessions.renameGroup(oldName, newName);
+    await refreshSessions();
+  };
+
+  const deleteGroup = async (name: string): Promise<void> => {
+    await window.deepwork.sessions.deleteGroup(name);
+    await refreshSessions();
+  };
+
+  const createGroup = async (name: string): Promise<void> => {
+    await window.deepwork.sessions.createGroup(name);
+    await refreshSessions();
+  };
+
+  if (showOnboarding && settings) {
+    return <Onboarding settings={settings} onDone={finishOnboarding} />;
+  }
+
   return (
-    <div className="app">
+    <div className={`app${showArtifacts ? " has-artifacts" : ""}`}>
       <Sidebar
         sessions={sessions}
         activeId={sessionId}
+        activeView={view}
         onNew={newSession}
         onSelect={selectSession}
         onDelete={deleteSession}
         onRename={renameSessionById}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenView={setView}
+        onMoveToGroup={moveToGroup}
+        onRenameGroup={renameGroup}
+        onDeleteGroup={deleteGroup}
+        onCreateGroup={createGroup}
       />
       <main className="main">
-        {showSettings ? (
-          <Settings
-            onClose={() => {
-              setShowSettings(false);
-              void refreshSettings();
-            }}
-          />
+        {view === "settings" ? (
+          <Settings onClose={() => setView("chat")} updateStatus={updateStatus} />
+        ) : view === "connectors" ? (
+          <Connectors onClose={() => setView("chat")} />
+        ) : view === "automations" ? (
+          <AutomationsView onClose={() => setView("chat")} />
         ) : (
           <Chat
             sessionId={sessionId}
             chat={chat}
-            mcpServers={settings?.mcpServers ?? []}
-            approvalMode={settings?.approvalMode ?? "manual"}
+            todos={todos}
+            artifactsCount={artifacts.length}
+            updateStatus={updateStatus}
+            permissionMode={settings?.permissionMode ?? "manual"}
+            sessionModel={selectedSession?.model}
+            enabledModels={enabledModels}
+            showReasoning={settings?.showReasoning ?? true}
             onSend={send}
+            onCancel={cancel}
             onRegenerate={regenerate}
-            onToggleMode={toggleApprovalMode}
+            onSetMode={setMode}
+            onSetModel={setSessionModel}
             onNewSession={newSession}
+            onToggleArtifacts={() => setShowArtifacts((v) => !v)}
+            onInstallUpdate={() => window.deepwork.updates.install()}
           />
         )}
       </main>
+      {showArtifacts && (
+        <ArtifactsPanel
+          artifacts={artifacts}
+          onClose={() => setShowArtifacts(false)}
+          onRefresh={async () => {
+            // Artifacts are pushed at turn end; this is a no-op placeholder.
+          }}
+        />
+      )}
       {approval && approval.type === "approval_requested" && (
         <ApprovalModal
           name={approval.name}
@@ -283,4 +444,11 @@ export function App(): React.ReactElement {
       )}
     </div>
   );
+}
+
+function mergeArtifacts(prev: ArtifactFile[], next: ArtifactFile[]): ArtifactFile[] {
+  const map = new Map<string, ArtifactFile>();
+  for (const a of prev) map.set(a.absolutePath, a);
+  for (const a of next) map.set(a.absolutePath, a);
+  return Array.from(map.values()).sort((a, b) => b.modifiedAt - a.modifiedAt);
 }

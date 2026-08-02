@@ -1,23 +1,37 @@
 import { createMiddleware, ToolMessage } from "langchain";
-import { EventEmitter } from "node:events";
 import { riskOf, isSystemTool } from "../tools/registry";
 import { approvals } from "../security/approvals";
 import { audit } from "../storage/db";
-import type { ApprovalDecision, DeepWorkEvent, RiskLevel } from "../../shared/types";
+import { emitTurnEvent } from "./turnEvents";
+import type {
+  ApprovalDecision,
+  DeepWorkEvent,
+  PermissionMode,
+  RiskLevel,
+} from "../../shared/types";
 
 /** GUI tools always require per-use approval — never "always allow". */
-const GUI_TOOLS = new Set(["screenshot", "mouse_move", "mouse_click", "keyboard_type", "keyboard_press"]);
+const GUI_TOOLS = new Set([
+  "screenshot",
+  "mouse_move",
+  "mouse_click",
+  "keyboard_type",
+  "keyboard_press",
+]);
 
-/** Per-turn emitters keyed by LangGraph thread_id. */
-const turnEmitters = new Map<string, EventEmitter>();
-
-export function registerTurnEmitter(threadId: string, emitter: EventEmitter): void {
-  turnEmitters.set(threadId, emitter);
-}
-
-export function unregisterTurnEmitter(threadId: string): void {
-  turnEmitters.delete(threadId);
-}
+/** Tools that mutate state / act on the world — blocked while in plan mode. */
+const MUTATING_TOOLS = new Set([
+  "write_file",
+  "edit_file",
+  "execute",
+  "screenshot",
+  "mouse_move",
+  "mouse_click",
+  "keyboard_type",
+  "keyboard_press",
+  "send_message",
+  "send_file",
+]);
 
 function needsApproval(risk: RiskLevel, toolName: string): boolean {
   if (GUI_TOOLS.has(toolName)) return true;
@@ -35,7 +49,8 @@ function previewArgs(args: unknown): string {
 }
 
 function previewContent(content: unknown): string {
-  if (typeof content === "string") return content.length > 300 ? content.slice(0, 300) + "…" : content;
+  if (typeof content === "string")
+    return content.length > 300 ? content.slice(0, 300) + "…" : content;
   if (Array.isArray(content)) {
     const text = content
       .filter((b) => (b as any)?.type === "text")
@@ -46,35 +61,74 @@ function previewContent(content: unknown): string {
   return "[result]";
 }
 
-export function createApprovalMiddleware(
-  getAlwaysAllow: () => Set<string>,
-  onAlwaysAllow: (toolName: string) => void,
-  isAutoMode: () => boolean,
-) {
+export interface MiddlewareDeps {
+  getAlwaysAllow: () => Set<string>;
+  onAlwaysAllow: (toolName: string) => void;
+  getMode: () => PermissionMode;
+  isUnattended: (threadId: string) => boolean;
+}
+
+export function createApprovalMiddleware(deps: MiddlewareDeps) {
+  const { getAlwaysAllow, onAlwaysAllow, getMode, isUnattended } = deps;
   return createMiddleware({
     name: "deepwork_approval",
     wrapToolCall: async (request: any, handler: any) => {
       const toolCall = request.toolCall as { id: string; name: string; args: unknown };
       const threadId: string | undefined = request.config?.configurable?.thread_id;
-      const emitter = threadId ? turnEmitters.get(threadId) : undefined;
       const risk = riskOf(toolCall.name);
       const argsPreview = previewArgs(toolCall.args);
+      const mode = getMode();
 
-      const emit = (e: DeepWorkEvent) => emitter?.emit("event", e);
+      const emit = (e: DeepWorkEvent) => emitTurnEvent(threadId, e);
       emit({ type: "tool_call_started", id: toolCall.id, name: toolCall.name, argsPreview });
+
+      // Plan mode: read/explore tools run freely, anything that changes state is
+      // blocked outright so the agent can plan without side effects.
+      if (mode === "plan" && MUTATING_TOOLS.has(toolCall.name)) {
+        const msg =
+          `Plan mode is active — the "${toolCall.name}" action is blocked. ` +
+          `Continue exploring with read-only tools, then present the plan to the user for approval.`;
+        emit({
+          type: "tool_call_finished",
+          id: toolCall.id,
+          name: toolCall.name,
+          outputPreview: "Blocked (plan mode)",
+          isError: true,
+        });
+        return new ToolMessage({
+          content: msg,
+          tool_call_id: toolCall.id,
+          name: toolCall.name,
+        });
+      }
 
       let decision: ApprovalDecision = "allow";
       const alwaysAllowed = getAlwaysAllow();
-      // In auto mode, non-GUI write/exec/external tools run without prompting.
-      // GUI tools always require per-use approval regardless of mode.
-      const autoAllowed = isAutoMode() && !GUI_TOOLS.has(toolCall.name);
+      const unattended = threadId ? isUnattended(threadId) : false;
+      // In auto mode OR an unattended (scheduled) run, non-GUI write/exec/external
+      // tools run without prompting. GUI tools always require per-use approval —
+      // in an unattended run they can't prompt, so they're denied.
+      const autoAllowed = (mode === "auto" || unattended) && !GUI_TOOLS.has(toolCall.name);
+      if (unattended && GUI_TOOLS.has(toolCall.name)) {
+        emit({
+          type: "tool_call_finished",
+          id: toolCall.id,
+          name: toolCall.name,
+          outputPreview: "Blocked: GUI actions need interactive approval.",
+          isError: true,
+        });
+        return new ToolMessage({
+          content: `GUI tool "${toolCall.name}" cannot run unattended (no user to approve).`,
+          tool_call_id: toolCall.id,
+          name: toolCall.name,
+        });
+      }
       const mustAsk =
         !autoAllowed &&
         needsApproval(risk, toolCall.name) &&
         (GUI_TOOLS.has(toolCall.name) || !alwaysAllowed.has(toolCall.name));
       if (mustAsk) {
         emit({ type: "approval_requested", id: toolCall.id, name: toolCall.name, risk, argsPreview });
-        // GUI tools can never be "always allowed" — coerce that choice to "allow".
         const d = await approvals.requestWithId(toolCall.id, {
           tool: toolCall.name,
           risk,
@@ -112,7 +166,9 @@ export function createApprovalMiddleware(
 
       try {
         const result = await handler(request);
-        const outputPreview = ToolMessage.isInstance(result) ? previewContent(result.content) : "[done]";
+        const outputPreview = ToolMessage.isInstance(result)
+          ? previewContent(result.content)
+          : "[done]";
         emit({
           type: "tool_call_finished",
           id: toolCall.id,

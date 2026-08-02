@@ -1,0 +1,3 @@
+// Auto-generated template tray icon (black glyph, macOS tints it).
+export const TRAY_ICON_16 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAAG0lEQVR4nGNgGAXkgP9E4lGDRg0aWgaNAlQAACIFY51n332/AAAAAElFTkSuQmCC";
+export const TRAY_ICON_36 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAAALUlEQVR4nO3OsQ0AAAjDsP7/NMw9gAU5UnYnklTN0UBAQEBAQEBAQEBAQJKetqKR4iyyhur4AAAAAElFTkSuQmCC";

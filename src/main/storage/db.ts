@@ -1,15 +1,12 @@
 import Database from "better-sqlite3";
-import { app } from "electron";
 import path from "node:path";
-import fs from "node:fs";
+import { APP_DATA_DIR } from "../config/paths";
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (db) return db;
-  const dir = app.getPath("userData");
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, "deepwork.db");
+  const file = path.join(APP_DATA_DIR, "deepwork.db");
   db = new Database(file);
   db.pragma("journal_mode = WAL");
   migrate(db);
@@ -17,12 +14,29 @@ export function getDb(): Database.Database {
 }
 
 function migrate(d: Database.Database): void {
+  // Run additive column migrations first, re-reading columns each time, so an
+  // older database is brought up to date even if a previous migration run was
+  // interrupted.
+  const addColumn = (table: string, name: string, decl: string): void => {
+    try {
+      const cols = d.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === name)) {
+        d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${decl}`);
+      }
+    } catch (err) {
+      console.error(`Migration failed for ${table}.${name}:`, err);
+    }
+  };
+
   d.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '默认',
+      workspace_dir TEXT,
+      model TEXT
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -39,6 +53,54 @@ function migrate(d: Database.Database): void {
       args_preview TEXT,
       decision TEXT,
       output_preview TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      scope_key TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_key);
+
+    CREATE TABLE IF NOT EXISTS automations (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      instructions TEXT NOT NULL,
+      schedule TEXT NOT NULL,
+      run_at TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      last_run_at INTEGER,
+      last_status TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS automation_runs (
+      id TEXT PRIMARY KEY,
+      automation_id TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      finished_at INTEGER,
+      status TEXT NOT NULL,
+      error TEXT,
+      session_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_runs_automation ON automation_runs(automation_id);
+  `);
+
+  // Backfill columns on databases created by older builds.
+  addColumn("sessions", "group_name", "TEXT NOT NULL DEFAULT '默认'");
+  addColumn("sessions", "workspace_dir", "TEXT");
+  addColumn("sessions", "model", "TEXT");
+
+  // Persisted groups (order + rename). A session's group is denormalized onto
+  // the session row so listing is a single query; this table just remembers
+  // group ordering and empty groups.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS session_groups (
+      name TEXT PRIMARY KEY,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
     );
   `);
 }

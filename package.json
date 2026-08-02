@@ -29,6 +29,7 @@
     "@nut-tree-fork/nut-js": "^4.2.6",
     "better-sqlite3": "^12.10.0",
     "deepagents": "^1.12.1",
+    "electron-updater": "^6.3.9",
     "langchain": "^1.5.4",
     "react-markdown": "^9",
     "remark-gfm": "^4",
