@@ -145,9 +145,16 @@ export function App(): React.ReactElement {
   };
 
   const send = async (text: string): Promise<void> => {
-    if (!sessionId || !text.trim()) return;
+    if (!text.trim()) return;
+    let sid = sessionId;
+    if (!sid) {
+      const s = await window.deepwork.sessions.create();
+      await refreshSessions();
+      setSessionId(s.id);
+      sid = s.id;
+    }
     dispatch({ type: "user", text });
-    await window.deepwork.chat.send(sessionId, text);
+    await window.deepwork.chat.send(sid, text);
   };
 
   const respondApproval = async (decision: "allow" | "deny" | "always_allow"): Promise<void> => {

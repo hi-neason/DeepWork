@@ -23,6 +23,8 @@ export function Chat({ sessionId, chat, onSend, onNewSession }: Props): React.Re
     void onSend(text);
   };
 
+  const placeholder = sessionId ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)" : "Ask anything — a new chat starts automatically";
+
   return (
     <>
       <div className="topbar">
@@ -79,8 +81,8 @@ export function Chat({ sessionId, chat, onSend, onNewSession }: Props): React.Re
         <div className="composer-inner">
           <textarea
             value={input}
-            placeholder={sessionId ? "Message DeepWork…" : "Start a chat first"}
-            disabled={!sessionId}
+            placeholder={placeholder}
+            autoFocus
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -89,7 +91,7 @@ export function Chat({ sessionId, chat, onSend, onNewSession }: Props): React.Re
               }
             }}
           />
-          <button onClick={submit} disabled={!sessionId || chat.streaming || !input.trim()}>
+          <button onClick={submit} disabled={chat.streaming || !input.trim()}>
             Send
           </button>
         </div>
