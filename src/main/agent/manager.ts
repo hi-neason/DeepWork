@@ -1,7 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
 import { EventEmitter } from "node:events";
-import { app } from "electron";
 import {
   createDeepAgent,
   LocalShellBackend,
@@ -44,6 +43,7 @@ import { WEB_TOOLS } from "../tools/web";
 import { createTodosTool } from "../tools/todos";
 import { createMemoryTools } from "../tools/memory";
 import { skillsSourcePath } from "../skills/store";
+import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR } from "../config/paths";
 
 const GUI_TOOLS = [
   screenshotTool.tool,
@@ -146,7 +146,7 @@ export class AgentManager {
   private unattended = new Set<string>();
 
   private backendFor(root: string): LocalShellBackend {
-    const key = root || app.getPath("home");
+    const key = root || DEFAULT_WORKSPACE_DIR;
     let b = this.backends.get(key);
     if (!b) {
       b = new LocalShellBackend({ rootDir: key, virtualMode: false });
@@ -176,12 +176,14 @@ export class AgentManager {
     const model = createChatModel(settings.model);
     this.chatModel = model;
 
-    const dbPath = path.join(app.getPath("userData"), "checkpoints.db");
+    const dbPath = path.join(APP_DATA_DIR, "checkpoints.db");
     this.checkpointer = SqliteSaver.fromConnString(dbPath);
 
     const mcpTools = await this.mcp.buildTools(settings.mcpServers);
 
-    const workspaceDir = settings.model.workspaceDir || app.getPath("home");
+    // Default workspace lives under ~/DeepWork/workspace, but a session may
+    // override it with any folder chosen in the new-task picker.
+    const workspaceDir = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
 
     // deepagents built-in fs tools: write/edit/execute are write/exec risk.
     annotateRisk("write_file", "write");
@@ -506,7 +508,7 @@ export class AgentManager {
     const root =
       (sessionId ? this.sessionWorkspace.get(sessionId) : undefined) ||
       settings.model.workspaceDir;
-    if (!root || root === app.getPath("home")) return [];
+    if (!root) return [];
     const since =
       (sessionId ? this.sessionStartedAt.get(sessionId) : undefined) ?? Date.now();
     const out: ArtifactFile[] = [];

@@ -6,6 +6,7 @@ import { getDb } from "./storage/db";
 import { agentManager } from "./agent/manager";
 import { loadClaudeCodeEnv } from "./config/ccEnv";
 import { loadSettings } from "./storage/settings";
+import { ensureDirs } from "./config/paths";
 import { TRAY_ICON_16, TRAY_ICON_36 } from "./trayIcon";
 
 // Reuse Claude Code's ANTHROPIC_* env (endpoint/auth token/model) at runtime.
@@ -131,6 +132,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  ensureDirs(); // create ~/DeepWork/{app,skills,workspace}
   getDb(); // initialize DB / migrations
   registerIpc(() => win);
   createWindow();

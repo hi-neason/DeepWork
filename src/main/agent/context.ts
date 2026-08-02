@@ -1,7 +1,7 @@
 import { createMiddleware } from "langchain";
 import { loadSettings } from "../storage/settings";
 import { listMemories } from "../storage/memories";
-import { app } from "electron";
+import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
 
 const PLAN_MODE_REMINDER = `## Plan mode (read-only)
 You are in PLAN MODE. You may explore, read files, search, list directories and use
@@ -21,7 +21,7 @@ export function createContextMiddleware() {
       const settings = loadSettings();
       const parts: string[] = [];
 
-      const scopeKey = settings.model.workspaceDir || app.getPath("home");
+      const scopeKey = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
       const memories = listMemories(scopeKey);
       if (memories.length > 0) {
         parts.push(

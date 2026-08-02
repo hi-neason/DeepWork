@@ -1,15 +1,14 @@
-import { app } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import type { Skill } from "../../shared/types";
+import { SKILLS_DIR } from "../config/paths";
 
 const DISABLED_SUFFIX = ".disabled";
 
 /** Directory holding all skills as `<skillsDir>/<skill-name>/SKILL.md`. */
 export function skillsDir(): string {
-  const dir = path.join(app.getPath("userData"), "skills");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  fs.mkdirSync(SKILLS_DIR, { recursive: true });
+  return SKILLS_DIR;
 }
 
 function frontmatter(body: string): Record<string, string> {

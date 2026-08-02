@@ -1,15 +1,12 @@
 import Database from "better-sqlite3";
-import { app } from "electron";
 import path from "node:path";
-import fs from "node:fs";
+import { APP_DATA_DIR } from "../config/paths";
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (db) return db;
-  const dir = app.getPath("userData");
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, "deepwork.db");
+  const file = path.join(APP_DATA_DIR, "deepwork.db");
   db = new Database(file);
   db.pragma("journal_mode = WAL");
   migrate(db);
