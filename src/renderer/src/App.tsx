@@ -255,10 +255,11 @@ export function App(): React.ReactElement {
     if (view === "chat") void refreshSettings();
   }, [view, refreshSettings]);
 
-  const newSession = async (): Promise<void> => {
-    const s = await window.deepwork.sessions.create();
-    await refreshSessions();
-    setSessionId(s.id);
+  // "New task" opens a blank composer without creating a session. The
+  // session is only persisted when the user sends the first message
+  // (see `send`, which calls sessions.create when there is no id yet).
+  const newSession = (): void => {
+    setSessionId(null);
     setTodos([]);
     setArtifacts([]);
     setView("chat");
