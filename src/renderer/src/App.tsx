@@ -139,6 +139,9 @@ export function App(): React.ReactElement {
       if (event.type === "approval_requested") {
         setApproval(event);
       }
+      if (event.type === "session_renamed") {
+        void refreshSessions();
+      }
       dispatch({ type: "event", event });
     });
     return off;
@@ -164,6 +167,11 @@ export function App(): React.ReactElement {
       setSessionId(null);
       dispatch({ type: "reset" });
     }
+    await refreshSessions();
+  };
+
+  const renameSessionById = async (id: string, title: string): Promise<void> => {
+    await window.deepwork.sessions.rename(id, title);
     await refreshSessions();
   };
 
@@ -195,6 +203,7 @@ export function App(): React.ReactElement {
         onNew={newSession}
         onSelect={selectSession}
         onDelete={deleteSession}
+        onRename={renameSessionById}
         onOpenSettings={() => setShowSettings(true)}
       />
       <main className="main">

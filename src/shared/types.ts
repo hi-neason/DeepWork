@@ -51,6 +51,7 @@ export type DeepWorkEvent =
       risk: RiskLevel;
       argsPreview: string;
     }
+  | { type: "session_renamed"; title: string }
   | { type: "turn_completed" }
   | { type: "turn_error"; message: string };
 

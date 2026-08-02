@@ -10,6 +10,7 @@ import { createChatModel } from "./model";
 import { createApprovalMiddleware, registerTurnEmitter, unregisterTurnEmitter } from "./middleware";
 import { approvals } from "../security/approvals";
 import { McpManager } from "../mcp/manager";
+import { renameSession } from "../storage/sessions";
 import type { HistoryItem } from "../../shared/types";
 import { screenshotTool } from "../tools/gui";
 import {
@@ -72,7 +73,9 @@ export class AgentManager {
   private mcp = new McpManager();
   private checkpointer: SqliteSaver | null = null;
   private alwaysAllow = new Set<string>();
+  private titledSessions = new Set<string>();
   private building: Promise<void> | null = null;
+  private chatModel: ReturnType<typeof createChatModel> | null = null;
 
   async ensureAgent(): Promise<void> {
     if (this.agent) return;
@@ -88,6 +91,7 @@ export class AgentManager {
   private async _build(): Promise<void> {
     const settings = loadSettings();
     const model = createChatModel(settings.model);
+    this.chatModel = model;
 
     const dbPath = path.join(app.getPath("userData"), "checkpoints.db");
     this.checkpointer = SqliteSaver.fromConnString(dbPath);
@@ -152,6 +156,9 @@ export class AgentManager {
       recursionLimit: 50,
     };
 
+    // Collect the assistant's reply so we can derive a title after the turn.
+    let assistantReply = "";
+
     // Drive the stream in the background. Tool call lifecycle events are
     // emitted by the approval middleware; here we only forward token deltas.
     const consumed = (async () => {
@@ -176,6 +183,7 @@ export class AgentManager {
         }
         const text = extractText(msg.content);
         if (text) {
+          assistantReply += text;
           emitter.emit("event", { type: "message_delta", text });
         }
       }
@@ -203,6 +211,13 @@ export class AgentManager {
       }
       await consumed;
       touchSession(sessionId);
+
+      // Auto-generate a title from the first exchange (best effort).
+      if (assistantReply.trim()) {
+        const title = await this.maybeGenerateTitle(sessionId, userText, assistantReply);
+        if (title) yield { type: "session_renamed", title };
+      }
+
       yield { type: "turn_completed" };
     } catch (err) {
       yield { type: "turn_error", message: err instanceof Error ? err.message : String(err) };
@@ -214,6 +229,47 @@ export class AgentManager {
 
   respondApproval(toolCallId: string, decision: "allow" | "deny" | "always_allow"): void {
     approvals.respond(toolCallId, decision);
+  }
+
+  /**
+   * Generate a short title for a session after its first exchange. Runs once per
+   * session; the prompt asks for the user's language and a plain title without
+   * quotes/punctuation. Best effort — failures are swallowed.
+   */
+  private async maybeGenerateTitle(
+    sessionId: string,
+    userText: string,
+    assistantReply: string,
+  ): Promise<string | null> {
+    if (this.titledSessions.has(sessionId)) return null;
+    this.titledSessions.add(sessionId);
+    if (!this.chatModel) return null;
+    try {
+      const prompt =
+        "Summarize the following conversation as a short title of at most 6 words. " +
+        "Write it in the same language as the user's message. " +
+        "Return ONLY the title text, no quotes, no punctuation, no explanation.\n\n" +
+        `User: ${userText.slice(0, 500)}\nAssistant: ${assistantReply.slice(0, 500)}`;
+      const res = await this.chatModel.invoke(prompt);
+      const raw =
+        typeof res.content === "string"
+          ? res.content
+          : res.content
+              .filter((b: any) => b?.type === "text")
+              .map((b: any) => b.text)
+              .join(" ");
+      const title = raw
+        .trim()
+        .replace(/^["'\s]+|["'\s]+$/g, "")
+        .replace(/\s+/g, " ")
+        .slice(0, 60);
+      if (!title) return null;
+      renameSession(sessionId, title);
+      return title;
+    } catch (err) {
+      console.info("Title generation failed:", err instanceof Error ? err.message : err);
+      return null;
+    }
   }
 
   /**
