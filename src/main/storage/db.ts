@@ -14,13 +14,29 @@ export function getDb(): Database.Database {
 }
 
 function migrate(d: Database.Database): void {
+  // Run additive column migrations first, re-reading columns each time, so an
+  // older database is brought up to date even if a previous migration run was
+  // interrupted.
+  const addColumn = (table: string, name: string, decl: string): void => {
+    try {
+      const cols = d.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === name)) {
+        d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${decl}`);
+      }
+    } catch (err) {
+      console.error(`Migration failed for ${table}.${name}:`, err);
+    }
+  };
+
   d.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      group_name TEXT NOT NULL DEFAULT '默认'
+      group_name TEXT NOT NULL DEFAULT '默认',
+      workspace_dir TEXT,
+      model TEXT
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -72,17 +88,10 @@ function migrate(d: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_runs_automation ON automation_runs(automation_id);
   `);
 
-  // Migration: add group_name / workspace_dir to pre-existing sessions tables.
-  const cols = d.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
-  if (!cols.some((c) => c.name === "group_name")) {
-    d.exec("ALTER TABLE sessions ADD COLUMN group_name TEXT NOT NULL DEFAULT '默认'");
-  }
-  if (!cols.some((c) => c.name === "workspace_dir")) {
-    d.exec("ALTER TABLE sessions ADD COLUMN workspace_dir TEXT");
-  }
-  if (!cols.some((c) => c.name === "model")) {
-    d.exec("ALTER TABLE sessions ADD COLUMN model TEXT");
-  }
+  // Backfill columns on databases created by older builds.
+  addColumn("sessions", "group_name", "TEXT NOT NULL DEFAULT '默认'");
+  addColumn("sessions", "workspace_dir", "TEXT");
+  addColumn("sessions", "model", "TEXT");
 
   // Persisted groups (order + rename). A session's group is denormalized onto
   // the session row so listing is a single query; this table just remembers
