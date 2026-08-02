@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
-import type { PermissionMode, TodoItem, UpdateStatus } from "../../../shared/types";
+import type {
+  ConfiguredModel,
+  PermissionMode,
+  TodoItem,
+  UpdateStatus,
+} from "../../../shared/types";
 import { Markdown } from "./Markdown";
 import { TodoPanel } from "./TodoPanel";
 
@@ -17,11 +22,19 @@ interface Props {
   updateStatus: UpdateStatus;
   permissionMode: PermissionMode;
   workspaceDir?: string;
+  sessionModel?: string;
+  enabledModels: ConfiguredModel[];
   showReasoning?: boolean;
-  onSend: (text: string, attachments?: File[], workspaceDir?: string) => void;
+  onSend: (
+    text: string,
+    attachments?: File[],
+    workspaceDir?: string,
+    modelId?: string,
+  ) => void;
   onCancel: () => void;
   onRegenerate: () => void;
   onSetMode: (mode: PermissionMode) => void;
+  onSetModel: (modelId: string) => void;
   onNewSession: () => void;
   onToggleArtifacts: () => void;
   onInstallUpdate: () => void;
@@ -35,11 +48,14 @@ export function Chat({
   updateStatus,
   permissionMode,
   workspaceDir,
+  sessionModel,
+  enabledModels,
   showReasoning = true,
   onSend,
   onCancel,
   onRegenerate,
   onSetMode,
+  onSetModel,
   onNewSession,
   onToggleArtifacts,
   onInstallUpdate,
@@ -48,12 +64,21 @@ export function Chat({
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showFolderMenu, setShowFolderMenu] = useState(false);
+  const [showModelMenu, setShowModelMenu] = useState(false);
   const [recent, setRecent] = useState<RecentFolder[]>([]);
-  // Workspace chosen for a brand-new session (before it is created).
+  // Workspace/model chosen for a brand-new session (before it is created).
   const [pendingWorkspace, setPendingWorkspace] = useState<string | undefined>(undefined);
+  const [pendingModel, setPendingModel] = useState<string | undefined>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const activeModel = sessionModel ?? pendingModel ?? enabledModels[0]?.id;
+  const activeModelLabel = useMemo(() => {
+    if (!activeModel) return "No model";
+    const m = enabledModels.find((x) => x.id === activeModel);
+    return m ? shortLabel(m) : activeModel.split(":").pop();
+  }, [activeModel, enabledModels]);
 
   const activeWorkspace = workspaceDir ?? pendingWorkspace;
   const folderLabel = useMemo(() => {
@@ -88,8 +113,15 @@ export function Chat({
     if ((!text && attachments.length === 0) || chat.streaming) return;
     setInput("");
     setAttachments([]);
-    void onSend(text, attachments, activeWorkspace);
+    void onSend(text, attachments, activeWorkspace, activeModel);
     setPendingWorkspace(undefined);
+    setPendingModel(undefined);
+  };
+
+  const chooseModel = (id: string): void => {
+    setPendingModel(id);
+    setShowModelMenu(false);
+    if (sessionId) onSetModel(id);
   };
 
   const pickFolder = async (): Promise<void> => {
@@ -132,9 +164,6 @@ export function Chat({
   const placeholder = sessionId
     ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)"
     : "Ask anything — a new chat starts automatically";
-
-  const modeLabel =
-    permissionMode === "auto" ? "Auto" : permissionMode === "plan" ? "Plan" : "Manual";
 
   return (
     <>
@@ -265,11 +294,6 @@ export function Chat({
             onPaste={paste}
           />
           <div className="composer-workspace">
-            <span className="ws-local" title="Local runtime">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
-              本地
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </span>
             <div className="ws-picker-wrap">
               <button
                 className={`ws-picker ${activeWorkspace ? "active" : ""}`}
@@ -344,7 +368,6 @@ export function Chat({
                   e.target.value = "";
                 }}
               />
-              <span className="cap-chip" title="Screen capture & GUI control">🖥</span>
               <button
                 className="cap-chip clickable"
                 onClick={onToggleArtifacts}
@@ -355,45 +378,72 @@ export function Chat({
               </button>
             </div>
             <div className="composer-right">
-              <div className="mode-wrap">
+              <div className="model-picker-wrap">
                 <button
-                  className={`mode-toggle mode-${permissionMode}`}
-                  onClick={() => setShowModeMenu((v) => !v)}
-                  title="Approval mode"
+                  className="model-picker"
+                  onClick={() => setShowModelMenu((v) => !v)}
+                  title="选择模型"
                 >
-                  <span className="dot" />
-                  {modeLabel}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                  <span className="model-dot" />
+                  <span className="model-picker-label">{activeModelLabel}</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                 </button>
-                {showModeMenu && (
-                  <div className="mode-menu" onMouseLeave={() => setShowModeMenu(false)}>
-                    <ModeOption
-                      active={permissionMode === "manual"}
-                      label="Manual"
-                      desc="Ask before any write/exec action"
-                      onClick={() => {
-                        onSetMode("manual");
-                        setShowModeMenu(false);
-                      }}
-                    />
-                    <ModeOption
-                      active={permissionMode === "auto"}
-                      label="Auto"
-                      desc="Auto-approve writes/commands (GUI still asks)"
-                      onClick={() => {
-                        onSetMode("auto");
-                        setShowModeMenu(false);
-                      }}
-                    />
-                    <ModeOption
-                      active={permissionMode === "plan"}
-                      label="Plan"
-                      desc="Read-only: plan first, execute on approval"
-                      onClick={() => {
-                        onSetMode("plan");
-                        setShowModeMenu(false);
-                      }}
-                    />
+                {showModelMenu && (
+                  <div className="model-menu" onMouseLeave={() => setShowModelMenu(false)}>
+                    {enabledModels.length === 0 && (
+                      <div className="model-menu-empty">
+                        还没有可用模型。请在「设置 → 模型」中添加或测试连接。
+                      </div>
+                    )}
+                    {enabledModels.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`model-menu-item ${activeModel === m.id ? "active" : ""}`}
+                        onClick={() => chooseModel(m.id)}
+                      >
+                        <span>{shortLabel(m)}</span>
+                        {activeModel === m.id && <span className="check">✓</span>}
+                      </div>
+                    ))}
+                    <div className="model-menu-sep" />
+                    <div
+                      className="model-menu-item mode-trigger"
+                      onClick={() => setShowModeMenu((v) => !v)}
+                    >
+                      <span>审批模式：{permissionMode === "manual" ? "手动" : permissionMode === "auto" ? "自动" : "计划"}</span>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18" /></svg>
+                      {showModeMenu && (
+                        <div className="mode-submenu">
+                          <ModeOption
+                            active={permissionMode === "manual"}
+                            label="手动"
+                            desc="任何写/执行操作前询问"
+                            onClick={() => {
+                              onSetMode("manual");
+                              setShowModeMenu(false);
+                            }}
+                          />
+                          <ModeOption
+                            active={permissionMode === "auto"}
+                            label="自动"
+                            desc="自动放行写/命令（GUI 仍询问）"
+                            onClick={() => {
+                              onSetMode("auto");
+                              setShowModeMenu(false);
+                            }}
+                          />
+                          <ModeOption
+                            active={permissionMode === "plan"}
+                            label="计划"
+                            desc="只读：先出计划，批准后执行"
+                            onClick={() => {
+                              onSetMode("plan");
+                              setShowModeMenu(false);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -436,4 +486,9 @@ function ModeOption({
       <div className="mode-opt-desc">{desc}</div>
     </div>
   );
+}
+
+function shortLabel(m: ConfiguredModel): string {
+  // Strip a leading provider prefix for display when the id is "provider:model".
+  return m.id.includes(":") ? m.id.split(":").slice(1).join(":") : m.id;
 }

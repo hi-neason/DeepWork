@@ -12,6 +12,7 @@ interface SessionRow {
   updated_at: number;
   group_name: string;
   workspace_dir: string | null;
+  model: string | null;
 }
 
 /** Group label derived from a workspace folder: its basename. */
@@ -29,13 +30,14 @@ function rowToSession(r: SessionRow): Session {
     updatedAt: r.updated_at,
     group: r.group_name || groupForWorkspace(r.workspace_dir),
     workspaceDir: r.workspace_dir ?? undefined,
+    model: r.model ?? undefined,
   };
 }
 
 export function listSessions(): Session[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, title, created_at, updated_at, group_name, workspace_dir
+      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, model
        FROM sessions ORDER BY updated_at DESC`,
     )
     .all() as SessionRow[];
@@ -45,7 +47,7 @@ export function listSessions(): Session[] {
 export function getSession(id: string): Session | null {
   const row = getDb()
     .prepare(
-      `SELECT id, title, created_at, updated_at, group_name, workspace_dir
+      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, model
        FROM sessions WHERE id = ?`,
     )
     .get(id) as SessionRow | undefined;
@@ -55,6 +57,7 @@ export function getSession(id: string): Session | null {
 export function createSession(
   title = "New chat",
   workspaceDir?: string,
+  model?: string,
 ): Session {
   const now = Date.now();
   const group = groupForWorkspace(workspaceDir);
@@ -65,13 +68,14 @@ export function createSession(
     updatedAt: now,
     group,
     workspaceDir: workspaceDir || undefined,
+    model: model || undefined,
   };
   getDb()
     .prepare(
-      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir, model)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(s.id, s.title, s.createdAt, s.updatedAt, group, workspaceDir ?? null);
+    .run(s.id, s.title, s.createdAt, s.updatedAt, group, workspaceDir ?? null, model ?? null);
   ensureGroup(group);
   return s;
 }
@@ -104,6 +108,10 @@ export function setSessionWorkspace(id: string, workspaceDir: string): void {
     )
     .run(workspaceDir, group, Date.now(), id);
   ensureGroup(group);
+}
+
+export function setSessionModel(id: string, model: string | null): void {
+  getDb().prepare("UPDATE sessions SET model = ? WHERE id = ?").run(model, id);
 }
 
 export function renameGroup(oldName: string, newName: string): void {

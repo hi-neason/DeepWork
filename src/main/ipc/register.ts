@@ -17,6 +17,7 @@ import {
   deleteSession,
   setSessionGroup,
   setSessionWorkspace,
+  setSessionModel,
   getSession,
   renameGroup,
   deleteGroup,
@@ -59,8 +60,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   ipcMain.handle("sessions:list", () => listSessions());
   ipcMain.handle(
     "sessions:create",
-    (_e, title?: string, workspaceDir?: string) =>
-      createSession(title, workspaceDir),
+    (_e, title?: string, workspaceDir?: string, model?: string) =>
+      createSession(title, workspaceDir, model),
   );
   ipcMain.handle("sessions:rename", (_e, id: string, title: string) =>
     renameSession(id, title),
@@ -74,6 +75,10 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     "sessions:setWorkspace",
     (_e, id: string, workspaceDir: string) => setSessionWorkspace(id, workspaceDir),
   );
+  ipcMain.handle("sessions:setModel", (_e, id: string, model: string) => {
+    setSessionModel(id, model);
+    agentManager.setSessionModel(id, model);
+  });
   /** Recently used workspace folders (for the new-task folder picker). */
   ipcMain.handle("sessions:recentFolders", () => {
     const rows = getDb()
@@ -147,6 +152,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   ipcMain.handle("chat:history", async (_e, sessionId: string) => {
     const s = getSession(sessionId);
     agentManager.setSessionWorkspace(sessionId, s?.workspaceDir);
+    agentManager.setSessionModel(sessionId, s?.model);
     return agentManager.getHistory(sessionId);
   });
 
@@ -158,17 +164,20 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       text: string,
       attachments?: Attachment[],
       workspaceDir?: string,
+      modelId?: string,
     ) => {
       const sender = event.sender;
       const push = (e: DeepWorkEvent) => {
         if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
       };
       try {
+        if (modelId) setSessionModel(sessionId, modelId);
         for await (const e of agentManager.runTurn(
           sessionId,
           text,
           attachments,
           workspaceDir,
+          modelId,
         )) {
           push(e);
         }

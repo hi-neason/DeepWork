@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: Settings = {
     model: "claude-sonnet-4-5",
     workspaceDir: "",
   },
+  configuredModels: [],
   mcpServers: [],
   permissionMode: "manual",
   alwaysAllowTools: [],

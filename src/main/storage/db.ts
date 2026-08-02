@@ -80,6 +80,9 @@ function migrate(d: Database.Database): void {
   if (!cols.some((c) => c.name === "workspace_dir")) {
     d.exec("ALTER TABLE sessions ADD COLUMN workspace_dir TEXT");
   }
+  if (!cols.some((c) => c.name === "model")) {
+    d.exec("ALTER TABLE sessions ADD COLUMN model TEXT");
+  }
 
   // Persisted groups (order + rename). A session's group is denormalized onto
   // the session row so listing is a single query; this table just remembers

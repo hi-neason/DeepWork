@@ -13,6 +13,14 @@ export type ProviderKind =
 
 export type PermissionMode = "manual" | "auto" | "plan";
 
+/** A model entry configured for a provider (enabled => shown in picker). */
+export interface ConfiguredModel {
+  id: string;
+  provider: ProviderKind;
+  enabled: boolean;
+  isDefault?: boolean;
+}
+
 export interface ModelConfig {
   provider: ProviderKind;
   /** Model id, e.g. "claude-sonnet-4-5" or "gpt-4o" or "qwen2.5" */
@@ -96,6 +104,8 @@ export interface Automation {
 
 export interface Settings {
   model: ModelConfig;
+  /** Models verified/configured per provider; enabled ones appear in the picker. */
+  configuredModels: ConfiguredModel[];
   mcpServers: McpServerConfig[];
   /**
    * "manual" (default): ask before write/exec/external tools; GUI tools always ask.
@@ -144,6 +154,8 @@ export interface Session {
   group: string;
   /** Per-session workspace directory; groups sessions and scopes the agent. */
   workspaceDir?: string;
+  /** Per-session model override (provider:model or just model id). */
+  model?: string;
 }
 
 /** A skill (SKILL.md) managed in the local skills directory. */

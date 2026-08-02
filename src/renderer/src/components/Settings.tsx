@@ -94,6 +94,7 @@ export function Settings({
               apiKey={apiKey}
               onApiKey={setApiKey}
               onChange={updateModel}
+              onSettingsChange={(patch) => setSettings({ ...settings, ...patch })}
             />
           )}
           {tab === "memory" && <MemoryTab />}

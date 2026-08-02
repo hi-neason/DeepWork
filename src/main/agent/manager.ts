@@ -45,6 +45,8 @@ import { createMemoryTools } from "../tools/memory";
 import { skillsSourcePath } from "../skills/store";
 import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR } from "../config/paths";
 
+type StateSchemaT = InstanceType<typeof StateSchema>;
+
 const GUI_TOOLS = [
   screenshotTool.tool,
   mouseMoveTool.tool,
@@ -128,13 +130,21 @@ function buildUserContent(
  * workspace) change. Runs a single turn at a time per session.
  */
 export class AgentManager {
-  private agent: DeepAgent | null = null;
   private mcp = new McpManager();
   private checkpointer: SqliteSaver | null = null;
   private alwaysAllow = new Set<string>();
   private titledSessions = new Set<string>();
   private building: Promise<void> | null = null;
   private chatModel: ReturnType<typeof createChatModel> | null = null;
+  /** Cached compiled agents keyed by a model id (one default agent + per overrides). */
+  private agents = new Map<string, DeepAgent>();
+  /** Shared tools/middleware, initialized once and reused across model agents. */
+  private shared: {
+    tools: StructuredToolInterface[];
+    middleware: unknown[];
+    stateSchema: StateSchemaT;
+    defaultWorkspace: string;
+  } | null = null;
   private aborters = new Map<string, AbortController>();
   /** First-run timestamp per session — used to bound artifact scanning. */
   private sessionStartedAt = new Map<string, number>();
@@ -144,6 +154,8 @@ export class AgentManager {
   private backends = new Map<string, LocalShellBackend>();
   /** Sessions running without an interactive user (scheduled automations). */
   private unattended = new Set<string>();
+  /** Per-session model override. */
+  private sessionModel = new Map<string, string>();
 
   private backendFor(root: string): LocalShellBackend {
     const key = root || DEFAULT_WORKSPACE_DIR;
@@ -160,8 +172,15 @@ export class AgentManager {
     return this.sessionWorkspace.get(sessionId) || fallback;
   }
 
+  /** The default (settings) agent. Per-model overrides live in `agents`. */
+  private get agent(): DeepAgent | null {
+    if (!this.shared) return null;
+    const settings = loadSettings();
+    return this.agents.get(this.modelKey(settings.model)) ?? null;
+  }
+
   async ensureAgent(): Promise<void> {
-    if (this.agent) return;
+    if (this.shared) return;
     if (this.building) return this.building;
     this.building = this._build();
     try {
@@ -183,7 +202,7 @@ export class AgentManager {
 
     // Default workspace lives under ~/DeepWork/workspace, but a session may
     // override it with any folder chosen in the new-task picker.
-    const workspaceDir = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
+    const defaultWorkspace = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
 
     // deepagents built-in fs tools: write/edit/execute are write/exec risk.
     annotateRisk("write_file", "write");
@@ -196,7 +215,7 @@ export class AgentManager {
     annotateRisk("list_memories", "read");
     annotateRisk("write_todos", "read");
 
-    const scopeKey = workspaceDir;
+    const scopeKey = defaultWorkspace;
     const self = this;
     const approvalMiddleware = createApprovalMiddleware({
       getAlwaysAllow: () => this.alwaysAllow,
@@ -205,9 +224,7 @@ export class AgentManager {
       isUnattended: (threadId) => this.unattended.has(threadId),
     });
 
-    // Auto-compression: when the conversation grows large, old messages are
-    // offloaded to an in-state backend and replaced by a summary. This keeps
-    // long sessions from blowing the context window.
+    // Auto-compression uses the active request model.
     const summarization = createSummarizationMiddleware({
       model,
       backend: () => new StateBackend(),
@@ -216,8 +233,6 @@ export class AgentManager {
       trimTokensToSummarize: 4000,
     });
 
-    // Skills: each subdirectory of userData/skills is a SKILL.md, loaded
-    // progressively (catalog at startup, full content on demand).
     const skills = createSkillsMiddleware({
       backend: new FilesystemBackend({
         rootDir: skillsSourcePath(),
@@ -234,29 +249,74 @@ export class AgentManager {
       ...mcpTools,
     ];
 
-    // Per-session workspace state. The backend factory reads `workspaceDir`
-    // from the thread state so different sessions can operate in different
-    // folders; sessions with no override fall back to the settings workspace.
-    const defaultWorkspace = workspaceDir;
     const stateSchema = new StateSchema({
       workspaceDir: z.string().optional().default(defaultWorkspace),
     });
 
-    this.agent = createDeepAgent({
+    // Shared, model-independent tooling/middleware; reused for every model agent.
+    this.shared = {
+      tools,
+      middleware: [summarization, skills, createContextMiddleware(), approvalMiddleware],
+      stateSchema: stateSchema as unknown as StateSchemaT,
+      defaultWorkspace,
+    };
+    this.agents.set(this.modelKey(settings.model), this.compileAgent(model));
+  }
+
+  /** Key under which an agent for a given model config is cached. */
+  private modelKey(cfg: { provider: string; model: string }): string {
+    return `${cfg.provider}:${cfg.model}`;
+  }
+
+  /**
+   * Return a compiled agent for the given model id. The default provider is
+   * used unless the id looks like "provider:model". Agents are cached so
+   * switching models in the UI is cheap.
+   */
+  async getAgentForModel(modelId?: string): Promise<DeepAgent> {
+    await this.ensureAgent();
+    if (!this.shared) throw new Error("Agent not initialized");
+    const settings = loadSettings();
+    let provider = settings.model.provider;
+    let modelName = settings.model.model;
+    if (modelId) {
+      if (modelId.includes(":")) {
+        const [p, ...rest] = modelId.split(":");
+        provider = p as typeof provider;
+        modelName = rest.join(":");
+      } else {
+        modelName = modelId;
+      }
+    }
+    const key = `${provider}:${modelName}`;
+    const existing = this.agents.get(key);
+    if (existing) return existing;
+    const model = createChatModel({ ...settings.model, provider, model: modelName });
+    const agent = this.compileAgent(model);
+    this.agents.set(key, agent);
+    return agent;
+  }
+
+  private compileAgent(model: ReturnType<typeof createChatModel>): DeepAgent {
+    if (!this.shared) throw new Error("Agent not initialized");
+    const self = this;
+    const { tools, middleware, stateSchema, defaultWorkspace } = this.shared;
+    return createDeepAgent({
       model,
       tools: tools as StructuredToolInterface[],
-      stateSchema,
+      stateSchema: stateSchema as any,
       backend: (runtime: any) =>
         self.backendFor(runtime?.state?.workspaceDir || defaultWorkspace),
-      checkpointer: this.checkpointer,
-      middleware: [summarization, skills, createContextMiddleware(), approvalMiddleware],
+      checkpointer: this.checkpointer!,
+      middleware: middleware as any,
       systemPrompt: SYSTEM_PROMPT,
     });
   }
 
   async rebuild(): Promise<void> {
     await this.mcp.close();
-    this.agent = null;
+    this.agents.clear();
+    this.shared = null;
     this.alwaysAllow.clear();
     await this.ensureAgent();
   }
@@ -287,18 +347,31 @@ export class AgentManager {
     else this.sessionWorkspace.delete(sessionId);
   }
 
+  /** Register a session's model override (loaded when the session is selected). */
+  setSessionModel(sessionId: string, modelId?: string): void {
+    if (modelId) this.sessionModel.set(sessionId, modelId);
+    else this.sessionModel.delete(sessionId);
+  }
+
+  /** Current model id used by a session (override or default), for the UI. */
+  modelForSession(sessionId: string): string {
+    return this.sessionModel.get(sessionId) ?? this.modelKey(loadSettings().model);
+  }
+
   /** Run a turn from a new user message. */
   async *runTurn(
     sessionId: string,
     userText: string,
     attachments?: Attachment[],
     workspaceDir?: string,
+    modelId?: string,
   ): AsyncGenerator<DeepWorkEvent> {
     const content = buildUserContent(userText, attachments);
     if (!this.sessionStartedAt.has(sessionId)) {
       this.sessionStartedAt.set(sessionId, Date.now());
     }
     if (workspaceDir) this.sessionWorkspace.set(sessionId, workspaceDir);
+    if (modelId) this.sessionModel.set(sessionId, modelId);
     const ws = this.sessionWorkspace.get(sessionId);
     const result = yield* this.runStream(sessionId, {
       messages: [{ role: "user", content }],
@@ -329,9 +402,12 @@ export class AgentManager {
   private async *runStream(
     sessionId: string,
     input: Record<string, unknown>,
+    modelId?: string,
   ): AsyncGenerator<DeepWorkEvent, { replyText: string; aborted: boolean }, void> {
     await this.ensureAgent();
-    if (!this.agent) throw new Error("Agent not initialized");
+    const agent = await this.getAgentForModel(
+      modelId ?? this.sessionModel.get(sessionId),
+    );
 
     const emitter = new EventEmitter();
     registerTurnEmitter(sessionId, emitter);
@@ -355,7 +431,7 @@ export class AgentManager {
     let replyText = "";
     let aborted = false;
     const consumed = (async () => {
-      const stream = await this.agent!.stream(input, {
+      const stream = await agent.stream(input, {
         streamMode: "messages",
         subgraphs: false,
         ...config,
@@ -425,9 +501,9 @@ export class AgentManager {
    */
   async *regenerate(sessionId: string): AsyncGenerator<DeepWorkEvent> {
     await this.ensureAgent();
-    if (!this.agent) throw new Error("Agent not initialized");
+    const agent = await this.getAgentForModel(this.sessionModel.get(sessionId));
     const config = { configurable: { thread_id: sessionId } };
-    const state: any = await (this.agent as any).getState(config);
+    const state: any = await (agent as any).getState(config);
     const messages: any[] = state?.values?.messages ?? [];
     let lastHuman = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -448,7 +524,7 @@ export class AgentManager {
       .filter((m) => m?.id)
       .map((m) => new RemoveMessage({ id: m.id }));
     if (toRemove.length > 0) {
-      await (this.agent as any).updateState(config, { messages: toRemove });
+      await (agent as any).updateState(config, { messages: toRemove });
     }
     const result = yield* this.runStream(sessionId, {
       messages: [new HumanMessage(humanContent)],
@@ -557,9 +633,9 @@ export class AgentManager {
    */
   async getHistory(sessionId: string): Promise<{ timeline: HistoryItem[] }> {
     await this.ensureAgent();
-    if (!this.agent) return { timeline: [] };
+    const agent = await this.getAgentForModel(this.sessionModel.get(sessionId));
     const config = { configurable: { thread_id: sessionId } };
-    const state: any = await (this.agent as any).getState(config);
+    const state: any = await (agent as any).getState(config);
     const messages: any[] = state?.values?.messages ?? [];
 
     const timeline: HistoryItem[] = [];

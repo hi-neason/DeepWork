@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import type {
   ArtifactFile,
   DeepWorkEvent,
@@ -199,6 +199,26 @@ export function App(): React.ReactElement {
   const showOnboarding =
     needsOnboarding && sessions.length === 0 && view === "chat";
 
+  const selectedSession = sessions.find((s) => s.id === sessionId);
+  // Models available in the picker: those enabled in settings, falling back to
+  // the default settings model so there's always something to pick.
+  const enabledModels = useMemo(() => {
+    const configured = settings?.configuredModels ?? [];
+    const enabled = configured.filter((m) => m.enabled);
+    if (enabled.length > 0) return enabled;
+    if (settings) {
+      return [
+        {
+          id: `${settings.model.provider}:${settings.model.model}`,
+          provider: settings.model.provider,
+          enabled: true,
+          isDefault: true,
+        },
+      ];
+    }
+    return [];
+  }, [settings]);
+
   // Global keyboard shortcuts.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -270,25 +290,36 @@ export function App(): React.ReactElement {
     text: string,
     attachments?: File[],
     workspaceDir?: string,
+    modelId?: string,
   ): Promise<void> => {
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
     let sid = sessionId;
     if (!sid) {
-      const s = await window.deepwork.sessions.create(undefined, workspaceDir);
+      const s = await window.deepwork.sessions.create(
+        undefined,
+        workspaceDir,
+        modelId,
+      );
       await refreshSessions();
       setSessionId(s.id);
       sid = s.id;
-    } else if (workspaceDir) {
-      // Bind the chosen folder to this session.
-      await window.deepwork.sessions.setWorkspace(sid, workspaceDir);
+    } else if (workspaceDir || modelId) {
+      if (workspaceDir) await window.deepwork.sessions.setWorkspace(sid, workspaceDir);
+      if (modelId) await window.deepwork.sessions.setModel(sid, modelId);
       await refreshSessions();
     }
     dispatch({ type: "user", text });
-    // Convert File attachments to data-transfer objects the main side can use.
     const atts = attachments && attachments.length > 0
       ? await Promise.all(attachments.map(fileToAttachment))
       : undefined;
-    await window.deepwork.chat.send(sid, text, atts, workspaceDir);
+    await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId);
+  };
+
+  const setSessionModel = async (modelId: string): Promise<void> => {
+    if (sessionId) {
+      await window.deepwork.sessions.setModel(sessionId, modelId);
+      await refreshSessions();
+    }
   };
 
   const cancel = (): void => {
@@ -375,11 +406,14 @@ export function App(): React.ReactElement {
             artifactsCount={artifacts.length}
             updateStatus={updateStatus}
             permissionMode={settings?.permissionMode ?? "manual"}
+            sessionModel={selectedSession?.model}
+            enabledModels={enabledModels}
             showReasoning={settings?.showReasoning ?? true}
             onSend={send}
             onCancel={cancel}
             onRegenerate={regenerate}
             onSetMode={setMode}
+            onSetModel={setSessionModel}
             onNewSession={newSession}
             onToggleArtifacts={() => setShowArtifacts((v) => !v)}
             onInstallUpdate={() => window.deepwork.updates.install()}
