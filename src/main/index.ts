@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from "electron";
+import { app, shell, BrowserWindow, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerIpc } from "./ipc/register";
@@ -15,6 +15,34 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let win: BrowserWindow | null = null;
 
+/**
+ * Set a Content-Security-Policy header. In dev the Vite dev server needs
+ * http: scripts and ws: for HMR; in production everything is self-contained.
+ */
+function applyCsp(): void {
+  const isDev = !!process.env.ELECTRON_RENDERER_URL;
+  const csp = isDev
+    ? [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "connect-src 'self' ws://localhost:* http://localhost:* data:",
+        "worker-src 'self' blob:",
+      ].join("; ")
+    : [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "connect-src 'self' data:",
+      ].join("; ");
+
+  session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+    cb({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [csp] } });
+  });
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
@@ -23,7 +51,7 @@ function createWindow(): void {
     minHeight: 560,
     title: "DeepWork",
     webPreferences: {
-      preload: path.join(__dirname, "../preload/index.js"),
+      preload: path.join(__dirname, "../preload/index.cjs"),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -34,6 +62,8 @@ function createWindow(): void {
     shell.openExternal(url);
     return { action: "deny" };
   });
+
+  applyCsp();
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL);

@@ -17,7 +17,9 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, "src/preload/index.ts") },
-        output: { format: "cjs", entryFileNames: "[name].js" },
+        // .cjs so the package.json "type": "module" doesn't make Electron treat
+        // the CommonJS preload as an ES module (which breaks `require`).
+        output: { format: "cjs", entryFileNames: "[name].cjs" },
       },
     },
   },
