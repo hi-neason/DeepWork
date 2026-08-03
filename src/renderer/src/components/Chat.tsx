@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
 import type {
+  ArtifactFile,
   ConfiguredModel,
   TodoItem,
   UpdateStatus,
@@ -16,6 +17,7 @@ interface Props {
   sessionId: string | null;
   chat: ChatState;
   todos: TodoItem[];
+  artifacts: ArtifactFile[];
   updateStatus: UpdateStatus;
   workspaceDir?: string;
   sessionModel?: string;
@@ -42,6 +44,7 @@ export function Chat({
   sessionId,
   chat,
   todos,
+  artifacts,
   updateStatus,
   workspaceDir,
   sessionModel,
@@ -200,24 +203,24 @@ export function Chat({
           </div>
         ) : (
           <>
-            {chat.timeline.map((item, i) => {
-              if (item.kind === "msg") {
-                const isAssistant = item.role === "assistant";
+            {buildSegments(chat).map((seg, i) => {
+              if (seg.kind === "msg") {
+                const isAssistant = seg.role === "assistant";
                 return (
-                  <div key={i} className={`msg ${item.role}`}>
-                    <div className="role">{item.role}</div>
+                  <div key={i} className={`msg ${seg.role}`}>
+                    <div className="role">{seg.role}</div>
                     <div className="bubble">
-                      {isAssistant && showReasoning && item.reasoning && (
+                      {isAssistant && showReasoning && seg.reasoning && (
                         <details className="reasoning">
                           <summary>思考过程</summary>
-                          <div className="reasoning-body">{item.reasoning}</div>
+                          <div className="reasoning-body">{seg.reasoning}</div>
                         </details>
                       )}
-                      {isAssistant ? <Markdown content={item.content} /> : item.content}
+                      {isAssistant ? <Markdown content={seg.content} /> : seg.content}
                     </div>
                     {isAssistant && (
                       <div className="msg-actions">
-                        <button title="Copy" onClick={() => copy(item.content)}>
+                        <button title="Copy" onClick={() => copy(seg.content)}>
                           ⧉
                         </button>
                         <button title="Regenerate" onClick={onRegenerate} disabled={!canRegenerate}>
@@ -228,12 +231,15 @@ export function Chat({
                   </div>
                 );
               }
-              const t = chat.tools[item.id];
-              if (!t) return null;
-              // Planning/todo tools are surfaced in the right panel; don't
-              // dump their raw JSON into the transcript.
-              if (HIDDEN_TOOLS.has(t.name)) return null;
-              return <ToolCard key={i} tool={t} />;
+              return (
+                <StepsGroup
+                  key={i}
+                  tools={seg.tools}
+                  allArtifacts={artifacts}
+                  streaming={chat.streaming}
+                  isLast={seg.isLast}
+                />
+              );
             })}
           </>
         )}
@@ -478,24 +484,166 @@ interface ToolCardData {
   status: "running" | "done";
 }
 
+type Segment =
+  | { kind: "msg"; role: "user" | "assistant"; content: string; reasoning?: string }
+  | { kind: "tools"; tools: ToolCardData[]; isLast: boolean };
+
+/** Group consecutive visible tool calls into a single "steps" segment. */
+function buildSegments(chat: ChatState): Segment[] {
+  const toolIndices: number[] = [];
+  const segments: Segment[] = [];
+  let toolBuffer: ToolCardData[] = [];
+  const flush = (): void => {
+    if (toolBuffer.length) {
+      toolIndices.push(segments.length);
+      segments.push({ kind: "tools", tools: toolBuffer, isLast: false });
+      toolBuffer = [];
+    }
+  };
+  for (const item of chat.timeline) {
+    if (item.kind === "msg") {
+      flush();
+      segments.push({
+        kind: "msg",
+        role: item.role,
+        content: item.content,
+        reasoning: item.reasoning,
+      });
+    } else {
+      const t = chat.tools[item.id];
+      if (!t || HIDDEN_TOOLS.has(t.name)) continue;
+      toolBuffer.push(t);
+    }
+  }
+  flush();
+  if (toolIndices.length) {
+    const last = segments[toolIndices[toolIndices.length - 1]] as Extract<
+      Segment,
+      { kind: "tools" }
+    >;
+    last.isLast = true;
+  }
+  return segments;
+}
+
 /**
- * A collapsible tool/command card. Collapsed it shows status + a one-line
- * summary (the command, file path, or query); expanded it shows the full
- * arguments and any output (e.g. a command's execution log).
+ * A run of consecutive tool calls, rendered as a collapsible "N steps" group
+ * (OpenWorker-style). Each step is a compact row with a status dot:
+ * blue = running, green = done, red = failed. While the last group is still
+ * running and no tool is currently in flight, "Waiting for agent…" is shown.
  */
-function ToolCard({ tool }: { tool: ToolCardData }): React.ReactElement {
-  // Failed tools auto-expand so the error is visible without a click.
+function StepsGroup({
+  tools,
+  allArtifacts,
+  streaming,
+  isLast,
+}: {
+  tools: ToolCardData[];
+  allArtifacts: ArtifactFile[];
+  streaming: boolean;
+  isLast: boolean;
+}): React.ReactElement {
+  const [open, setOpen] = useState(true);
+  const anyRunning = tools.some((t) => t.status === "running");
+  const anyError = tools.some((t) => t.isError);
+  const allDone = tools.every((t) => t.status === "done");
+  // The agent is "between steps" when the turn is still streaming, this is the
+  // latest group, and no tool is currently executing (model is thinking/calling).
+  const waiting = streaming && isLast && !anyRunning;
+  const finished = !streaming && allDone;
+  const count = tools.length;
+  const title = anyRunning
+    ? `正在执行 ${count} 个步骤…`
+    : finished
+      ? `已完成 ${count} 个步骤`
+      : `${count} 个步骤`;
+  return (
+    <div className={`steps-group ${anyError ? "has-error" : ""}`}>
+      <button
+        type="button"
+        className="steps-head"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="steps-caret">{open ? "▾" : "▸"}</span>
+        <span className={`steps-dot ${anyRunning || waiting ? "running" : anyError ? "error" : "done"}`} />
+        <span className="steps-title">{title}</span>
+      </button>
+      {open && (
+        <div className="steps-body">
+          {tools.map((t) => (
+            <StepRow key={t.id} tool={t} />
+          ))}
+          {finished && !anyError && (
+            <ProducedArtifacts tools={tools} allArtifacts={allArtifacts} />
+          )}
+          {waiting && (
+            <div className="step-row waiting">
+              <span className="step-spinner" />
+              <span className="step-label dim">Waiting for agent…</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * After the steps finish, inline any files these steps produced (write_file /
+ * edit_file) as artifact cards the user can open directly.
+ */
+function ProducedArtifacts({
+  tools,
+  allArtifacts,
+}: {
+  tools: ToolCardData[];
+  allArtifacts: ArtifactFile[];
+}): React.ReactElement | null {
+  const produced: ArtifactFile[] = [];
+  const seen = new Set<string>();
+  for (const t of tools) {
+    if (t.name !== "write_file" && t.name !== "edit_file") continue;
+    const path = String(parseArgs(t.argsPreview)?.file_path ?? "");
+    const name = path.split(/[/\\]/).filter(Boolean).pop() ?? path;
+    const match =
+      allArtifacts.find((a) => a.name === name || a.absolutePath === path) ??
+      allArtifacts.find((a) => a.absolutePath.endsWith("/" + name) || a.absolutePath.endsWith("\\" + name));
+    if (match && !seen.has(match.absolutePath)) {
+      seen.add(match.absolutePath);
+      produced.push(match);
+    }
+  }
+  if (produced.length === 0) return null;
+  return (
+    <div className="produced-artifacts">
+      {produced.map((f) => (
+        <button
+          key={f.absolutePath}
+          type="button"
+          className="artifact-chip"
+          onClick={() => void window.deepwork.artifacts.open(f.absolutePath)}
+          title={f.absolutePath}
+        >
+          <span className="artifact-icon">{fileIcon(f.ext)}</span>
+          <span className="artifact-name">{f.name}</span>
+          <span className="artifact-open">Open ›</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A single compact step row: status dot + label + expandable detail. */
+function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
   const [open, setOpen] = useState(!!tool.isError);
   useEffect(() => {
     if (tool.isError) setOpen(true);
   }, [tool.isError]);
   const running = tool.status === "running";
-  const icon = running ? "⏳" : tool.isError ? "✕" : "✓";
-  const summary = summarize(tool);
-  // Auto-expand failed tools and long-running command output.
   const hasDetail =
     (tool.outputPreview && tool.outputPreview.trim().length > 0) ||
     (tool.argsPreview && tool.argsPreview.length > 20);
+  const dotClass = running ? "running" : tool.isError ? "error" : "done";
   const copy = (e: React.MouseEvent): void => {
     e.stopPropagation();
     void navigator.clipboard?.writeText(
@@ -505,21 +653,21 @@ function ToolCard({ tool }: { tool: ToolCardData }): React.ReactElement {
     );
   };
   return (
-    <div className={`tool-card ${tool.isError ? "error" : ""} ${open ? "open" : ""}`}>
+    <div className={`step-row ${tool.isError ? "error" : ""} ${open ? "open" : ""}`}>
       <button
         type="button"
-        className="tc-head"
+        className="step-head"
         onClick={() => hasDetail && setOpen((v) => !v)}
         disabled={!hasDetail}
       >
-        <span className="tc-caret">{hasDetail ? (open ? "▾" : "▸") : ""}</span>
-        <span className="tc-status">{icon}</span>
-        <span className="tname">{prettyToolName(tool.name)}</span>
-        {summary && <span className="tc-summary" title={summary}>{summary}</span>}
-        {running && <span className="tc-spinner" />}
+        <span className={`step-dot ${dotClass}`} />
+        <span className="step-label">
+          <span className="step-verb">{stepVerb(tool.name)}</span>
+          {summarize(tool) && <span className="step-target" title={summarize(tool)}>{summarize(tool)}</span>}
+        </span>
         {hasDetail && (
           <span
-            className="tc-copy"
+            className="step-copy"
             role="button"
             title="复制"
             onClick={copy}
@@ -527,9 +675,10 @@ function ToolCard({ tool }: { tool: ToolCardData }): React.ReactElement {
             ⧉
           </span>
         )}
+        <span className="step-caret">{hasDetail ? (open ? "▾" : "▸") : ""}</span>
       </button>
       {open && hasDetail && (
-        <div className="tc-body">
+        <div className="step-detail">
           {tool.argsPreview && (
             <pre className="tc-args">{formatArgs(tool.name, tool.argsPreview)}</pre>
           )}
@@ -542,6 +691,29 @@ function ToolCard({ tool }: { tool: ToolCardData }): React.ReactElement {
       )}
     </div>
   );
+}
+
+function stepVerb(name: string): string {
+  const verbs: Record<string, string> = {
+    write_file: "写入",
+    edit_file: "编辑",
+    read_file: "读取",
+    ls: "列出目录",
+    execute: "执行命令",
+    grep: "搜索",
+    glob: "查找",
+    web_search: "网页搜索",
+    web_fetch: "抓取网页",
+  };
+  return verbs[name] ?? prettyToolName(name);
+}
+
+function fileIcon(ext: string): string {
+  if (["html", "htm"].includes(ext)) return "🌐";
+  if (["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext)) return "🖼";
+  if (["pdf"].includes(ext)) return "📄";
+  if (["js", "ts", "jsx", "tsx", "py", "go", "rs", "java", "c", "cpp"].includes(ext)) return "📜";
+  return "📄";
 }
 
 /** Best-effort parse of the JSON-encoded tool args. */

@@ -477,6 +477,7 @@ export function App(): React.ReactElement {
             sessionId={sessionId}
             chat={chat}
             todos={todos}
+            artifacts={artifacts}
             updateStatus={updateStatus}
             sessionModel={selectedSession?.model}
             enabledModels={enabledModels}
