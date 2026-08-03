@@ -352,6 +352,32 @@ body,
   border: none;
   color: inherit;
 }
+.bubble.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  animation: thinking-bounce 1.2s infinite ease-in-out both;
+}
+.thinking-dots span:nth-child(1) { animation-delay: -0.32s; }
+.thinking-dots span:nth-child(2) { animation-delay: -0.16s; }
+.thinking-label {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+@keyframes thinking-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
 
 .tool-card {
   width: 100%;

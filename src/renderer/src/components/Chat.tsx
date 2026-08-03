@@ -237,6 +237,7 @@ export function Chat({
             })}
           </>
         )}
+        {chat.streaming && <ThinkingIndicator chat={chat} />}
         {chat.error && (
           <div className="msg">
             <div className="bubble" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>
@@ -419,6 +420,34 @@ export function Chat({
 function shortLabel(m: ConfiguredModel): string {
   // Strip a leading provider prefix for display when the id is "provider:model".
   return m.id.includes(":") ? m.id.split(":").slice(1).join(":") : m.id;
+}
+
+/**
+ * Shown while the agent is streaming but nothing has appeared yet (model is
+ * thinking / preparing its first tool call). Hides as soon as any assistant
+ * text or visible tool card exists, since those already convey progress.
+ */
+function ThinkingIndicator({ chat }: { chat: ChatState }): React.ReactElement | null {
+  const hasAssistantText = chat.timeline.some(
+    (t) => t.kind === "msg" && t.role === "assistant" && t.content.trim().length > 0,
+  );
+  const hasVisibleTool = chat.timeline.some(
+    (t) => t.kind === "tool" && chat.tools[t.id] && !HIDDEN_TOOLS.has(chat.tools[t.id].name),
+  );
+  if (hasAssistantText || hasVisibleTool) return null;
+  return (
+    <div className="msg assistant">
+      <div className="role">assistant</div>
+      <div className="bubble thinking">
+        <span className="thinking-dots">
+          <span />
+          <span />
+          <span />
+        </span>
+        <span className="thinking-label">正在思考…</span>
+      </div>
+    </div>
+  );
 }
 
 /** Tools whose calls we don't render as cards (planning/housekeeping). */

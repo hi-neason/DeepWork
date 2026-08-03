@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   ArtifactFile,
   DeepWorkEvent,
@@ -234,11 +234,21 @@ export function App(): React.ReactElement {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Subscribe to agent events for the active session.
+  // Keep a ref to the active sessionId so the single event subscription below
+  // always filters against the latest value without needing to resubscribe.
+  // Resubscribing per session created a race where a brand-new session's first
+  // events could fire before the new listener was attached.
+  const sessionIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!sessionId) return;
-    setTodos([]);
-    const off = window.deepwork.chat.onEvent(sessionId, (event) => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  // Subscribe to ALL chat events once, on mount. We filter to the active
+  // session inside the callback using the ref. This is race-free for new
+  // sessions because the listener already exists before chat.send is called.
+  useEffect(() => {
+    return window.deepwork.chat.onAnyEvent((sid, event) => {
+      if (sid !== sessionIdRef.current) return;
       if (event.type === "approval_requested") {
         setApproval(event);
       }
@@ -254,8 +264,7 @@ export function App(): React.ReactElement {
       }
       dispatch({ type: "event", event });
     });
-    return off;
-  }, [sessionId, refreshSessions]);
+  }, [refreshSessions]);
 
   const refreshArtifacts = useCallback(async (): Promise<void> => {
     if (!sessionId) return;
@@ -355,6 +364,9 @@ export function App(): React.ReactElement {
       );
       await refreshSessions();
       setSessionId(s.id);
+      // Update the ref synchronously so the onAnyEvent listener already filters
+      // for this session by the time chat.send starts emitting.
+      sessionIdRef.current = s.id;
       sid = s.id;
     } else if (workspaceDir || modelId) {
       if (workspaceDir) await window.deepwork.sessions.setWorkspace(sid, workspaceDir);

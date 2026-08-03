@@ -115,6 +115,18 @@ const api = {
       ipcRenderer.on("chat:event", listener);
       return () => ipcRenderer.removeListener("chat:event", listener);
     },
+    // Subscribe to every session's events (the callback receives the sessionId
+    // too). Used by the renderer to maintain a single, race-free subscription
+    // instead of tearing down/recreating one whenever the active session changes.
+    onAnyEvent: (
+      cb: (sessionId: string, e: DeepWorkEvent) => void,
+    ): (() => void) => {
+      const listener = (_e: unknown, sid: string, event: DeepWorkEvent) => {
+        cb(sid, event);
+      };
+      ipcRenderer.on("chat:event", listener);
+      return () => ipcRenderer.removeListener("chat:event", listener);
+    },
   },
   approval: {
     respond: (id: string, decision: ApprovalDecision): Promise<void> =>
