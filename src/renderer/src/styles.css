@@ -763,7 +763,15 @@ body,
 .setting-card .row input { flex: 1; min-width: 0; }
 
 /* ---- Markdown rendering ---- */
-.markdown { line-height: 1.6; word-break: break-word; }
+.markdown {
+  line-height: 1.6;
+  word-break: break-word;
+  /* The chat bubble sets white-space: pre-wrap (for plain user text); reset it
+     for rendered markdown, otherwise newlines between block elements in the
+     markdown source show up as blank lines in the output. */
+  white-space: normal;
+}
+.markdown pre, .markdown code { white-space: pre-wrap; }
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
 .markdown h1, .markdown h2, .markdown h3 { margin: 14px 0 8px; line-height: 1.3; }
