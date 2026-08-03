@@ -74,7 +74,13 @@ export function createApprovalMiddleware(deps: MiddlewareDeps) {
     name: "deepwork_approval",
     wrapToolCall: async (request: any, handler: any) => {
       const toolCall = request.toolCall as { id: string; name: string; args: unknown };
-      const threadId: string | undefined = request.config?.configurable?.thread_id;
+      // The langchain middleware runtime exposes the LangGraph thread_id on
+      // `runtime.configurable` (NOT `request.config`, which is undefined here).
+      // Without it emitTurnEvent silently drops every live tool event.
+      const threadId: string | undefined =
+        request.runtime?.configurable?.thread_id ??
+        request.runtime?.config?.configurable?.thread_id ??
+        request.config?.configurable?.thread_id;
       const risk = riskOf(toolCall.name);
       const argsPreview = previewArgs(toolCall.args);
       const mode = getMode();
