@@ -162,7 +162,11 @@ export class AgentManager {
     const key = root || DEFAULT_WORKSPACE_DIR;
     let b = this.backends.get(key);
     if (!b) {
-      b = new LocalShellBackend({ rootDir: key, virtualMode: false });
+      // virtualMode sandboxes every path under rootDir: absolute paths
+      // (e.g. "/tmp/x.html", "/Users/...") are rewritten inside the
+      // session folder, and ".." traversal is rejected. This guarantees
+      // all produced files live in <workspace>/<sessionId>/.
+      b = new LocalShellBackend({ rootDir: key, virtualMode: true });
       this.backends.set(key, b);
     }
     return b;

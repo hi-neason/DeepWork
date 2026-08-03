@@ -316,8 +316,12 @@ export function App(): React.ReactElement {
     setView("chat");
     setTodos([]);
     dispatch({ type: "reset" });
-    const { timeline } = await window.deepwork.chat.history(id);
+    const [{ timeline }, files] = await Promise.all([
+      window.deepwork.chat.history(id),
+      window.deepwork.artifacts.list(id),
+    ]);
     dispatch({ type: "history", timeline });
+    setArtifacts(files);
   };
 
   const deleteSession = async (id: string): Promise<void> => {
