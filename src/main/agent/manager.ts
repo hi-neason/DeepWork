@@ -576,30 +576,18 @@ export class AgentManager {
   private async maybeGenerateTitle(
     sessionId: string,
     userText: string,
-    assistantReply: string,
+    _assistantReply: string,
   ): Promise<string | null> {
     if (this.titledSessions.has(sessionId)) return null;
     this.titledSessions.add(sessionId);
-    if (!this.chatModel) return null;
+    // Derive a title from the user's first message without making a
+    // separate model call (coding-plan endpoints can 404 on plain chat).
     try {
-      const prompt =
-        "Summarize the following conversation as a short title of at most 6 words. " +
-        "Write it in the same language as the user's message. " +
-        "Return ONLY the title text, no quotes, no punctuation, no explanation.\n\n" +
-        `User: ${userText.slice(0, 500)}\nAssistant: ${assistantReply.slice(0, 500)}`;
-      const res = await this.chatModel.invoke(prompt);
-      const raw =
-        typeof res.content === "string"
-          ? res.content
-          : res.content
-              .filter((b: any) => b?.type === "text")
-              .map((b: any) => b.text)
-              .join(" ");
-      const title = raw
+      const title = userText
+        .replace(/\s+/g, " ")
         .trim()
         .replace(/^["'\s]+|["'\s]+$/g, "")
-        .replace(/\s+/g, " ")
-        .slice(0, 60);
+        .slice(0, 40);
       if (!title) return null;
       renameSession(sessionId, title);
       return title;

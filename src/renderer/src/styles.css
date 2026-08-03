@@ -1340,6 +1340,12 @@ body,
 
 /* ---- right panel: tasks + artifacts ---- */
 .app.has-right-panel { grid-template-columns: 260px 1fr var(--rp-width, 320px); }
+.right-panel-wrap {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
 .app.resizing { cursor: col-resize; }
 .app.resizing * { cursor: col-resize !important; user-select: none !important; }
 .right-panel {
@@ -1351,8 +1357,16 @@ body,
   overflow-y: auto;
   min-height: 0;
   position: relative;
-  min-width: 240px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
+.rp-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin: -8px -4px 0;
+}
+.rp-title { margin-right: auto; font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
 .rp-resizer {
   width: 5px;
   cursor: col-resize;

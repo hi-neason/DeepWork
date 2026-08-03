@@ -6,6 +6,7 @@ interface Props {
   todos: TodoItem[];
   artifacts: ArtifactFile[];
   onRefreshArtifacts: () => void;
+  onClose?: () => void;
 }
 
 const ICONS: Record<string, string> = {
@@ -50,6 +51,7 @@ export function RightPanel({
   todos,
   artifacts,
   onRefreshArtifacts,
+  onClose,
 }: Props): React.ReactElement | null {
   const [progressOpen, setProgressOpen] = useState(true);
   const [artifactsOpen, setArtifactsOpen] = useState(true);
@@ -68,6 +70,14 @@ export function RightPanel({
 
   return (
     <aside className="right-panel">
+      <div className="rp-topbar">
+        <span className="rp-title">面板</span>
+        {onClose && (
+          <button className="icon-btn" onClick={onClose} title="折叠右栏">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>
+          </button>
+        )}
+      </div>
       {hasTasks && (
         <section className="rp-section">
           <button

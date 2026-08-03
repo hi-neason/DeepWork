@@ -478,14 +478,12 @@ export function App(): React.ReactElement {
               setView("settings");
             }}
             onNewSession={newSession}
-            onToggleRightPanel={() => setRightCollapsed((v) => !v)}
-            rightCollapsed={rightCollapsed}
             onInstallUpdate={() => window.deepwork.updates.install()}
           />
         )}
       </main>
       {showRight && (
-        <>
+        <div className="right-panel-wrap">
           <div
             className={`rp-resizer ${resizing ? "active" : ""}`}
             onMouseDown={() => setResizing(true)}
@@ -495,8 +493,9 @@ export function App(): React.ReactElement {
             todos={todos}
             artifacts={artifacts}
             onRefreshArtifacts={refreshArtifacts}
+            onClose={() => setRightCollapsed(true)}
           />
-        </>
+        </div>
       )}
       {!showRight && view === "chat" && (
         <button
