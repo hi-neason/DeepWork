@@ -219,21 +219,7 @@ export function Chat({
               // Planning/todo tools are surfaced in the right panel; don't
               // dump their raw JSON into the transcript.
               if (HIDDEN_TOOLS.has(t.name)) return null;
-              return (
-                <div key={i} className={`tool-card ${t.isError ? "error" : ""}`}>
-                  <div className="inner">
-                    <div>
-                      {t.status === "running" ? "⏳ " : t.isError ? "✕ " : "✓ "}
-                      <span className="tname">{prettyToolName(t.name)}</span>
-                    </div>
-                    {t.isError && t.outputPreview && (
-                      <div className="targs" style={{ marginTop: 4 }}>
-                        → {t.outputPreview}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
+              return <ToolCard key={i} tool={t} />;
             })}
           </>
         )}
@@ -438,4 +424,138 @@ function prettyToolName(name: string): string {
     write_todos: "更新任务",
   };
   return labels[name] ?? name;
+}
+
+interface ToolCardData {
+  id: string;
+  name: string;
+  argsPreview: string;
+  outputPreview?: string;
+  isError?: boolean;
+  status: "running" | "done";
+}
+
+/**
+ * A collapsible tool/command card. Collapsed it shows status + a one-line
+ * summary (the command, file path, or query); expanded it shows the full
+ * arguments and any output (e.g. a command's execution log).
+ */
+function ToolCard({ tool }: { tool: ToolCardData }): React.ReactElement {
+  // Failed tools auto-expand so the error is visible without a click.
+  const [open, setOpen] = useState(!!tool.isError);
+  useEffect(() => {
+    if (tool.isError) setOpen(true);
+  }, [tool.isError]);
+  const running = tool.status === "running";
+  const icon = running ? "⏳" : tool.isError ? "✕" : "✓";
+  const summary = summarize(tool);
+  // Auto-expand failed tools and long-running command output.
+  const hasDetail =
+    (tool.outputPreview && tool.outputPreview.trim().length > 0) ||
+    (tool.argsPreview && tool.argsPreview.length > 20);
+  const copy = (e: React.MouseEvent): void => {
+    e.stopPropagation();
+    void navigator.clipboard?.writeText(
+      tool.name === "execute"
+        ? String(parseArgs(tool.argsPreview)?.command ?? tool.argsPreview)
+        : tool.argsPreview,
+    );
+  };
+  return (
+    <div className={`tool-card ${tool.isError ? "error" : ""} ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="tc-head"
+        onClick={() => hasDetail && setOpen((v) => !v)}
+        disabled={!hasDetail}
+      >
+        <span className="tc-caret">{hasDetail ? (open ? "▾" : "▸") : ""}</span>
+        <span className="tc-status">{icon}</span>
+        <span className="tname">{prettyToolName(tool.name)}</span>
+        {summary && <span className="tc-summary" title={summary}>{summary}</span>}
+        {running && <span className="tc-spinner" />}
+        {hasDetail && (
+          <span
+            className="tc-copy"
+            role="button"
+            title="复制"
+            onClick={copy}
+          >
+            ⧉
+          </span>
+        )}
+      </button>
+      {open && hasDetail && (
+        <div className="tc-body">
+          {tool.argsPreview && (
+            <pre className="tc-args">{formatArgs(tool.name, tool.argsPreview)}</pre>
+          )}
+          {tool.outputPreview && (
+            <pre className={`tc-output ${tool.isError ? "error" : ""}`}>
+              {tool.outputPreview}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Best-effort parse of the JSON-encoded tool args. */
+function parseArgs(preview: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(preview);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One-line summary shown on the collapsed card. */
+function summarize(tool: ToolCardData): string {
+  const args = parseArgs(tool.argsPreview);
+  if (!args) return tool.argsPreview;
+  switch (tool.name) {
+    case "execute":
+      return String(args.command ?? "");
+    case "write_file":
+    case "edit_file":
+    case "read_file":
+      return shortPath(String(args.file_path ?? args.path ?? ""));
+    case "ls":
+    case "glob":
+    case "grep":
+      return shortPath(
+        String(args.path ?? args.pattern ?? args.query ?? ""),
+      );
+    case "web_search":
+      return String(args.query ?? "");
+    case "web_fetch":
+      return String(args.url ?? "");
+    default: {
+      const first = Object.values(args)[0];
+      return first != null ? String(first) : "";
+    }
+  }
+}
+
+function shortPath(p: string): string {
+  if (!p) return "";
+  // Collapse an absolute sandbox path to its last two segments.
+  const parts = p.split(/[/\\]/).filter(Boolean);
+  return parts.length > 2 ? "…/" + parts.slice(-2).join("/") : p;
+}
+
+/** Pretty, readable representation of the args for the expanded body. */
+function formatArgs(name: string, preview: string): string {
+  const args = parseArgs(preview);
+  if (!args) return preview;
+  if (name === "execute" && typeof args.command === "string") {
+    return "$ " + args.command;
+  }
+  try {
+    return JSON.stringify(args, null, 2);
+  } catch {
+    return preview;
+  }
 }

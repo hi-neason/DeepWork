@@ -39,24 +39,31 @@ function needsApproval(risk: RiskLevel, toolName: string): boolean {
   return risk === "write" || risk === "exec" || risk === "external";
 }
 
+// Args can embed full file contents (write_file); keep them compact. Output
+// (e.g. command logs) is what users expand a card to read, so allow much more.
+const ARGS_PREVIEW_LIMIT = 800;
+const OUTPUT_PREVIEW_LIMIT = 20_000;
+
+function truncate(s: string, limit: number): string {
+  return s.length > limit ? s.slice(0, limit) + "…" : s;
+}
+
 function previewArgs(args: unknown): string {
   try {
-    const s = JSON.stringify(args);
-    return s.length > 300 ? s.slice(0, 300) + "…" : s;
+    return truncate(JSON.stringify(args), ARGS_PREVIEW_LIMIT);
   } catch {
     return String(args);
   }
 }
 
 function previewContent(content: unknown): string {
-  if (typeof content === "string")
-    return content.length > 300 ? content.slice(0, 300) + "…" : content;
+  if (typeof content === "string") return truncate(content, OUTPUT_PREVIEW_LIMIT);
   if (Array.isArray(content)) {
     const text = content
       .filter((b) => (b as any)?.type === "text")
       .map((b) => (b as any).text)
       .join(" ");
-    return text.length > 300 ? text.slice(0, 300) + "…" : text || "[non-text result]";
+    return text ? truncate(text, OUTPUT_PREVIEW_LIMIT) : "[non-text result]";
   }
   return "[result]";
 }

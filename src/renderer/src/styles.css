@@ -357,29 +357,118 @@ body,
   width: 100%;
   padding: 0 28px;
   display: flex;
-  justify-content: flex-start;
+  flex-direction: column;
+  align-items: flex-start;
 }
-.tool-card .inner {
-  max-width: min(70%, 720px);
+.tool-card .tc-head {
+  max-width: min(72%, 760px);
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: 8px;
-  padding: 9px 12px;
+  padding: 7px 10px;
   font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.tool-card .tc-head:disabled {
+  cursor: default;
+}
+.tool-card .tc-caret {
+  color: var(--text-dim);
+  width: 12px;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+.tool-card .tc-status {
+  flex-shrink: 0;
+  font-size: 12px;
 }
 .tool-card .tname {
   font-weight: 600;
   color: var(--accent);
+  flex-shrink: 0;
 }
-.tool-card .targs {
+.tool-card .tc-summary {
   color: var(--text-dim);
-  font-family: ui-monospace, monospace;
-  margin-top: 3px;
-  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
-.tool-card.error .inner {
+.tool-card .tc-copy {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 0 3px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.tool-card .tc-head:hover .tc-copy,
+.tool-card.open .tc-copy {
+  opacity: 1;
+}
+.tool-card .tc-copy:hover {
+  color: var(--text);
+}
+.tool-card .tc-spinner {
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: tc-spin 0.7s linear infinite;
+}
+@keyframes tc-spin {
+  to { transform: rotate(360deg); }
+}
+.tool-card .tc-body {
+  max-width: min(72%, 760px);
+  width: 100%;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tool-card .tc-args,
+.tool-card .tc-output {
+  margin: 0;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.tool-card .tc-args {
+  color: var(--text-dim);
+}
+.tool-card .tc-output.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.tool-card.open .tc-head {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.tool-card.error .tc-head {
   border-left-color: var(--danger);
 }
 .tool-card.error .tname {
