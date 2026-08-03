@@ -1337,7 +1337,9 @@ body,
 .back-btn:hover { text-decoration: underline; }
 
 /* ---- right panel: tasks + artifacts ---- */
-.app.has-right-panel { grid-template-columns: 260px 1fr 320px; }
+.app.has-right-panel { grid-template-columns: 260px 1fr var(--rp-width, 320px); }
+.app.resizing { cursor: col-resize; }
+.app.resizing * { cursor: col-resize !important; user-select: none !important; }
 .right-panel {
   border-left: 1px solid var(--border);
   background: var(--bg-elev);
@@ -1347,7 +1349,37 @@ body,
   padding: 18px 16px;
   overflow-y: auto;
   min-height: 0;
+  position: relative;
+  min-width: 240px;
 }
+.rp-resizer {
+  width: 6px;
+  margin-left: -3px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+}
+.rp-resizer:hover,
+.rp-resizer.active {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.rp-expand {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  z-index: 20;
+}
+.rp-expand:hover { background: var(--bg-elev2); }
+.rp-toggle { width: 34px; height: 34px; }
 .rp-section { display: flex; flex-direction: column; }
 .rp-head {
   display: flex; align-items: center; gap: 8px;

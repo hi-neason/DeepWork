@@ -167,6 +167,14 @@ export function App(): React.ReactElement {
   const [artifacts, setArtifacts] = useState<ArtifactFile[]>([]);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle" });
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState<boolean>(
+    () => localStorage.getItem("dw.right.collapsed") === "1",
+  );
+  const [rightWidth, setRightWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem("dw.right.width"));
+    return saved && saved >= 240 && saved <= 720 ? saved : 320;
+  });
+  const [resizing, setResizing] = useState(false);
 
   const refreshSessions = useCallback(async (): Promise<void> => {
     setSessions(await window.deepwork.sessions.list());
@@ -263,6 +271,34 @@ export function App(): React.ReactElement {
   useEffect(() => {
     if (view === "chat") void refreshSettings();
   }, [view, refreshSettings]);
+
+  // Persist right-panel state.
+  useEffect(() => {
+    localStorage.setItem("dw.right.collapsed", rightCollapsed ? "1" : "0");
+  }, [rightCollapsed]);
+  useEffect(() => {
+    localStorage.setItem("dw.right.width", String(rightWidth));
+  }, [rightWidth]);
+
+  // Drag-to-resize the right panel.
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: MouseEvent) => {
+      const w = window.innerWidth - e.clientX;
+      setRightWidth(Math.min(720, Math.max(240, Math.round(w))));
+    };
+    const onUp = () => setResizing(false);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [resizing]);
 
   // "New task" opens a blank composer without creating a session. The
   // session is only persisted when the user sends the first message
@@ -380,8 +416,17 @@ export function App(): React.ReactElement {
     return <Onboarding settings={settings} onDone={finishOnboarding} />;
   }
 
+  const showRight = view === "chat" && !rightCollapsed;
+
   return (
-    <div className="app has-right-panel">
+    <div
+      className={`app ${showRight ? "has-right-panel" : ""} ${resizing ? "resizing" : ""}`}
+      style={
+        showRight
+          ? ({ ["--rp-width" as string]: `${rightWidth}px` } as React.CSSProperties)
+          : undefined
+      }
+    >
       <Sidebar
         sessions={sessions}
         activeId={sessionId}
@@ -426,16 +471,35 @@ export function App(): React.ReactElement {
               setView("settings");
             }}
             onNewSession={newSession}
+            onToggleRightPanel={() => setRightCollapsed((v) => !v)}
+            rightCollapsed={rightCollapsed}
             onInstallUpdate={() => window.deepwork.updates.install()}
           />
         )}
       </main>
-      <RightPanel
-        sessionId={view === "chat" ? sessionId : null}
-        todos={todos}
-        artifacts={artifacts}
-        onRefreshArtifacts={refreshArtifacts}
-      />
+      {showRight && (
+        <>
+          <div
+            className={`rp-resizer ${resizing ? "active" : ""}`}
+            onMouseDown={() => setResizing(true)}
+          />
+          <RightPanel
+            sessionId={sessionId}
+            todos={todos}
+            artifacts={artifacts}
+            onRefreshArtifacts={refreshArtifacts}
+          />
+        </>
+      )}
+      {!showRight && view === "chat" && (
+        <button
+          className="rp-expand"
+          onClick={() => setRightCollapsed(false)}
+          title="展开右栏"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>
+        </button>
+      )}
       {approval && approval.type === "approval_requested" && (
         <ApprovalModal
           name={approval.name}
