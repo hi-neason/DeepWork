@@ -28,15 +28,12 @@ export function Settings({
   updateStatus,
 }: Props): React.ReactElement {
   const [settings, setSettings] = useState<SettingsType | null>(null);
-  const [apiKey, setApiKey] = useState("");
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const s = await window.deepwork.settings.get();
-      setSettings(s);
-      setApiKey(await window.deepwork.settings.getKey(s.model.provider));
+      setSettings(await window.deepwork.settings.get());
     })();
   }, []);
 
@@ -52,7 +49,6 @@ export function Settings({
 
   const save = async (): Promise<void> => {
     await window.deepwork.settings.save(settings);
-    await window.deepwork.settings.setKey(settings.model.provider, apiKey.trim());
     await window.deepwork.settings.applySystem();
     await window.deepwork.settings.rebuildAgent();
     setSaved(true);
@@ -97,8 +93,6 @@ export function Settings({
           {tab === "models" && (
             <ModelsTab
               settings={settings}
-              apiKey={apiKey}
-              onApiKey={setApiKey}
               onChange={updateModel}
               onSettingsChange={(patch) => setSettings({ ...settings, ...patch })}
             />

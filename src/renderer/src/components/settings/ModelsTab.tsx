@@ -13,16 +13,12 @@ import {
 
 interface Props {
   settings: SettingsType;
-  apiKey: string;
-  onApiKey: (k: string) => void;
   onChange: (patch: Partial<SettingsType["model"]>) => void;
   onSettingsChange: (patch: Partial<SettingsType>) => void;
 }
 
 export function ModelsTab({
   settings,
-  apiKey,
-  onApiKey,
   onChange,
   onSettingsChange,
 }: Props): React.ReactElement {
@@ -50,8 +46,6 @@ export function ModelsTab({
     return (
       <ModelEditor
         settings={settings}
-        apiKey={apiKey}
-        onApiKey={onApiKey}
         editing={editing}
         creating={creating}
         onChange={onChange}
@@ -177,8 +171,6 @@ export function ModelsTab({
 
 function ModelEditor({
   settings,
-  apiKey,
-  onApiKey,
   editing,
   creating,
   onChange,
@@ -186,8 +178,6 @@ function ModelEditor({
   onClose,
 }: {
   settings: SettingsType;
-  apiKey: string;
-  onApiKey: (k: string) => void;
   editing: ConfiguredModel | null;
   creating: boolean;
   onChange: (patch: Partial<ModelConfig>) => void;
@@ -201,12 +191,33 @@ function ModelEditor({
     editing ? shortId(editing.id) : "",
   );
   const [baseUrl, setBaseUrl] = useState(settings.model.baseUrl ?? "");
+  const [apiKey, setApiKey] = useState("");
+  const [hasStoredKey, setHasStoredKey] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
 
   const preset = PROVIDER_PRESETS[provider];
   const needsKey = provider !== "ollama";
   const suggestions = MODEL_CATALOG.filter((m) => m.provider === provider);
+
+  // Load the saved key for the current provider when it changes.
+  useEffect(() => {
+    let cancelled = false;
+    setApiKey("");
+    setShowKey(false);
+    if (!needsKey) {
+      setHasStoredKey(false);
+      return;
+    }
+    void window.deepwork.settings.getKey(provider).then((k: string) => {
+      if (cancelled) return;
+      setHasStoredKey(Boolean(k));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, needsKey]);
 
   // When switching provider, update base URL to preset default.
   useEffect(() => {
@@ -217,7 +228,10 @@ function ModelEditor({
   const verify = async (): Promise<void> => {
     setVerifying(true);
     setResult(null);
-    if (needsKey) await window.deepwork.settings.setKey(provider, apiKey.trim());
+    if (needsKey && apiKey.trim()) {
+      await window.deepwork.settings.setKey(provider, apiKey.trim());
+      setHasStoredKey(true);
+    }
     const cfg: ModelConfig = {
       provider,
       model: modelId || preset.defaultModel,
@@ -253,6 +267,12 @@ function ModelEditor({
       },
     });
     onClose();
+  };
+
+  const clearKey = (): void => {
+    void window.deepwork.settings.setKey(provider, "");
+    setApiKey("");
+    setHasStoredKey(false);
   };
 
   return (
@@ -314,12 +334,37 @@ function ModelEditor({
               {preset.label} API Key
               {preset.envKey ? `（也可通过环境变量 ${preset.envKey} 提供）` : ""}
             </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => onApiKey(e.target.value)}
-              placeholder={preset.keyPlaceholder}
-            />
+            <div className="key-input-row">
+              <input
+                type={showKey ? "text" : "password"}
+                value={
+                  apiKey ||
+                  (hasStoredKey && !showKey ? "••••••••••••••••" : "")
+                }
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  if (hasStoredKey) setHasStoredKey(false);
+                }}
+                onFocus={() => {
+                  if (hasStoredKey && !apiKey) setShowKey(true);
+                }}
+                placeholder={hasStoredKey ? "" : preset.keyPlaceholder}
+                autoComplete="off"
+              />
+              {hasStoredKey && (
+                <button
+                  type="button"
+                  className="btn small ghost"
+                  onClick={clearKey}
+                  title="清除已保存的密钥"
+                >
+                  清除
+                </button>
+              )}
+            </div>
+            {hasStoredKey && (
+              <p className="setting-hint">已保存密钥。直接输入新值可替换，或点「清除」删除。</p>
+            )}
           </div>
         )}
 
