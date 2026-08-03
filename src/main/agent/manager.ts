@@ -432,19 +432,20 @@ export class AgentManager {
 
     const queue: DeepWorkEvent[] = [];
     let waiter: ((() => void) | null) = null;
+    const scanArtifacts = (): void => {
+      try {
+        const files = this.listArtifacts(sessionId);
+        queue.push({ type: "artifacts_updated", artifacts: files });
+      } catch {
+        // ignore scan errors
+      }
+    };
     const onEvent = (e: DeepWorkEvent) => {
       queue.push(e);
-      // After any tool finishes, refresh the artifact list so the right
-      // panel shows newly produced files in near real time.
-      if (e.type === "tool_call_finished" && !e.isError) {
-        try {
-          const files = this.listArtifacts(sessionId);
-          if (files.length) {
-            queue.push({ type: "artifacts_updated", artifacts: files });
-          }
-        } catch {
-          // ignore scan errors
-        }
+      // Refresh the artifact list after every tool call (write/edit/exec/…).
+      // The file write is complete by the time tool_call_finished fires.
+      if (e.type === "tool_call_finished") {
+        scanArtifacts();
       }
       waiter?.();
     };
