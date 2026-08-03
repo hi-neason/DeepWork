@@ -29,6 +29,7 @@ import type {
   Attachment,
   DeepWorkEvent,
   HistoryItem,
+  TodoItem,
 } from "../../shared/types";
 import { screenshotTool } from "../tools/gui";
 import {
@@ -661,9 +662,13 @@ export class AgentManager {
   /**
    * Reconstruct a coarse chat timeline from the persisted checkpointer state
    * for a thread, so switching sessions shows prior messages. Tool call/result
-   * pairs are collapsed into a single tool record.
+   * pairs are collapsed into a single tool record. Also returns the latest
+   * todo plan (from the most recent write_todos call) so the Progress panel
+   * survives reloads/session switches.
    */
-  async getHistory(sessionId: string): Promise<{ timeline: HistoryItem[] }> {
+  async getHistory(
+    sessionId: string,
+  ): Promise<{ timeline: HistoryItem[]; todos: TodoItem[] }> {
     await this.ensureAgent();
     const agent = await this.getAgentForModel(this.sessionModel.get(sessionId));
     const config = { configurable: { thread_id: sessionId } };
@@ -672,6 +677,7 @@ export class AgentManager {
 
     const timeline: HistoryItem[] = [];
     const toolResults = new Map<string, string>();
+    let lastTodos: TodoItem[] = [];
     for (const m of messages) {
       const role = m._getType?.() ?? m.getType?.();
       if (role === "human") {
@@ -682,6 +688,10 @@ export class AgentManager {
         if (text) timeline.push({ kind: "msg", role: "assistant", content: text });
         for (const tc of m.tool_calls ?? []) {
           if (!tc?.id) continue;
+          if (tc.name === "write_todos") {
+            const parsed = parseTodos(tc.args);
+            if (parsed) lastTodos = parsed;
+          }
           timeline.push({
             kind: "tool",
             id: tc.id,
@@ -701,7 +711,7 @@ export class AgentManager {
         if (out) item.outputPreview = out;
       }
     }
-    return { timeline };
+    return { timeline, todos: lastTodos };
   }
 }
 
@@ -731,6 +741,28 @@ function preview(v: unknown): string {
   }
 }
 
+/** Parse a write_todos tool call's arguments into TodoItems. */
+function parseTodos(args: unknown): TodoItem[] | null {
+  try {
+    const raw = typeof args === "string" ? JSON.parse(args) : args;
+    const list = (raw as { todos?: unknown[] })?.todos;
+    if (!Array.isArray(list)) return null;
+    return list
+      .map((t) => {
+        const item = t as { content?: unknown; status?: unknown };
+        const content = String(item.content ?? "").trim();
+        const status =
+          item.status === "in_progress" || item.status === "completed"
+            ? item.status
+            : "pending";
+        return content ? { content, status } : null;
+      })
+      .filter((x): x is TodoItem => x !== null);
+  } catch {
+    return null;
+  }
+}
+
 const SYSTEM_PROMPT = `You are DeepWork, a local-first personal desktop AI assistant.
 
 You can accomplish tasks on this computer using tools:
@@ -751,9 +783,16 @@ When you create deliverables (documents, code, reports, data files), save them
 into the workspace and mention the file paths in your final reply so the user
 can open them from the artifacts panel.
 
+WORKFLOW (always follow):
+1. At the very start of EVERY user request, call "write_todos" with an ordered
+   plan. Even simple tasks get at least one todo (e.g. ["Create the HTML file",
+   "Report the result"]). Mark the first item "in_progress".
+2. Execute the plan step by step, updating todo statuses as you go
+   (in_progress when starting, completed when done).
+3. When all steps are done, give a concise summary.
+
 When a task requires a consequential action (writing files, running commands,
 network actions, any GUI action), you will be asked to approve it through the
-user. For complex tasks, first write_todos as a plan, then execute step by step.
-Report results concisely.`;
+user. Report results concisely.`;
 
 export const agentManager = new AgentManager();

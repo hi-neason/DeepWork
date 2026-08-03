@@ -316,11 +316,12 @@ export function App(): React.ReactElement {
     setView("chat");
     setTodos([]);
     dispatch({ type: "reset" });
-    const [{ timeline }, files] = await Promise.all([
+    const [history, files] = await Promise.all([
       window.deepwork.chat.history(id),
       window.deepwork.artifacts.list(id),
     ]);
-    dispatch({ type: "history", timeline });
+    dispatch({ type: "history", timeline: history.timeline });
+    setTodos(history.todos ?? []);
     setArtifacts(files);
   };
 

@@ -14,6 +14,7 @@ import type {
   Session,
   Settings,
   Skill,
+  TodoItem,
   UpdateStatus,
   VerifyResult,
 } from "../shared/types";
@@ -84,7 +85,9 @@ const api = {
       ipcRenderer.invoke("models:verify", cfg),
   },
   chat: {
-    history: (sessionId: string): Promise<{ timeline: HistoryItem[] }> =>
+    history: (
+      sessionId: string,
+    ): Promise<{ timeline: HistoryItem[]; todos: TodoItem[] }> =>
       ipcRenderer.invoke("chat:history", sessionId),
     send: (
       sessionId: string,
