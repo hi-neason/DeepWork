@@ -230,6 +230,9 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   ipcMain.handle("memories:remove", (_e, id: string) => removeMemory(id));
 
   // ---- artifacts ----
+  ipcMain.handle("artifacts:list", (_e, sessionId: string) =>
+    agentManager.listArtifacts(sessionId),
+  );
   ipcMain.handle("artifacts:reveal", (_e, absolutePath: string) => {
     if (isSafePath(absolutePath)) shell.showItemInFolder(absolutePath);
   });

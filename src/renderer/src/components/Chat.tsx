@@ -17,7 +17,6 @@ interface Props {
   sessionId: string | null;
   chat: ChatState;
   todos: TodoItem[];
-  artifactsCount: number;
   updateStatus: UpdateStatus;
   workspaceDir?: string;
   sessionModel?: string;
@@ -35,7 +34,6 @@ interface Props {
   onRefreshModels: () => void | Promise<void>;
   onAddModel: () => void;
   onNewSession: () => void;
-  onToggleArtifacts: () => void;
   onInstallUpdate: () => void;
 }
 
@@ -43,7 +41,6 @@ export function Chat({
   sessionId,
   chat,
   todos,
-  artifactsCount,
   updateStatus,
   workspaceDir,
   sessionModel,
@@ -56,7 +53,6 @@ export function Chat({
   onRefreshModels,
   onAddModel,
   onNewSession,
-  onToggleArtifacts,
   onInstallUpdate,
 }: Props): React.ReactElement {
   const [input, setInput] = useState("");
@@ -179,14 +175,6 @@ export function Chat({
               Restart to update
             </button>
           )}
-          <button
-            className="btn ghost small"
-            onClick={onToggleArtifacts}
-            disabled={artifactsCount === 0}
-            title="Artifacts produced in this session"
-          >
-            📦 {artifactsCount}
-          </button>
         </div>
       </div>
       <div className="chat" ref={scrollRef}>
@@ -363,14 +351,6 @@ export function Chat({
                 e.target.value = "";
               }}
             />
-            <button
-              className="cap-chip clickable"
-              onClick={onToggleArtifacts}
-              disabled={artifactsCount === 0}
-              title="Artifacts panel"
-            >
-              📦 {artifactsCount}
-            </button>
             <div className="composer-right">
               <div className="model-picker-wrap">
                 <button

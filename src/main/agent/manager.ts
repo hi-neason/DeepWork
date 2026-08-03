@@ -18,6 +18,7 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { createChatModel } from "./model";
 import { createApprovalMiddleware } from "./middleware";
+import { createSanitizeMiddleware, setThreadRoot } from "./sanitize";
 import { createContextMiddleware } from "./context";
 import { registerTurnEmitter, unregisterTurnEmitter } from "./turnEvents";
 import { approvals } from "../security/approvals";
@@ -256,7 +257,13 @@ export class AgentManager {
     // Shared, model-independent tooling/middleware; reused for every model agent.
     this.shared = {
       tools,
-      middleware: [summarization, skills, createContextMiddleware(), approvalMiddleware],
+      middleware: [
+        createSanitizeMiddleware(),
+        summarization,
+        skills,
+        createContextMiddleware(),
+        approvalMiddleware,
+      ],
       stateSchema: stateSchema as unknown as StateSchemaT,
       defaultWorkspace,
     };
@@ -346,8 +353,13 @@ export class AgentManager {
    * <base>/<sessionId>). Loaded when the session is selected.
    */
   setSessionRoot(sessionId: string, rootDir?: string): void {
-    if (rootDir) this.sessionWorkspace.set(sessionId, rootDir);
-    else this.sessionWorkspace.delete(sessionId);
+    if (rootDir) {
+      this.sessionWorkspace.set(sessionId, rootDir);
+      setThreadRoot(sessionId, rootDir);
+    } else {
+      this.sessionWorkspace.delete(sessionId);
+      setThreadRoot(sessionId, "");
+    }
   }
 
   /** Register a session's model override (loaded when the session is selected). */
@@ -373,7 +385,10 @@ export class AgentManager {
     if (!this.sessionStartedAt.has(sessionId)) {
       this.sessionStartedAt.set(sessionId, Date.now());
     }
-    if (workspaceDir) this.sessionWorkspace.set(sessionId, workspaceDir);
+    if (workspaceDir) {
+      this.sessionWorkspace.set(sessionId, workspaceDir);
+      setThreadRoot(sessionId, workspaceDir);
+    }
     if (modelId) this.sessionModel.set(sessionId, modelId);
     const ws = this.sessionWorkspace.get(sessionId);
     const result = yield* this.runStream(sessionId, {
@@ -393,7 +408,7 @@ export class AgentManager {
       if (title) yield { type: "session_renamed", title };
     }
     // Surface any artifacts produced in the workspace during this session.
-    const artifacts = this.collectArtifacts(sessionId);
+    const artifacts = this.listArtifacts(sessionId);
     if (artifacts.length) yield { type: "artifacts_updated", artifacts };
   }
 
@@ -419,6 +434,18 @@ export class AgentManager {
     let waiter: ((() => void) | null) = null;
     const onEvent = (e: DeepWorkEvent) => {
       queue.push(e);
+      // After any tool finishes, refresh the artifact list so the right
+      // panel shows newly produced files in near real time.
+      if (e.type === "tool_call_finished" && !e.isError) {
+        try {
+          const files = this.listArtifacts(sessionId);
+          if (files.length) {
+            queue.push({ type: "artifacts_updated", artifacts: files });
+          }
+        } catch {
+          // ignore scan errors
+        }
+      }
       waiter?.();
     };
     emitter.on("event", onEvent);
@@ -582,18 +609,19 @@ export class AgentManager {
    * run started (capped). Skips scanning the home directory directly to avoid
    * enumerating tens of thousands of files.
    */
-  private collectArtifacts(sessionId?: string): ArtifactFile[] {
-    const settings = loadSettings();
+  /** List all files in the session's root folder (the artifacts panel). */
+  listArtifacts(sessionId: string): ArtifactFile[] {
     const root =
-      (sessionId ? this.sessionWorkspace.get(sessionId) : undefined) ||
-      settings.model.workspaceDir;
+      this.sessionWorkspace.get(sessionId) || loadSettings().model.workspaceDir;
     if (!root) return [];
-    const since =
-      (sessionId ? this.sessionStartedAt.get(sessionId) : undefined) ?? Date.now();
+    return this.scanArtifacts(root);
+  }
+
+  private scanArtifacts(root: string): ArtifactFile[] {
     const out: ArtifactFile[] = [];
-    const skip = new Set(["node_modules", ".git", ".venv", "dist", "build", "out"]);
+    const skip = new Set(["node_modules", ".git", ".venv", "dist", "build", "out", "__pycache__"]);
     const walk = (dir: string, depth: number): void => {
-      if (depth > 3 || out.length > 200) return;
+      if (depth > 3 || out.length > 300) return;
       let entries: fs.Dirent[];
       try {
         entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -612,16 +640,14 @@ export class AgentManager {
           } catch {
             continue;
           }
-          if (st.mtimeMs >= since) {
-            out.push({
-              name: e.name,
-              relativePath: path.relative(root, full),
-              absolutePath: full,
-              size: st.size,
-              modifiedAt: st.mtimeMs,
-              ext: path.extname(e.name).replace(".", "").toLowerCase(),
-            });
-          }
+          out.push({
+            name: e.name,
+            relativePath: path.relative(root, full),
+            absolutePath: full,
+            size: st.size,
+            modifiedAt: st.mtimeMs,
+            ext: path.extname(e.name).replace(".", "").toLowerCase(),
+          });
         }
       }
     };

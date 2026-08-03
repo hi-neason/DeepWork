@@ -14,7 +14,7 @@ import { Chat } from "./components/Chat";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { Settings } from "./components/Settings";
 import { Onboarding } from "./components/Onboarding";
-import { ArtifactsPanel } from "./components/ArtifactsPanel";
+import { RightPanel } from "./components/RightPanel";
 import { AutomationsView } from "./components/AutomationsView";
 import { Connectors } from "./components/Connectors";
 import { fileToAttachment } from "./lib/attachments";
@@ -165,7 +165,6 @@ export function App(): React.ReactElement {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactFile[]>([]);
-  const [showArtifacts, setShowArtifacts] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle" });
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
@@ -242,12 +241,22 @@ export function App(): React.ReactElement {
         setTodos(event.todos);
       }
       if (event.type === "artifacts_updated") {
-        setArtifacts((prev) => mergeArtifacts(prev, event.artifacts));
+        // Server sends the complete current list for this session.
+        setArtifacts(event.artifacts);
       }
       dispatch({ type: "event", event });
     });
     return off;
   }, [sessionId, refreshSessions]);
+
+  const refreshArtifacts = useCallback(async (): Promise<void> => {
+    if (!sessionId) return;
+    try {
+      setArtifacts(await window.deepwork.artifacts.list(sessionId));
+    } catch {
+      // ignore
+    }
+  }, [sessionId]);
 
   // When returning to chat from settings/connectors, reload settings so newly
   // added models and appearance changes show up immediately.
@@ -372,7 +381,7 @@ export function App(): React.ReactElement {
   }
 
   return (
-    <div className={`app${showArtifacts ? " has-artifacts" : ""}`}>
+    <div className="app has-right-panel">
       <Sidebar
         sessions={sessions}
         activeId={sessionId}
@@ -403,7 +412,6 @@ export function App(): React.ReactElement {
             sessionId={sessionId}
             chat={chat}
             todos={todos}
-            artifactsCount={artifacts.length}
             updateStatus={updateStatus}
             sessionModel={selectedSession?.model}
             enabledModels={enabledModels}
@@ -418,20 +426,16 @@ export function App(): React.ReactElement {
               setView("settings");
             }}
             onNewSession={newSession}
-            onToggleArtifacts={() => setShowArtifacts((v) => !v)}
             onInstallUpdate={() => window.deepwork.updates.install()}
           />
         )}
       </main>
-      {showArtifacts && (
-        <ArtifactsPanel
-          artifacts={artifacts}
-          onClose={() => setShowArtifacts(false)}
-          onRefresh={async () => {
-            // Artifacts are pushed at turn end; this is a no-op placeholder.
-          }}
-        />
-      )}
+      <RightPanel
+        sessionId={view === "chat" ? sessionId : null}
+        todos={todos}
+        artifacts={artifacts}
+        onRefreshArtifacts={refreshArtifacts}
+      />
       {approval && approval.type === "approval_requested" && (
         <ApprovalModal
           name={approval.name}
@@ -447,11 +451,4 @@ export function App(): React.ReactElement {
       )}
     </div>
   );
-}
-
-function mergeArtifacts(prev: ArtifactFile[], next: ArtifactFile[]): ArtifactFile[] {
-  const map = new Map<string, ArtifactFile>();
-  for (const a of prev) map.set(a.absolutePath, a);
-  for (const a of next) map.set(a.absolutePath, a);
-  return Array.from(map.values()).sort((a, b) => b.modifiedAt - a.modifiedAt);
 }

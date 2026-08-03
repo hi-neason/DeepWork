@@ -1335,3 +1335,65 @@ body,
   font-size: 14px; padding: 0 0 8px; font-family: inherit;
 }
 .back-btn:hover { text-decoration: underline; }
+
+/* ---- right panel: tasks + artifacts ---- */
+.app.has-right-panel { grid-template-columns: 260px 1fr 320px; }
+.right-panel {
+  border-left: 1px solid var(--border);
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.rp-section { display: flex; flex-direction: column; }
+.rp-head {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; color: var(--text);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 4px 2px; text-align: left; font-family: inherit;
+}
+.rp-caret { width: 12px; color: var(--text-dim); font-size: 10px; }
+.rp-count {
+  margin-left: auto; font-size: 11px; color: var(--text-dim);
+  background: var(--bg-elev2); padding: 1px 7px; border-radius: 20px;
+}
+.rp-refresh, .rp-open-folder {
+  margin-left: 6px; color: var(--text-dim); font-size: 14px;
+  padding: 2px 4px; border-radius: 6px;
+}
+.rp-refresh:hover, .rp-open-folder:hover { background: var(--bg-elev2); color: var(--text); }
+.rp-tasks, .rp-artifacts { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rp-task {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; color: var(--text); padding: 6px 8px; border-radius: 8px;
+}
+.rp-task.pending { color: var(--text-dim); }
+.rp-task.in_progress { color: var(--text); }
+.rp-task.completed { color: var(--ok); }
+.rp-task-icon { width: 16px; flex-shrink: 0; text-align: center; }
+.rp-task.in_progress .rp-task-icon { animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.rp-task-label { line-height: 1.4; }
+.rp-empty { color: var(--text-dim); font-size: 13px; padding: 10px 8px; margin: 0; }
+.rp-artifact {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 8px; border-radius: 8px;
+}
+.rp-artifact:hover { background: var(--bg-elev2); }
+.rp-artifact-main { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.rp-artifact-icon { font-size: 18px; flex-shrink: 0; }
+.rp-artifact-meta { min-width: 0; }
+.rp-artifact-name {
+  font-size: 13px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rp-artifact-sub { font-size: 11px; color: var(--text-dim); }
+.rp-artifact-open {
+  background: none; border: none; color: var(--accent);
+  cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 6px;
+  font-family: inherit; flex-shrink: 0;
+}
+.rp-artifact-open:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }

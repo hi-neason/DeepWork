@@ -124,6 +124,8 @@ const api = {
     remove: (id: string): Promise<void> => ipcRenderer.invoke("memories:remove", id),
   },
   artifacts: {
+    list: (sessionId: string): Promise<ArtifactFile[]> =>
+      ipcRenderer.invoke("artifacts:list", sessionId),
     reveal: (absolutePath: string): Promise<void> =>
       ipcRenderer.invoke("artifacts:reveal", absolutePath),
     open: (absolutePath: string): Promise<void> =>
