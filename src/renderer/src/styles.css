@@ -1341,7 +1341,6 @@ body,
 .app.resizing { cursor: col-resize; }
 .app.resizing * { cursor: col-resize !important; user-select: none !important; }
 .right-panel {
-  border-left: 1px solid var(--border);
   background: var(--bg-elev);
   display: flex;
   flex-direction: column;
@@ -1353,16 +1352,23 @@ body,
   min-width: 240px;
 }
 .rp-resizer {
-  width: 6px;
-  margin-left: -3px;
+  width: 5px;
   cursor: col-resize;
-  background: transparent;
+  background: var(--border);
   position: relative;
   z-index: 5;
+  flex-shrink: 0;
+  transition: background 0.12s;
 }
 .rp-resizer:hover,
 .rp-resizer.active {
-  background: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent);
+}
+.rp-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  left: -4px; right: -4px;
 }
 .rp-expand {
   position: fixed;

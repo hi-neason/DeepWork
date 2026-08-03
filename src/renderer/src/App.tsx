@@ -361,6 +361,9 @@ export function App(): React.ReactElement {
       ? await Promise.all(attachments.map(fileToAttachment))
       : undefined;
     await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId);
+    // Guarantee the right panel reflects produced files even if a streamed
+    // event was missed during the new-session handoff.
+    setArtifacts(await window.deepwork.artifacts.list(sid));
   };
 
   const setSessionModel = async (modelId: string): Promise<void> => {
