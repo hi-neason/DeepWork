@@ -6,7 +6,6 @@ import type {
   UpdateStatus,
 } from "../../../shared/types";
 import { Markdown } from "./Markdown";
-import { TodoPanel } from "./TodoPanel";
 
 interface RecentFolder {
   path: string;
@@ -157,7 +156,6 @@ export function Chat({
 
   const canRegenerate =
     !chat.streaming && chat.timeline.some((t) => t.kind === "msg" && t.role === "assistant");
-  const completedTodos = todos.filter((t) => t.status === "completed").length;
 
   const placeholder = sessionId
     ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)"
@@ -202,7 +200,6 @@ export function Chat({
           </div>
         ) : (
           <>
-            {todos.length > 0 && <TodoPanel todos={todos} completed={completedTodos} />}
             {chat.timeline.map((item, i) => {
               if (item.kind === "msg") {
                 const isAssistant = item.role === "assistant";
@@ -233,15 +230,17 @@ export function Chat({
               }
               const t = chat.tools[item.id];
               if (!t) return null;
+              // Planning/todo tools are surfaced in the right panel; don't
+              // dump their raw JSON into the transcript.
+              if (HIDDEN_TOOLS.has(t.name)) return null;
               return (
                 <div key={i} className={`tool-card ${t.isError ? "error" : ""}`}>
                   <div className="inner">
                     <div>
                       {t.status === "running" ? "⏳ " : t.isError ? "✕ " : "✓ "}
-                      <span className="tname">{t.name}</span>
+                      <span className="tname">{prettyToolName(t.name)}</span>
                     </div>
-                    <div className="targs">{t.argsPreview}</div>
-                    {t.outputPreview && (
+                    {t.isError && t.outputPreview && (
                       <div className="targs" style={{ marginTop: 4 }}>
                         → {t.outputPreview}
                       </div>
@@ -434,4 +433,23 @@ export function Chat({
 function shortLabel(m: ConfiguredModel): string {
   // Strip a leading provider prefix for display when the id is "provider:model".
   return m.id.includes(":") ? m.id.split(":").slice(1).join(":") : m.id;
+}
+
+/** Tools whose calls we don't render as cards (planning/housekeeping). */
+const HIDDEN_TOOLS = new Set(["write_todos", "Task"]);
+
+function prettyToolName(name: string): string {
+  const labels: Record<string, string> = {
+    write_file: "写入文件",
+    edit_file: "编辑文件",
+    read_file: "读取文件",
+    ls: "列出目录",
+    execute: "执行命令",
+    grep: "搜索",
+    glob: "查找文件",
+    web_search: "网页搜索",
+    web_fetch: "抓取网页",
+    write_todos: "更新任务",
+  };
+  return labels[name] ?? name;
 }
