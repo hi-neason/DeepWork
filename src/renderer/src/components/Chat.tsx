@@ -34,6 +34,8 @@ interface Props {
   onAddModel: () => void;
   onNewSession: () => void;
   onInstallUpdate: () => void;
+  rightPanelOpen: boolean;
+  onToggleRightPanel: () => void;
 }
 
 export function Chat({
@@ -53,6 +55,8 @@ export function Chat({
   onAddModel,
   onNewSession,
   onInstallUpdate,
+  rightPanelOpen,
+  onToggleRightPanel,
 }: Props): React.ReactElement {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -162,6 +166,16 @@ export function Chat({
       <div className="topbar">
         <span className="title">{sessionId ? "Chat" : "DeepWork"}</span>
         <div className="topbar-right">
+          <button
+            className={`icon-btn topbar-panel-toggle ${rightPanelOpen ? "active" : ""}`}
+            title={rightPanelOpen ? "隐藏右侧面板" : "显示右侧面板"}
+            onClick={onToggleRightPanel}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="15" y1="4" x2="15" y2="20" />
+            </svg>
+          </button>
           {updateStatus.state === "available" && (
             <span className="update-banner">Update available ({updateStatus.version})</span>
           )}

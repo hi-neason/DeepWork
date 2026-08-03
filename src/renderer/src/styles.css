@@ -543,6 +543,13 @@ body,
   background: var(--bg-elev2);
   color: var(--text);
 }
+.icon-btn.active {
+  color: var(--accent);
+  background: var(--bg-elev2);
+}
+.topbar-panel-toggle {
+  margin-right: 4px;
+}
 .cap-chip {
   display: inline-flex;
   align-items: center;
