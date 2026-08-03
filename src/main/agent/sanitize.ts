@@ -94,9 +94,9 @@ export function createSanitizeMiddleware() {
             `  ${root}`,
             ``,
             `Rules:`,
-            `- Every file you create MUST live under this folder. When using write_file / edit_file, use a relative path (e.g. "index.html") or an absolute path inside this folder.`,
-            `- Never write files outside this folder (e.g. not the user's home directory).`,
-            `- This folder already exists; do not create it.`,
+            `- When using write_file / edit_file, ALWAYS use a BARE filename or relative path (e.g. "index.html", "src/app.js"), NOT an absolute path and NOT /tmp/... — the sandbox maps the file into this folder automatically.`,
+            `- Every file you create lives under this folder. Do not write to /tmp, the user's home, or anywhere else.`,
+            `- The folder already exists; do not create it. Run shell commands with relative paths too.`,
           ].join("\n");
           const base =
             typeof request.systemPrompt === "string"

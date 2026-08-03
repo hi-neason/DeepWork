@@ -23,7 +23,7 @@ import { createContextMiddleware } from "./context";
 import { registerTurnEmitter, unregisterTurnEmitter } from "./turnEvents";
 import { approvals } from "../security/approvals";
 import { McpManager } from "../mcp/manager";
-import { renameSession } from "../storage/sessions";
+import { getSession, renameSession } from "../storage/sessions";
 import type {
   ArtifactFile,
   Attachment,
@@ -616,8 +616,18 @@ export class AgentManager {
    */
   /** List all files in the session's root folder (the artifacts panel). */
   listArtifacts(sessionId: string): ArtifactFile[] {
-    const root =
-      this.sessionWorkspace.get(sessionId) || loadSettings().model.workspaceDir;
+    // Prefer the in-memory session root; fall back to the persisted
+    // root_dir (set when the session was created) so the panel works even
+    // if chat:history hasn't populated the map yet, then to the default.
+    let root = this.sessionWorkspace.get(sessionId);
+    if (!root) {
+      const s = getSession(sessionId);
+      root = s?.rootDir || s?.workspaceDir;
+    }
+    if (!root) {
+      const settings = loadSettings();
+      root = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
+    }
     if (!root) return [];
     return this.scanArtifacts(root);
   }
