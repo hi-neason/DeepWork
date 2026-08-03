@@ -773,6 +773,10 @@ body,
 .markdown p { margin: 8px 0; }
 .markdown ul, .markdown ol { margin: 8px 0; padding-left: 22px; }
 .markdown li { margin: 3px 0; }
+/* GFM "loose" lists (blank lines between items) wrap content in <p>;
+   remove that paragraph margin so list items stay tight. */
+.markdown li > p { margin: 0; }
+.markdown li > p + p { margin-top: 6px; }
 .markdown a { color: var(--accent); text-decoration: none; }
 .markdown a:hover { text-decoration: underline; }
 .markdown code {
