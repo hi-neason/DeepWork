@@ -9,6 +9,7 @@ import { approvals } from "../security/approvals";
 import { verifyModelConfig } from "../agent/model";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
 import { scheduler } from "../automation/scheduler";
+import { terminalManager } from "../terminal/manager";
 
 import {
   listSessions,
@@ -56,6 +57,11 @@ import type {
 } from "../../shared/types";
 
 export function registerIpc(getWin: () => BrowserWindow | null): void {
+  // Forward shell output from the terminal manager to the renderer.
+  terminalManager.setSender((channel, ...args) =>
+    getWin()?.webContents.send(channel, ...args),
+  );
+
   // ---- sessions ----
   ipcMain.handle("sessions:list", () => listSessions());
   ipcMain.handle(
@@ -304,6 +310,18 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       // ignore
     }
   });
+
+  // ---- terminal (interactive PTY accessible from the renderer) ----
+  ipcMain.handle("terminal:spawn", (_e, id: string, cwd: string) =>
+    terminalManager.spawn(id, cwd),
+  );
+  ipcMain.handle("terminal:input", (_e, id: string, data: string) =>
+    terminalManager.input(id, data),
+  );
+  ipcMain.handle("terminal:resize", (_e, id: string, cols: number, rows: number) =>
+    terminalManager.resize(id, cols, rows),
+  );
+  ipcMain.handle("terminal:kill", (_e, id: string) => terminalManager.kill(id));
 }
 
 /** Guard reveal/open to real files under the user's home directory. */

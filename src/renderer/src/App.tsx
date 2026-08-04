@@ -14,6 +14,8 @@ import { Chat } from "./components/Chat";
 import { Settings } from "./components/Settings";
 import { Onboarding } from "./components/Onboarding";
 import { RightPanel } from "./components/RightPanel";
+import { TerminalPanel } from "./components/TerminalPanel";
+import { TerminalErrorBoundary } from "./components/TerminalErrorBoundary";
 import { AutomationsView } from "./components/AutomationsView";
 import { Connectors } from "./components/Connectors";
 import { fileToAttachment } from "./lib/attachments";
@@ -177,6 +179,24 @@ export function App(): React.ReactElement {
   // A produced-artifact the user jumped to from the chat: opens the right panel
   // and briefly highlights the matching entry. `n` re-triggers for repeats.
   const [highlightArtifact, setHighlightArtifact] = useState<{ path: string; n: number } | null>(null);
+  // Terminal panel toggle (lives inside the right panel as its own section).
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const toggleTerminal = useCallback((): void => {
+    setRightCollapsed(false);
+    setTerminalOpen((v) => !v);
+  }, []);
+
+  // The right region shows one of two full-area views: the terminal, or the
+  // panel (todos + artifacts). The fold button switches terminal -> panel, and
+  // toggles the whole region when already on the panel.
+  const toggleRightPanel = useCallback((): void => {
+    if (terminalOpen) {
+      setTerminalOpen(false);
+      setRightCollapsed(false);
+    } else {
+      setRightCollapsed((v) => !v);
+    }
+  }, [terminalOpen]);
 
   const refreshSessions = useCallback(async (): Promise<void> => {
     setSessions(await window.deepwork.sessions.list());
@@ -444,7 +464,8 @@ export function App(): React.ReactElement {
     return <Onboarding settings={settings} onDone={finishOnboarding} />;
   }
 
-  const showRight = view === "chat" && !rightCollapsed && !!sessionId;
+  const showRight =
+    view === "chat" && !rightCollapsed && (!!sessionId || terminalOpen);
   // Narrow the pending approval event for the inline banner (null when none/other type).
   const approvalRequest =
     approval && approval.type === "approval_requested" ? approval : null;
@@ -484,32 +505,37 @@ export function App(): React.ReactElement {
         ) : view === "automations" ? (
           <AutomationsView onClose={() => setView("chat")} />
         ) : (
-          <Chat
-            sessionId={sessionId}
-            chat={chat}
-            todos={todos}
-            artifacts={artifacts}
-            updateStatus={updateStatus}
-            sessionModel={selectedSession?.model}
-            enabledModels={enabledModels}
-            showReasoning={settings?.showReasoning ?? true}
-            onSend={send}
-            onCancel={cancel}
-            onRegenerate={regenerate}
-            onSetModel={setSessionModel}
-            onRefreshModels={refreshModels}
-            onAddModel={() => {
-              setSettingsTab("models");
-              setView("settings");
-            }}
-            onNewSession={newSession}
-            onInstallUpdate={() => window.deepwork.updates.install()}
-            rightPanelOpen={showRight}
-            onToggleRightPanel={() => setRightCollapsed((v) => !v)}
-            approval={approvalRequest}
-            onRespondApproval={respondApproval}
-            onJumpToArtifact={jumpToArtifact}
-          />
+          <>
+            <Chat
+              sessionId={sessionId}
+              sessionTitle={selectedSession?.title}
+              chat={chat}
+              todos={todos}
+              artifacts={artifacts}
+              updateStatus={updateStatus}
+              sessionModel={selectedSession?.model}
+              enabledModels={enabledModels}
+              showReasoning={settings?.showReasoning ?? true}
+              onSend={send}
+              onCancel={cancel}
+              onRegenerate={regenerate}
+              onSetModel={setSessionModel}
+              onRefreshModels={refreshModels}
+              onAddModel={() => {
+                setSettingsTab("models");
+                setView("settings");
+              }}
+              onNewSession={newSession}
+              onInstallUpdate={() => window.deepwork.updates.install()}
+              rightPanelOpen={showRight}
+              onToggleRightPanel={toggleRightPanel}
+              terminalOpen={terminalOpen}
+              onToggleTerminal={toggleTerminal}
+              approval={approvalRequest}
+              onRespondApproval={respondApproval}
+              onJumpToArtifact={jumpToArtifact}
+            />
+          </>
         )}
       </main>
       {showRight && (
@@ -518,14 +544,23 @@ export function App(): React.ReactElement {
             className={`rp-resizer ${resizing ? "active" : ""}`}
             onMouseDown={() => setResizing(true)}
           />
-          <RightPanel
-            sessionId={sessionId}
-            todos={todos}
-            artifacts={artifacts}
-            onRefreshArtifacts={refreshArtifacts}
-            onClose={() => setRightCollapsed(true)}
-            highlightArtifact={highlightArtifact}
-          />
+          {terminalOpen ? (
+            <TerminalErrorBoundary onClose={toggleTerminal}>
+              <TerminalPanel
+                cwd={selectedSession?.rootDir}
+                onClose={toggleTerminal}
+              />
+            </TerminalErrorBoundary>
+          ) : (
+            <RightPanel
+              sessionId={sessionId}
+              todos={todos}
+              artifacts={artifacts}
+              onRefreshArtifacts={refreshArtifacts}
+              onClose={() => setRightCollapsed(true)}
+              highlightArtifact={highlightArtifact}
+            />
+          )}
         </div>
       )}
     </div>

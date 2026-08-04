@@ -86,8 +86,6 @@ export function RightPanel({
   const hasTasks = todos.length > 0;
   const hasArtifacts = artifacts.length > 0;
 
-  if (!sessionId) return null;
-
   return (
     <aside className="right-panel">
       <div className="rp-topbar">

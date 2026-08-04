@@ -165,6 +165,20 @@ const api = {
       return () => ipcRenderer.removeListener("update:status", listener);
     },
   },
+  terminal: {
+    spawn: (id: string, cwd: string): Promise<void> =>
+      ipcRenderer.invoke("terminal:spawn", id, cwd),
+    input: (id: string, data: string): Promise<void> =>
+      ipcRenderer.invoke("terminal:input", id, data),
+    resize: (id: string, cols: number, rows: number): Promise<void> =>
+      ipcRenderer.invoke("terminal:resize", id, cols, rows),
+    kill: (id: string): Promise<void> => ipcRenderer.invoke("terminal:kill", id),
+    onData: (cb: (id: string, data: string) => void): (() => void) => {
+      const listener = (_e: unknown, id: string, data: string) => cb(id, data);
+      ipcRenderer.on("terminal:data", listener);
+      return () => ipcRenderer.removeListener("terminal:data", listener);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("deepwork", api);

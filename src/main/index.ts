@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, session, Tray, Menu, nativeImage } from "ele
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerIpc } from "./ipc/register";
+import { terminalManager } from "./terminal/manager";
 import { getDb } from "./storage/db";
 import { agentManager } from "./agent/manager";
 import { loadClaudeCodeEnv } from "./config/ccEnv";
@@ -158,6 +159,7 @@ app.whenReady().then(() => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  terminalManager.killAll();
 });
 
 app.on("window-all-closed", () => {

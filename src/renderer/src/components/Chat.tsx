@@ -16,6 +16,7 @@ interface RecentFolder {
 
 interface Props {
   sessionId: string | null;
+  sessionTitle?: string;
   chat: ChatState;
   todos: TodoItem[];
   artifacts: ArtifactFile[];
@@ -39,6 +40,8 @@ interface Props {
   onInstallUpdate: () => void;
   rightPanelOpen: boolean;
   onToggleRightPanel: () => void;
+  terminalOpen: boolean;
+  onToggleTerminal: () => void;
   /** A pending approval request rendered inline above the composer (null when none). */
   approval?: Extract<DeepWorkEvent, { type: "approval_requested" }> | null;
   onRespondApproval: (decision: "allow" | "deny" | "always_allow") => void;
@@ -48,6 +51,7 @@ interface Props {
 
 export function Chat({
   sessionId,
+  sessionTitle,
   chat,
   todos,
   artifacts,
@@ -66,6 +70,8 @@ export function Chat({
   onInstallUpdate,
   rightPanelOpen,
   onToggleRightPanel,
+  terminalOpen,
+  onToggleTerminal,
   approval,
   onRespondApproval,
   onJumpToArtifact,
@@ -256,11 +262,9 @@ export function Chat({
   return (
     <>
       <div className="topbar">
-        <span className="title">{sessionId ? "Chat" : "DeepWork"}</span>
+        <span className="title">{sessionTitle || "DeepWork"}</span>
         <div className="topbar-right">
-          {sessionId && (
-            <>
-              <div className="topbar-menu-wrap search-wrap" ref={searchWrapRef}>
+          <div className="topbar-menu-wrap search-wrap" ref={searchWrapRef}>
                 <button
                   className={`icon-btn ${showSearch ? "active" : ""}`}
                   title="搜索对话"
@@ -394,18 +398,26 @@ export function Chat({
                   </div>
                 )}
               </div>
-              <button
-                className={`icon-btn topbar-panel-toggle ${rightPanelOpen ? "active" : ""}`}
-                title={rightPanelOpen ? "隐藏右侧面板" : "显示右侧面板"}
-                onClick={onToggleRightPanel}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <line x1="15" y1="4" x2="15" y2="20" />
-                </svg>
-              </button>
-            </>
-          )}
+          <button
+            className={`icon-btn ${terminalOpen ? "active" : ""}`}
+            title={terminalOpen ? "关闭终端" : "打开终端"}
+            onClick={onToggleTerminal}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </button>
+          <button
+            className={`icon-btn topbar-panel-toggle ${rightPanelOpen ? "active" : ""}`}
+            title={terminalOpen ? "切换为面板（任务进程+产物）" : rightPanelOpen ? "隐藏右侧面板" : "显示右侧面板"}
+            onClick={onToggleRightPanel}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="15" y1="4" x2="15" y2="20" />
+            </svg>
+          </button>
           {updateStatus.state === "available" && (
             <span className="update-banner">Update available ({updateStatus.version})</span>
           )}
