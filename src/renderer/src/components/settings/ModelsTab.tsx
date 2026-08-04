@@ -26,6 +26,7 @@ export function ModelsTab({
   const { t } = useTranslation();
   const [editing, setEditing] = useState<ConfiguredModel | null>(null);
   const [creating, setCreating] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ConfiguredModel | null>(null);
 
   const configured = settings.configuredModels ?? [];
   // Ensure the active settings model is always represented in the list.
@@ -155,7 +156,7 @@ export function ModelsTab({
                           : t("settings.models.delete")
                       }
                       disabled={effectiveList.length <= 1}
-                      onClick={() => effectiveList.length > 1 && removeModel(m.id)}
+                      onClick={() => effectiveList.length > 1 && setPendingDelete(m)}
                     >
                       🗑
                     </button>
@@ -181,6 +182,37 @@ export function ModelsTab({
             })}
           </tbody>
         </table>
+      )}
+
+      {pendingDelete && (
+        <div
+          className="overlay"
+          onClick={() => setPendingDelete(null)}
+          role="presentation"
+        >
+          <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog">
+            <h3>{t("settings.models.confirmDeleteTitle")}</h3>
+            <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 4 }}>
+              {t("settings.models.confirmDeleteBody", {
+                name: shortId(pendingDelete.id),
+              })}
+            </p>
+            <div className="actions">
+              <button className="btn" onClick={() => setPendingDelete(null)}>
+                {t("common.cancel")}
+              </button>
+              <button
+                className="btn danger"
+                onClick={() => {
+                  removeModel(pendingDelete.id);
+                  setPendingDelete(null);
+                }}
+              >
+                {t("common.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

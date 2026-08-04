@@ -104,6 +104,8 @@ const zhCN = {
       edit: "编辑",
       delete: "删除",
       deleteDisabled: "至少保留一个模型",
+      confirmDeleteTitle: "删除模型",
+      confirmDeleteBody: "确定要删除「{{name}}」吗？此操作无法撤销。",
       enable: "启用",
       setDefault: "设为默认",
       backToModels: "‹ 模型",

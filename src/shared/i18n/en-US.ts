@@ -106,6 +106,8 @@ const enUS = {
       edit: "Edit",
       delete: "Delete",
       deleteDisabled: "Keep at least one model",
+      confirmDeleteTitle: "Delete model",
+      confirmDeleteBody: "Delete \"{{name}}\"? This cannot be undone.",
       enable: "Enable",
       setDefault: "Set as default",
       backToModels: "‹ Models",
