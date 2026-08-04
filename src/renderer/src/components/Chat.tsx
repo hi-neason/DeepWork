@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
 import type {
   ArtifactFile,
@@ -457,29 +457,37 @@ export function Chat({
             {buildSegments(chat).map((seg, i) => {
               if (seg.kind === "msg") {
                 const isAssistant = seg.role === "assistant";
+                const reasoningVisible = isAssistant && showReasoning && !!seg.reasoning;
                 return (
-                  <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
-                    <div className="role">{seg.role === "user" ? t("chat.roleUser") : t("chat.roleAI")}</div>
-                    <div className="bubble">
-                      {isAssistant && showReasoning && seg.reasoning && (
-                        <details className="reasoning">
-                          <summary>{t("chat.thinking")}</summary>
+                  <Fragment key={i}>
+                    {reasoningVisible && (
+                      <div className="reasoning-card">
+                        <details className="reasoning" open>
+                          <summary>
+                            <span className="reasoning-icon">✨</span>
+                            {t("chat.thinking")}
+                          </summary>
                           <div className="reasoning-body">{seg.reasoning}</div>
                         </details>
-                      )}
-                      {isAssistant ? <Markdown content={seg.content} /> : seg.content}
-                    </div>
-                    {isAssistant && (
-                      <div className="msg-actions">
-                        <button title={t("common.copy")} onClick={() => copy(seg.content)}>
-                          ⧉
-                        </button>
-                        <button title={t("chat.regenerate")} onClick={onRegenerate} disabled={!canRegenerate}>
-                          ↻
-                        </button>
                       </div>
                     )}
-                  </div>
+                    <div ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
+                      <div className="role">{seg.role === "user" ? t("chat.roleUser") : t("chat.roleAI")}</div>
+                      <div className="bubble">
+                        {isAssistant ? <Markdown content={seg.content} /> : seg.content}
+                      </div>
+                      {isAssistant && (
+                        <div className="msg-actions">
+                          <button title={t("common.copy")} onClick={() => copy(seg.content)}>
+                            ⧉
+                          </button>
+                          <button title={t("chat.regenerate")} onClick={onRegenerate} disabled={!canRegenerate}>
+                            ↻
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </Fragment>
                 );
               }
               return (
