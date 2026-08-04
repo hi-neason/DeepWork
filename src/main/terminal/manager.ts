@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn as ptySpawn, type IPty } from "node-pty";
+import { logger } from "../log/logger";
 
 export type TerminalDataSender = (channel: string, ...args: unknown[]) => void;
 
@@ -44,6 +45,7 @@ class TerminalManager {
     });
     term.onData((data) => this.send("terminal:data", id, data));
     this.terms.set(id, term);
+    logger.info("terminal", "spawn", { id, cwd: dir });
   }
 
   input(id: string, data: string): void {
@@ -69,6 +71,7 @@ class TerminalManager {
       // already gone
     }
     this.terms.delete(id);
+    logger.info("terminal", "kill", { id });
   }
 
   killAll(): void {

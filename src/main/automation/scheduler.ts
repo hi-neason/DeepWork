@@ -9,6 +9,7 @@ import {
   updateAutomation,
 } from "../storage/automations";
 import type { Automation, AutomationRun } from "../../shared/types";
+import { logger } from "../log/logger";
 
 // Minimal cron matcher: supports "*", step (every N), lists "a,b,c", ranges "a-b".
 function fieldMatches(pattern: string, value: number, min: number, max: number): boolean {
@@ -90,11 +91,13 @@ class AutomationScheduler extends EventEmitter {
     // Catch up any one-shots that came due while the app was closed.
     void this.catchUpOnce();
     this.timer = setInterval(() => void this.tick(), 30_000);
+    logger.info("automation", "scheduler started", { intervalMs: 30_000 });
   }
 
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    logger.info("automation", "scheduler stopped");
   }
 
   async previewNext(schedule: string): Promise<Date | null> {
@@ -144,6 +147,13 @@ class AutomationScheduler extends EventEmitter {
     const session = createSession(`⏰ ${a.title}`);
     const run = startRun(a.id, session.id);
     this.emit("run:started", { automation: a, run });
+    logger.info("automation", "run started", {
+      automationId: a.id,
+      title: a.title,
+      schedule: a.schedule,
+      sessionId: session.id,
+      runId: run.id,
+    });
     try {
       await this.handlers.runAutomationTurn(
         session.id,
@@ -153,11 +163,25 @@ class AutomationScheduler extends EventEmitter {
       finishRun(run.id, "success");
       markAutomationRun(a.id, "success", Date.now());
       this.emit("run:finished", { automation: a, run, sessionId: session.id });
+      logger.info("automation", "run finished", {
+        automationId: a.id,
+        title: a.title,
+        sessionId: session.id,
+        runId: run.id,
+        status: "success",
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       finishRun(run.id, "error", message);
       markAutomationRun(a.id, "error", Date.now());
       this.emit("run:error", { automation: a, run, error: message, sessionId: session.id });
+      logger.error("automation", "run failed", {
+        automationId: a.id,
+        title: a.title,
+        sessionId: session.id,
+        runId: run.id,
+        error: message,
+      });
     } finally {
       this.running.delete(a.id);
     }
@@ -166,6 +190,7 @@ class AutomationScheduler extends EventEmitter {
   /** Manually trigger an automation now. */
   async runNow(a: Automation): Promise<void> {
     if (this.running.has(a.id)) return;
+    logger.info("automation", "runNow triggered", { automationId: a.id, title: a.title });
     await this.fire(a);
   }
 }

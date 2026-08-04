@@ -7,6 +7,7 @@ import type {
   ProviderKind,
 } from "../../shared/types";
 import { listAllMemories } from "./memories";
+import { configureLogger } from "../log/logger";
 
 const SETTINGS_KEY = "app_settings";
 const SECRET_PREFIX = "secret:";
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: Settings = {
   telemetry: false,
   showReasoning: true,
   funMode: false,
+  logEnabled: false,
   memories: [],
 };
 
@@ -65,6 +67,8 @@ export function saveSettings(settings: Settings): void {
       "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
     .run(SETTINGS_KEY, JSON.stringify(rest));
+  // Keep the runtime logger config in sync with the saved settings.
+  configureLogger({ enabled: settings.logEnabled, workspaceDir: settings.model.workspaceDir });
 }
 
 /** Generic encrypted key per provider. */

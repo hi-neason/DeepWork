@@ -55,6 +55,9 @@ const enUS = {
       showReasoningDesc: "Show the model's reasoning/thinking content in replies.",
       funMode: "Fun mode",
       funModeDesc: "Show playful easter eggs (e.g. the Commit Runner) on idle screens.",
+      logEnabled: "Enable local logs",
+      logEnabledDesc:
+        "When on, write structured debug logs to <workspace>/logs/<sessionId>/deepwork.log for local troubleshooting.",
     },
     title: "Settings",
     close: "Close",

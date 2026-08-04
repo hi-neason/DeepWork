@@ -23,6 +23,7 @@ import { createSanitizeMiddleware, setThreadRoot } from "./sanitize";
 import { createContextMiddleware } from "./context";
 import { registerTurnEmitter, unregisterTurnEmitter } from "./turnEvents";
 import { approvals } from "../security/approvals";
+import { logger } from "../log/logger";
 import { McpManager } from "../mcp/manager";
 import { getSession, renameSession } from "../storage/sessions";
 import type {
@@ -345,6 +346,7 @@ export class AgentManager {
 
   /** Request cancellation of an in-flight turn for a session. */
   cancel(sessionId: string): void {
+    logger.info("agent", "turn_cancel", { session: sessionId }, sessionId);
     const ac = this.aborters.get(sessionId);
     if (ac) ac.abort();
     approvals.rejectAll();
@@ -397,6 +399,18 @@ export class AgentManager {
     modelId?: string,
   ): AsyncGenerator<DeepWorkEvent> {
     const content = buildUserContent(userText, attachments);
+    const tTurn = Date.now();
+    logger.info(
+      "agent",
+      "turn_start",
+      {
+        session: sessionId,
+        model: modelId ?? this.modelForSession(sessionId),
+        workspace: workspaceDir ?? this.sessionWorkspace.get(sessionId),
+        inputLen: userText?.length ?? 0,
+      },
+      sessionId,
+    );
     if (!this.sessionStartedAt.has(sessionId)) {
       this.sessionStartedAt.set(sessionId, Date.now());
     }
@@ -417,7 +431,14 @@ export class AgentManager {
     );
     // Unlock the input immediately after the turn finishes.
     yield { type: "turn_completed" };
+    logger.info(
+      "agent",
+      "turn_completed",
+      { session: sessionId, durationMs: Date.now() - tTurn, replyLen: result.replyText.length },
+      sessionId,
+    );
     if (result.aborted) {
+      logger.info("agent", "turn_aborted", { session: sessionId }, sessionId);
       yield { type: "turn_aborted" };
       return;
     }
@@ -439,9 +460,25 @@ export class AgentManager {
     modelId?: string,
     userText?: string,
   ): AsyncGenerator<DeepWorkEvent, { replyText: string; aborted: boolean }, void> {
-    await this.ensureAgent();
+    try {
+      await this.ensureAgent();
+    } catch (e) {
+      logger.error(
+        "agent",
+        "ensure_agent_failed",
+        { session: sessionId, error: e instanceof Error ? e.message : e },
+        sessionId,
+      );
+      throw e;
+    }
     const agent = await this.getAgentForModel(
       modelId ?? this.sessionModel.get(sessionId),
+    );
+    logger.debug(
+      "agent",
+      "model_resolved",
+      { session: sessionId, model: modelId ?? this.sessionModel.get(sessionId) },
+      sessionId,
     );
 
     const emitter = new EventEmitter();
@@ -471,10 +508,28 @@ export class AgentManager {
     };
     const onEvent = (e: DeepWorkEvent) => {
       queue.push(e);
-      // Refresh the artifact list after every tool call (write/edit/exec/…).
-      // The file write is complete by the time tool_call_finished fires.
-      if (e.type === "tool_call_finished") {
+      if (e.type === "tool_call_started") {
+        logger.info(
+          "agent",
+          "tool_start",
+          { session: sessionId, name: e.name, argsPreview: e.argsPreview },
+          sessionId,
+        );
+      } else if (e.type === "tool_call_finished") {
+        // Refresh the artifact list after every tool call (write/edit/exec/…).
+        // The file write is complete by the time tool_call_finished fires.
         scanArtifacts();
+        logger.info(
+          "agent",
+          "tool_finished",
+          {
+            session: sessionId,
+            name: e.name,
+            isError: e.isError ?? false,
+            outputLen: e.outputPreview?.length ?? 0,
+          },
+          sessionId,
+        );
       }
       waiter?.();
     };
@@ -491,6 +546,14 @@ export class AgentManager {
     let replyText = "";
     let aborted = false;
     const consumed = (async () => {
+      const t0 = Date.now();
+      let firstToken = false;
+      logger.info(
+        "agent",
+        "stream_start",
+        { session: sessionId, model: modelId ?? this.sessionModel.get(sessionId) },
+        sessionId,
+      );
       const stream = await agent.stream(input, {
         streamMode: "messages",
         subgraphs: false,
@@ -509,6 +572,15 @@ export class AgentManager {
         if (text) {
           replyText += text;
           emitter.emit("event", { type: "message_delta", text });
+          if (!firstToken) {
+            firstToken = true;
+            logger.info(
+              "agent",
+              "first_token",
+              { session: sessionId, latencyMs: Date.now() - t0 },
+              sessionId,
+            );
+          }
         }
       }
     })();
@@ -538,6 +610,16 @@ export class AgentManager {
       if (ac.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
         aborted = true;
       } else {
+        logger.error(
+          "agent",
+          "turn_error",
+          {
+            session: sessionId,
+            message: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          },
+          sessionId,
+        );
         yield {
           type: "turn_error",
           message: err instanceof Error ? err.message : String(err),
@@ -675,16 +757,18 @@ export class AgentManager {
         .slice(0, 40);
       if (!title) return; // keep "New Chat"
       this.pushTitle(sessionId, title);
-      console.log(
-        `[title] ai title ready in ${Date.now() - t0}ms`,
+      logger.info(
+        "agent",
+        "title_ready",
+        { session: sessionId, durationMs: Date.now() - t0, title },
         sessionId,
-        "->",
-        title,
       );
     } catch (err) {
-      console.info(
-        "[title] ai title failed, keeping New Chat:",
-        err instanceof Error ? err.message : err,
+      logger.warn(
+        "agent",
+        "title_failed",
+        { session: sessionId, error: err instanceof Error ? err.message : err },
+        sessionId,
       );
     }
   }
@@ -695,7 +779,12 @@ export class AgentManager {
     try {
       this.send?.("chat:event", sessionId, { type: "session_renamed", title });
     } catch (e) {
-      console.error("[title] send failed", e instanceof Error ? e.message : e);
+      logger.error(
+        "agent",
+        "title_send_failed",
+        { session: sessionId, error: e instanceof Error ? e.message : e },
+        sessionId,
+      );
     }
   }
 

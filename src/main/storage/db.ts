@@ -1,13 +1,22 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 import { APP_DATA_DIR } from "../config/paths";
+import { logger } from "../log/logger";
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (db) return db;
   const file = path.join(APP_DATA_DIR, "deepwork.db");
-  db = new Database(file);
+  try {
+    db = new Database(file);
+  } catch (err) {
+    logger.error("db", "failed to open database", {
+      file,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
   db.pragma("journal_mode = WAL");
   migrate(db);
   return db;
@@ -24,7 +33,11 @@ function migrate(d: Database.Database): void {
         d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${decl}`);
       }
     } catch (err) {
-      console.error(`Migration failed for ${table}.${name}:`, err);
+      logger.error("db", "migration failed", {
+        table,
+        column: name,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 

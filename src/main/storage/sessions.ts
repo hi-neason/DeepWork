@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { DEFAULT_WORKSPACE_DIR, sessionRootDir } from "../config/paths";
+import { logger } from "../log/logger";
 
 export const DEFAULT_GROUP = "默认";
 
@@ -72,7 +73,10 @@ export function createSession(
   try {
     fs.mkdirSync(rootDir, { recursive: true });
   } catch (err) {
-    console.error("Failed to create session directory:", err);
+    logger.error("session", "failed to create session directory", {
+      rootDir,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
   const s: Session = {
     id,
@@ -100,6 +104,13 @@ export function createSession(
       model ?? null,
     );
   ensureGroup(group);
+  logger.info("session", "created", {
+    id: s.id,
+    title: s.title,
+    group: s.group,
+    workspaceDir: base,
+    model: s.model,
+  });
   return s;
 }
 
@@ -115,6 +126,7 @@ export function touchSession(id: string): void {
 
 export function deleteSession(id: string): void {
   getDb().prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  logger.info("session", "deleted", { id });
 }
 
 export function setSessionGroup(id: string, group: string): void {

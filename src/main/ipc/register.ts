@@ -46,6 +46,7 @@ import {
   deleteAutomation,
   listRuns,
 } from "../storage/automations";
+import { logger } from "../log/logger";
 import type {
   ApprovalDecision,
   Attachment,
@@ -57,6 +58,39 @@ import type {
 } from "../../shared/types";
 
 export function registerIpc(getWin: () => BrowserWindow | null): void {
+  // Global IPC instrumentation: wrap every handler so each renderer request is
+  // logged with its duration, and failures surface as ERROR lines. This is the
+  // single highest-value debug surface for diagnosing "why did X not work".
+  {
+    const ipcAny = ipcMain as unknown as {
+      handle: (
+        channel: string,
+        listener: (event: unknown, ...args: unknown[]) => unknown,
+      ) => void;
+    };
+    const origHandle = ipcAny.handle.bind(ipcMain);
+    ipcAny.handle = (channel, listener) => {
+      origHandle(channel, async (event: unknown, ...args: unknown[]) => {
+        const t0 = Date.now();
+        try {
+          const result = await (listener as (e: unknown, ...a: unknown[]) => unknown)(
+            event,
+            ...args,
+          );
+          logger.debug("ipc", "handled", { channel, ms: Date.now() - t0 });
+          return result;
+        } catch (err) {
+          logger.error("ipc", "handle failed", {
+            channel,
+            error: err instanceof Error ? err.message : String(err),
+            ms: Date.now() - t0,
+          });
+          throw err;
+        }
+      });
+    };
+  }
+
   // Forward shell output from the terminal manager to the renderer.
   terminalManager.setSender((channel, ...args) =>
     getWin()?.webContents.send(channel, ...args),

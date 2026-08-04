@@ -53,6 +53,9 @@ const zhCN = {
       showReasoningDesc: "在回答中展示模型的 reasoning/thinking 内容。",
       funMode: "摸鱼模式",
       funModeDesc: "在空闲页面显示小游戏等趣味彩蛋（如 Commit Runner）。",
+      logEnabled: "启用本地日志",
+      logEnabledDesc:
+        "开启后输出结构化调试日志到「默认工作区目录」/logs/<会话ID>/deepwork.log，便于本地排查问题。",
     },
     title: "设置",
     close: "关闭",

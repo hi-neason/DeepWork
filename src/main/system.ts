@@ -1,4 +1,5 @@
 import { app, powerSaveBlocker } from "electron";
+import { logger } from "./log/logger";
 
 let blockerId: number | null = null;
 let loginItemEnabled = false;
@@ -20,10 +21,10 @@ export function applyOpenAtLogin(enabled: boolean): void {
     });
   } catch (err) {
     // Non-fatal: usually an unsigned/dev build. Log once instead of throwing.
-    console.info(
-      "Could not set login item (expected in dev/unsigned builds):",
-      err instanceof Error ? err.message : err,
-    );
+    logger.info("system", "openAtLogin not applied (dev/unsigned build expected)", {
+      enabled,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -31,8 +32,10 @@ export function applyOpenAtLogin(enabled: boolean): void {
 export function setKeepAwake(enabled: boolean): void {
   if (enabled && blockerId === null) {
     blockerId = powerSaveBlocker.start("prevent-display-sleep");
+    logger.info("system", "keepAwake enabled", { blockerId });
   } else if (!enabled && blockerId !== null) {
     if (powerSaveBlocker.isStarted(blockerId)) powerSaveBlocker.stop(blockerId);
+    logger.info("system", "keepAwake disabled", { blockerId });
     blockerId = null;
   }
 }

@@ -126,6 +126,13 @@ export function GeneralTab({ settings, onChange, onModelChange }: Props): React.
           checked={settings.funMode}
           onChange={(v) => onChange({ funMode: v })}
         />
+        <div className="setting-sep" />
+        <Toggle
+          label={t("settings.general.logEnabled")}
+          desc={t("settings.general.logEnabledDesc")}
+          checked={settings.logEnabled}
+          onChange={(v) => onChange({ logEnabled: v })}
+        />
       </div>
     </div>
   );

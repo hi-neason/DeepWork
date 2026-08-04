@@ -7,6 +7,7 @@ import { getApiKey } from "../storage/settings";
 import { PROVIDER_PRESETS } from "../../shared/providers";
 import type { ModelConfig, ProviderKind, VerifyResult } from "../../shared/types";
 import i18n from "../i18n";
+import { logger } from "../log/logger";
 
 /**
  * Resolve credentials/endpoint with this precedence (highest first):
@@ -63,6 +64,11 @@ function resolveOpenAICompat(provider: ProviderKind, cfg: ModelConfig): Construc
 }
 
 export function createChatModel(cfg: ModelConfig): BaseChatModel {
+  logger.debug("model", "create", {
+    provider: cfg.provider,
+    model: cfg.model,
+    baseUrl: cfg.baseUrl || undefined,
+  });
   switch (cfg.provider) {
     case "anthropic":
       return new ChatAnthropic(resolveAnthropic(cfg));

@@ -11,11 +11,24 @@ import { ensureDirs } from "./config/paths";
 import { applyOpenAtLogin, setKeepAwake } from "./system";
 import { TRAY_ICON_16, TRAY_ICON_36 } from "./trayIcon";
 import i18n, { i18nReady } from "./i18n";
+import { logger, configureLogger } from "./log/logger";
 
 // Reuse Claude Code's ANTHROPIC_* env (endpoint/auth token/model) at runtime.
 // This must run before the agent/model layer is first used. No secrets are
 // hardcoded or stored by DeepWork.
 loadClaudeCodeEnv();
+
+// Capture fatal errors as early as possible so crashes are never silent.
+process.on("uncaughtException", (err) => {
+  logger.error("app", "uncaughtException", { message: err.message, stack: err.stack });
+});
+process.on("unhandledRejection", (reason) => {
+  const e = reason as Error;
+  logger.error("app", "unhandledRejection", {
+    message: e?.message ?? String(reason),
+    stack: e?.stack,
+  });
+});
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -137,6 +150,13 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   ensureDirs(); // create ~/DeepWork/{app,skills,workspace}
   getDb(); // initialize DB / migrations
+  // Sync the runtime logger config from saved settings.
+  const bootSettings = loadSettings();
+  configureLogger({
+    enabled: bootSettings.logEnabled,
+    workspaceDir: bootSettings.model.workspaceDir,
+  });
+  logger.info("app", "ready", { version: app.getVersion() });
   await i18nReady;
   registerIpc(() => win);
   createWindow();

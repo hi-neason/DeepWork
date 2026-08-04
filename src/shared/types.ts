@@ -140,6 +140,8 @@ export interface Settings {
   showReasoning: boolean;
   /** Enable playful easter-egg mini-games (e.g. the Commit Runner) on idle screens. */
   funMode: boolean;
+  /** Write structured debug logs to <workspace>/logs/<sessionId>/deepwork.log. */
+  logEnabled: boolean;
   /** Global memory entries injected into the system prompt (denormalized for renderer). */
   memories: MemoryItem[];
 }

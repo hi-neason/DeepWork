@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import type { Skill } from "../../shared/types";
 import { SKILLS_DIR } from "../config/paths";
+import { logger } from "../log/logger";
 
 const DISABLED_SUFFIX = ".disabled";
 
@@ -43,6 +44,7 @@ function parseSkill(dir: string, name: string): Skill | null {
   const fm = frontmatter(raw);
   const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
   const stat = fs.statSync(file);
+  logger.debug("skills", "parsed", { name, enabled });
   return {
     name,
     description: fm.description || "",
@@ -85,6 +87,7 @@ export function createSkill(input: { name: string; description?: string; body?: 
     body: input.body ?? "",
   });
   fs.writeFileSync(filePath, content, "utf8");
+  logger.info("skills", "created", { name });
   return {
     name,
     description: input.description ?? "",
@@ -115,12 +118,16 @@ export function updateSkill(
   }
   const file = path.join(dir, "SKILL.md" + (next.enabled ? "" : DISABLED_SUFFIX));
   fs.writeFileSync(file, buildSkillMd(next), "utf8");
+  logger.info("skills", "updated", { name, enabled: next.enabled });
   return next;
 }
 
 export function deleteSkill(name: string): void {
   const dir = path.join(skillsDir(), name);
-  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    logger.info("skills", "deleted", { name });
+  }
 }
 
 /** Posix-style source path handed to deepagents skills middleware. */
