@@ -1148,6 +1148,11 @@ body,
 .setting-card input:focus {
   border-color: var(--accent);
 }
+.setting-card .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 .setting-card .row input { flex: 1; min-width: 0; }
 
 /* ---- Markdown rendering ---- */
