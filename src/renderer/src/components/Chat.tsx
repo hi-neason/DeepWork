@@ -803,6 +803,51 @@ type Segment =
   | { kind: "tools"; tools: ToolCardData[]; isLast: boolean };
 
 /** Group consecutive visible tool calls into a single "steps" segment. */
+/**
+ * Detects deepagents/internal action markers that leak into assistant content
+ * (e.g. "create", "run", "search", "子", "规划"). These are short fragments
+ * without punctuation that immediately precede a tool call. Normal replies,
+ * even short ones like "好的", are kept because they are not raw action verbs.
+ */
+const ACTION_MARKERS = new Set([
+  // English markers commonly emitted by deepagents/tool-calling loops
+  "create",
+  "run",
+  "plan",
+  "search",
+  "analyze",
+  "browse",
+  "execute",
+  "fetch",
+  "read",
+  "write",
+  "call",
+  "invoke",
+  "next",
+  "continue",
+  // Chinese markers
+  "子",
+  "规划",
+  "搜索",
+  "分析",
+  "浏览",
+  "执行",
+  "调用",
+  "创建",
+  "开始",
+  "下一步",
+  "继续",
+]);
+function isActionMarker(content: string): boolean {
+  const t = content.trim().toLowerCase();
+  if (t.length === 0) return true;
+  if (/[。！？.?!]/.test(t)) return false;
+  if (ACTION_MARKERS.has(t)) return true;
+  // Pure lowercase English word <= 12 chars is likely a tool intent.
+  if (/^[a-z]+$/.test(t) && t.length <= 12) return true;
+  return false;
+}
+
 function buildSegments(chat: ChatState): Segment[] {
   const toolIndices: number[] = [];
   const segments: Segment[] = [];
@@ -814,9 +859,26 @@ function buildSegments(chat: ChatState): Segment[] {
       toolBuffer = [];
     }
   };
-  for (const item of chat.timeline) {
+  // Always keep the final assistant message so the summary (if any) is visible.
+  let lastAssistantIndex = -1;
+  for (let i = 0; i < chat.timeline.length; i++) {
+    const item = chat.timeline[i];
+    if (item.kind === "msg" && item.role === "assistant") lastAssistantIndex = i;
+  }
+  for (let i = 0; i < chat.timeline.length; i++) {
+    const item = chat.timeline[i];
     if (item.kind === "msg") {
       flush();
+      // Suppress internal action markers that precede a tool call, but never
+      // suppress the final assistant message — that one may be the summary.
+      if (
+        i !== lastAssistantIndex &&
+        item.role === "assistant" &&
+        isActionMarker(item.content) &&
+        chat.timeline[i + 1]?.kind === "tool"
+      ) {
+        continue;
+      }
       segments.push({
         kind: "msg",
         role: item.role,

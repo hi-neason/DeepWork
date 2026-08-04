@@ -889,7 +889,10 @@ WORKFLOW (always follow):
    "Report the result"]). Mark the first item "in_progress".
 2. Execute the plan step by step, updating todo statuses as you go
    (in_progress when starting, completed when done).
-3. When all steps are done, give a concise summary.
+3. When all steps are done, give a concise summary in the same language as the
+   user's request. The summary must explain what was done and what the outcome
+   was. Never end the response with bare action names or step markers (e.g.
+   "create", "search", "子", "规划") — those are internal, not user-facing.
 
 When a task requires a consequential action (writing files, running commands,
 network actions, any GUI action), you will be asked to approve it through the
