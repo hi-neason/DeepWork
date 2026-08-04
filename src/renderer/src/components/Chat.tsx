@@ -8,6 +8,7 @@ import type {
   UpdateStatus,
 } from "../../../shared/types";
 import { useTranslation } from "react-i18next";
+import { CommitRunner } from "./CommitRunner";
 import i18n from "../i18n";
 import { Markdown } from "./Markdown";
 
@@ -447,6 +448,7 @@ export function Chat({
             <button className="new-chat" style={{ marginTop: 12 }} onClick={onNewSession}>
               {t("chat.startChat")}
             </button>
+            <CommitRunner />
           </div>
         ) : (
           <>

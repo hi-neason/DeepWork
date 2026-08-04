@@ -1006,6 +1006,48 @@ body,
   font-weight: 600;
 }
 
+.dino-card {
+  margin: 18px auto 0;
+  width: 300px;
+  max-width: 92%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  padding: 10px 10px 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  user-select: none;
+}
+.dino-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dino-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.dino-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dino-canvas {
+  display: block;
+  width: 300px;
+  height: 132px;
+  max-width: 100%;
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--bg-elev);
+  touch-action: manipulation;
+}
+
 /* modal */
 .overlay {
   position: fixed;
