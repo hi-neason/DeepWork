@@ -31,6 +31,7 @@ export function ModelsTab({
   const configured = settings.configuredModels ?? [];
   // Ensure the active settings model is always represented in the list.
   const effectiveList = withActiveModel(settings, configured);
+  const activeId = `${settings.model.provider}:${settings.model.model}`;
 
   const startCreate = (): void => {
     setEditing(null);
@@ -60,23 +61,27 @@ export function ModelsTab({
 
   const removeModel = (id: string): void => {
     const remaining = configured.filter((m) => m.id !== id);
+    if (remaining.length === 0) return;
     const patch: Partial<SettingsType> = { configuredModels: remaining };
-    const activeId = `${settings.model.provider}:${settings.model.model}`;
     // If the deleted model is the one currently in use, reassign the active
     // slot to the first remaining model so it doesn't get re-injected by
     // withActiveModel() and appear "undeletable".
-    if (activeId === id && remaining.length > 0) {
+    if (activeId === id) {
       const next = remaining[0];
       patch.model = {
         ...settings.model,
         provider: next.provider,
         model: shortId(next.id),
       };
-      patch.configuredModels = remaining.map((x, i) => ({
-        ...x,
-        isDefault: i === 0,
-      }));
     }
+    // Keep the default flag in sync with the active model.
+    const nextActiveId = patch.model
+      ? `${patch.model.provider}:${patch.model.model}`
+      : activeId;
+    patch.configuredModels = remaining.map((x) => ({
+      ...x,
+      isDefault: x.id === nextActiveId,
+    }));
     onSettingsChange(patch);
   };
 
@@ -128,11 +133,10 @@ export function ModelsTab({
           <tbody>
             {effectiveList.map((m) => {
               const preset = PROVIDER_PRESETS[m.provider];
-              const isDefault =
-                m.isDefault ||
-                (settings.model.provider === m.provider &&
-                  settings.model.model === shortId(m.id) &&
-                  !configured.some((x) => x.isDefault));
+              // The active model in settings is the single source of truth for
+              // "default". This prevents duplicate default tags when legacy data
+              // has multiple ConfiguredModel.isDefault set to true.
+              const isDefault = m.id === activeId;
               return (
                 <tr key={m.id}>
                   <td>
@@ -160,14 +164,19 @@ export function ModelsTab({
                     >
                       🗑
                     </button>
-                    <label className="switch small" title={t("settings.models.enable")}>
-                      <input
-                        type="checkbox"
-                        checked={m.enabled}
-                        onChange={(e) => toggleModel(m.id, e.target.checked)}
-                      />
+                    <button
+                      className={`switch small ${m.enabled ? "on" : ""}`}
+                      title={
+                        m.enabled
+                          ? t("settings.models.enabled")
+                          : t("settings.models.disabled")
+                      }
+                      onClick={() => toggleModel(m.id, !m.enabled)}
+                      role="switch"
+                      aria-checked={m.enabled}
+                    >
                       <span className="knob" />
-                    </label>
+                    </button>
                     {!isDefault && (
                       <button
                         className="btn small ghost"
@@ -304,13 +313,18 @@ function ModelEditor({
       id: `${provider}:${id}`,
       provider,
       enabled: editing?.enabled ?? true,
-      isDefault: editing?.isDefault ?? settings.configuredModels.length === 0,
+      isDefault: true,
     };
     const others = settings.configuredModels.filter(
       (m) => m.id !== entry.id,
     );
+    // The saved model becomes the active/default model, so keep the flag in
+    // sync and clear stale isDefault markers from other entries.
     onSettingsChange({
-      configuredModels: [...others, entry],
+      configuredModels: [...others, entry].map((m) => ({
+        ...m,
+        isDefault: m.id === entry.id,
+      })),
       model: {
         ...settings.model,
         provider,
@@ -468,13 +482,12 @@ function withActiveModel(
   const activeId = `${settings.model.provider}:${settings.model.model}`;
   if (configured.some((m) => m.id === activeId)) return configured;
   // Synthesize an entry for the active model so it appears in the list.
-  return [
-    ...configured,
-    {
-      id: activeId,
-      provider: settings.model.provider,
-      enabled: true,
-      isDefault: true,
-    },
-  ];
+    return [
+      ...configured,
+      {
+        id: activeId,
+        provider: settings.model.provider,
+        enabled: true,
+      },
+    ];
 }
