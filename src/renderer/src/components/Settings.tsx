@@ -14,6 +14,7 @@ interface Props {
   onClose: () => void;
   initialTab?: SettingsTab;
   updateStatus?: UpdateStatus;
+  onSaved?: () => void;
 }
 
 const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string }> = [
@@ -27,6 +28,7 @@ export function Settings({
   onClose,
   initialTab = "general",
   updateStatus,
+  onSaved,
 }: Props): React.ReactElement {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<SettingsType | null>(null);
@@ -55,6 +57,7 @@ export function Settings({
     await window.deepwork.settings.rebuildAgent();
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+    onSaved?.();
   };
 
   return (

@@ -506,6 +506,7 @@ export function App(): React.ReactElement {
             onClose={() => setView("chat")}
             updateStatus={updateStatus}
             initialTab={settingsTab}
+            onSaved={() => void refreshSettings()}
           />
         ) : view === "connectors" ? (
           <Connectors onClose={() => setView("chat")} />
