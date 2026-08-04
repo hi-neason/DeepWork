@@ -83,7 +83,7 @@ export function CommitRunner(): React.ReactElement {
     let over = false;
     let score = 0;
     let best = loadBest();
-    let speed = 3.2;
+    let speed = 2.0;
     let py = groundY;
     let vy = 0;
     let onGround = true;
@@ -123,7 +123,7 @@ export function CommitRunner(): React.ReactElement {
       running = false;
       over = false;
       score = 0;
-      speed = 3.2;
+      speed = 2.0;
       py = groundY;
       vy = 0;
       onGround = true;
@@ -273,7 +273,7 @@ export function CommitRunner(): React.ReactElement {
     const step = (): void => {
       if (running && !over) {
         frame++;
-        speed = Math.min(7.5, speed + 0.0015);
+        speed = Math.min(6.0, speed + 0.0011);
         vy += gravity;
         py += vy;
         if (py >= groundY) {
