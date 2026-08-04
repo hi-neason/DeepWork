@@ -103,6 +103,7 @@ const zhCN = {
       defaultTag: "默认",
       edit: "编辑",
       delete: "删除",
+      deleteDisabled: "至少保留一个模型",
       enable: "启用",
       setDefault: "设为默认",
       backToModels: "‹ 模型",

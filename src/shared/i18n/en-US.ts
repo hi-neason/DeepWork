@@ -105,6 +105,7 @@ const enUS = {
       defaultTag: "Default",
       edit: "Edit",
       delete: "Delete",
+      deleteDisabled: "Keep at least one model",
       enable: "Enable",
       setDefault: "Set as default",
       backToModels: "‹ Models",

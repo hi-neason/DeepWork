@@ -58,9 +58,25 @@ export function ModelsTab({
   }
 
   const removeModel = (id: string): void => {
-    onSettingsChange({
-      configuredModels: configured.filter((m) => m.id !== id),
-    });
+    const remaining = configured.filter((m) => m.id !== id);
+    const patch: Partial<SettingsType> = { configuredModels: remaining };
+    const activeId = `${settings.model.provider}:${settings.model.model}`;
+    // If the deleted model is the one currently in use, reassign the active
+    // slot to the first remaining model so it doesn't get re-injected by
+    // withActiveModel() and appear "undeletable".
+    if (activeId === id && remaining.length > 0) {
+      const next = remaining[0];
+      patch.model = {
+        ...settings.model,
+        provider: next.provider,
+        model: shortId(next.id),
+      };
+      patch.configuredModels = remaining.map((x, i) => ({
+        ...x,
+        isDefault: i === 0,
+      }));
+    }
+    onSettingsChange(patch);
   };
 
   const toggleModel = (id: string, enabled: boolean): void => {
@@ -133,8 +149,13 @@ export function ModelsTab({
                     </button>
                     <button
                       className="icon-btn"
-                      title={t("settings.models.delete")}
-                      onClick={() => removeModel(m.id)}
+                      title={
+                        effectiveList.length <= 1
+                          ? t("settings.models.deleteDisabled")
+                          : t("settings.models.delete")
+                      }
+                      disabled={effectiveList.length <= 1}
+                      onClick={() => effectiveList.length > 1 && removeModel(m.id)}
                     >
                       🗑
                     </button>
