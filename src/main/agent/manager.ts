@@ -138,6 +138,10 @@ export class AgentManager {
   private titledSessions = new Set<string>();
   private building: Promise<void> | null = null;
   private chatModel: ReturnType<typeof createChatModel> | null = null;
+  /** Sender for pushing title updates outside the turn's event stream. */
+  private send: ((channel: string, ...args: unknown[]) => void) | null = null;
+  /** Models reused for title generation, keyed by provider:model. */
+  private titleModels = new Map<string, ReturnType<typeof createChatModel>>();
   /** Cached compiled agents keyed by a model id (one default agent + per overrides). */
   private agents = new Map<string, DeepAgent>();
   /** Shared tools/middleware, initialized once and reused across model agents. */
@@ -158,6 +162,11 @@ export class AgentManager {
   private unattended = new Set<string>();
   /** Per-session model override. */
   private sessionModel = new Map<string, string>();
+
+  /** Wire up the renderer sender so title updates can be pushed independently. */
+  setSender(send: (channel: string, ...args: unknown[]) => void): void {
+    this.send = send;
+  }
 
   private backendFor(root: string): LocalShellBackend {
     const key = root || DEFAULT_WORKSPACE_DIR;
@@ -396,25 +405,26 @@ export class AgentManager {
     }
     if (modelId) this.sessionModel.set(sessionId, modelId);
     const ws = this.sessionWorkspace.get(sessionId);
-    const result = yield* this.runStream(sessionId, {
-      messages: [{ role: "user", content }],
-      ...(ws ? { workspaceDir: ws } : {}),
-    });
-    // Unlock the input immediately. Title generation is a follow-up model call;
-    // do it after turn_completed so the user can type the next message without
-    // waiting for the title.
+    const result = yield* this.runStream(
+      sessionId,
+      {
+        messages: [{ role: "user", content }],
+        ...(ws ? { workspaceDir: ws } : {}),
+      },
+      modelId,
+      userText,
+    );
+    // Unlock the input immediately after the turn finishes.
     yield { type: "turn_completed" };
     if (result.aborted) {
       yield { type: "turn_aborted" };
       return;
     }
-    if (result.replyText.trim()) {
-      const title = await this.maybeGenerateTitle(sessionId, userText, result.replyText);
-      if (title) yield { type: "session_renamed", title };
-    }
     // Surface any artifacts produced in the workspace during this session.
     const artifacts = this.listArtifacts(sessionId);
     if (artifacts.length) yield { type: "artifacts_updated", artifacts };
+    // The title is generated in parallel and pushed independently of the turn
+    // event stream — nothing to do here.
   }
 
   /**
@@ -426,6 +436,7 @@ export class AgentManager {
     sessionId: string,
     input: Record<string, unknown>,
     modelId?: string,
+    userText?: string,
   ): AsyncGenerator<DeepWorkEvent, { replyText: string; aborted: boolean }, void> {
     await this.ensureAgent();
     const agent = await this.getAgentForModel(
@@ -434,6 +445,18 @@ export class AgentManager {
 
     const emitter = new EventEmitter();
     registerTurnEmitter(sessionId, emitter);
+
+    // Generate the session title on its own independent Promise, fully
+    // detached from the turn's event stream. When it finishes it pushes a
+    // session_renamed event directly via the injected sender, so the UI
+    // refreshes regardless of whether the turn is still running.
+    // Defer with setImmediate so any synchronous model setup does not compete
+    // with the agent's first token delivery.
+    if (userText) {
+      setImmediate(() => {
+        void this.maybeGenerateTitle(sessionId, userText, modelId);
+      });
+    }
 
     const queue: DeepWorkEvent[] = [];
     let waiter: ((() => void) | null) = null;
@@ -570,41 +593,78 @@ export class AgentManager {
   }
 
   /**
-   * Generate a short title for a session after its first exchange. Runs once
-   * per session. Uses the active chat model to summarize the conversation into
-   * a concise title (no model call on plain chat paths — failures fall back to
-   * truncating the user's first message). Best effort — failures swallowed.
+   * Resolve the chat model used for a session's title, reusing the session's
+   * configured model (override or default). Falls back to the default
+   * `chatModel` instance. Models are cached so repeated title calls are cheap.
+   */
+  private titleModel(modelId?: string): ReturnType<typeof createChatModel> | null {
+    if (!modelId) return this.chatModel;
+    const base = loadSettings().model;
+    let cfg = base;
+    if (modelId.includes(":")) {
+      const [p, ...rest] = modelId.split(":");
+      cfg = { ...base, provider: p as typeof base.provider, model: rest.join(":") };
+    } else {
+      cfg = { ...base, model: modelId };
+    }
+    const key = `${cfg.provider}:${cfg.model}`;
+    const cached = this.titleModels.get(key);
+    if (cached) return cached;
+    const m = createChatModel(cfg);
+    this.titleModels.set(key, m);
+    return m;
+  }
+
+  /**
+   * Generate a short title for a session after its first user message. Runs
+   * once per session, fully asynchronously on its own Promise — independent of
+   * the turn's event stream. When a title is produced (by AI or fallback) it
+   * is persisted to the DB and pushed directly to the renderer via the injected
+   * sender, so the UI refreshes even if the turn has already finished.
+   */
+  /**
+   * Generate a short title for a session after its first user message.
+   * Uses an optimistic + async-upgrade strategy:
+   *  - Immediately publish a truncated title so the UI shows something at once
+   *    (the title request is an independent model call that can be queued behind
+   *    the main turn on the provider side, so it may arrive noticeably later).
+   *  - Then run a background AI call; when it returns, publish the AI title to
+   *    replace the truncated placeholder. If the AI call fails or is empty, the
+   *    optimistic title simply stays.
    */
   private async maybeGenerateTitle(
     sessionId: string,
     userText: string,
-    assistantReply: string,
-  ): Promise<string | null> {
-    if (this.titledSessions.has(sessionId)) return null;
+    modelId?: string,
+  ): Promise<void> {
+    if (this.titledSessions.has(sessionId)) return;
     this.titledSessions.add(sessionId);
-    const fallback = (): string | null => {
-      const t = userText
-        .replace(/\s+/g, " ")
-        .trim()
-        .replace(/^["'\s]+|["'\s]+$/g, "")
-        .slice(0, 40);
-      if (!t) return null;
-      renameSession(sessionId, t);
-      return t;
-    };
-    if (!userText.trim()) return null;
+    if (!userText.trim()) return;
+
+    // The session already shows "New Chat" as its default placeholder title.
+    // We deliberately do NOT push a truncated user-string — that flashes an
+    // ugly partial title in the list. Instead the AI call runs in the
+    // background and replaces "New Chat" only once the real title is ready.
     try {
-      const model = this.chatModel;
-      if (!model) return fallback();
+      const model = this.titleModel(modelId);
+      if (!model) return; // keep "New Chat"
       const prompt =
-        "请根据下面的对话内容，生成一句简短的会话标题用于列表展示。要求：\n" +
+        "请根据用户的第一条消息，生成一句简短的会话标题用于列表展示。要求：\n" +
         "- 不超过 20 个字\n" +
         "- 概括用户的主要意图或任务\n" +
         "- 直接输出标题本身，不要加引号、编号、书名号或任何解释\n\n" +
-        `用户：${userText.slice(0, 1500)}\n` +
-        `助手：${assistantReply.slice(0, 1500)}`;
-      const res = await model.invoke([new HumanMessage(prompt)]);
-      let title = extractText(res.content);
+        `用户：${userText.slice(0, 600)}`;
+      const t0 = Date.now();
+      const stream = await model.stream([new HumanMessage(prompt)], {
+        maxTokens: 16,
+        temperature: 0,
+      } as Record<string, unknown>);
+      const parts: string[] = [];
+      for await (const chunk of stream) {
+        const t = extractText(chunk.content);
+        if (t) parts.push(t);
+      }
+      let title = parts.join("");
       title = title
         .replace(/^(标题|title)\s*[:：]\s*/i, "")
         .replace(/^[《"「『'“”]+|[》"」』'”]+$/g, "")
@@ -612,15 +672,29 @@ export class AgentManager {
         .trim()
         .replace(/\s+/g, " ")
         .slice(0, 40);
-      if (!title) return fallback();
-      renameSession(sessionId, title);
-      return title;
+      if (!title) return; // keep "New Chat"
+      this.pushTitle(sessionId, title);
+      console.log(
+        `[title] ai title ready in ${Date.now() - t0}ms`,
+        sessionId,
+        "->",
+        title,
+      );
     } catch (err) {
       console.info(
-        "AI title generation failed, falling back to truncation:",
+        "[title] ai title failed, keeping New Chat:",
         err instanceof Error ? err.message : err,
       );
-      return fallback();
+    }
+  }
+
+  /** Persist and push a session_renamed event to the renderer. */
+  private pushTitle(sessionId: string, title: string): void {
+    renameSession(sessionId, title);
+    try {
+      this.send?.("chat:event", sessionId, { type: "session_renamed", title });
+    } catch (e) {
+      console.error("[title] send failed", e instanceof Error ? e.message : e);
     }
   }
 

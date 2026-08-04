@@ -62,6 +62,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     getWin()?.webContents.send(channel, ...args),
   );
 
+  // Let the agent manager push title updates outside the turn event stream.
+  agentManager.setSender((channel, ...args) =>
+    getWin()?.webContents.send(channel, ...args),
+  );
+
   // ---- sessions ----
   ipcMain.handle("sessions:list", () => listSessions());
   ipcMain.handle(
