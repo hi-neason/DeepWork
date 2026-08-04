@@ -570,31 +570,57 @@ export class AgentManager {
   }
 
   /**
-   * Generate a short title for a session after its first exchange. Runs once per
-   * session; the prompt asks for the user's language and a plain title without
-   * quotes/punctuation. Best effort — failures are swallowed.
+   * Generate a short title for a session after its first exchange. Runs once
+   * per session. Uses the active chat model to summarize the conversation into
+   * a concise title (no model call on plain chat paths — failures fall back to
+   * truncating the user's first message). Best effort — failures swallowed.
    */
   private async maybeGenerateTitle(
     sessionId: string,
     userText: string,
-    _assistantReply: string,
+    assistantReply: string,
   ): Promise<string | null> {
     if (this.titledSessions.has(sessionId)) return null;
     this.titledSessions.add(sessionId);
-    // Derive a title from the user's first message without making a
-    // separate model call (coding-plan endpoints can 404 on plain chat).
-    try {
-      const title = userText
+    const fallback = (): string | null => {
+      const t = userText
         .replace(/\s+/g, " ")
         .trim()
         .replace(/^["'\s]+|["'\s]+$/g, "")
         .slice(0, 40);
-      if (!title) return null;
+      if (!t) return null;
+      renameSession(sessionId, t);
+      return t;
+    };
+    if (!userText.trim()) return null;
+    try {
+      const model = this.chatModel;
+      if (!model) return fallback();
+      const prompt =
+        "请根据下面的对话内容，生成一句简短的会话标题用于列表展示。要求：\n" +
+        "- 不超过 20 个字\n" +
+        "- 概括用户的主要意图或任务\n" +
+        "- 直接输出标题本身，不要加引号、编号、书名号或任何解释\n\n" +
+        `用户：${userText.slice(0, 1500)}\n` +
+        `助手：${assistantReply.slice(0, 1500)}`;
+      const res = await model.invoke([new HumanMessage(prompt)]);
+      let title = extractText(res.content);
+      title = title
+        .replace(/^(标题|title)\s*[:：]\s*/i, "")
+        .replace(/^[《"「『'“”]+|[》"」』'”]+$/g, "")
+        .replace(/^["'\s]+|["'\s]+$/g, "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 40);
+      if (!title) return fallback();
       renameSession(sessionId, title);
       return title;
     } catch (err) {
-      console.info("Title generation failed:", err instanceof Error ? err.message : err);
-      return null;
+      console.info(
+        "AI title generation failed, falling back to truncation:",
+        err instanceof Error ? err.message : err,
+      );
+      return fallback();
     }
   }
 
