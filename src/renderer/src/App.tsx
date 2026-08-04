@@ -524,6 +524,7 @@ export function App(): React.ReactElement {
               sessionModel={selectedSession?.model}
               enabledModels={enabledModels}
               showReasoning={settings?.showReasoning ?? true}
+              funMode={settings?.funMode ?? false}
               onSend={send}
               onCancel={cancel}
               onRegenerate={regenerate}

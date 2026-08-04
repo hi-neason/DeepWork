@@ -28,6 +28,7 @@ interface Props {
   sessionModel?: string;
   enabledModels: ConfiguredModel[];
   showReasoning?: boolean;
+  funMode?: boolean;
   onSend: (
     text: string,
     attachments?: File[],
@@ -63,6 +64,7 @@ export function Chat({
   sessionModel,
   enabledModels,
   showReasoning = true,
+  funMode = false,
   onSend,
   onCancel,
   onRegenerate,
@@ -448,7 +450,7 @@ export function Chat({
             <button className="new-chat" style={{ marginTop: 12 }} onClick={onNewSession}>
               {t("chat.startChat")}
             </button>
-            <CommitRunner />
+            {funMode && <CommitRunner />}
           </div>
         ) : (
           <>

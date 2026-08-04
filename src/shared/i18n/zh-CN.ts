@@ -51,6 +51,8 @@ const zhCN = {
       keepAwakeDesc: "长任务或自动化运行期间保持电脑唤醒、屏幕不关闭。",
       showReasoning: "显示思考过程",
       showReasoningDesc: "在回答中展示模型的 reasoning/thinking 内容。",
+      funMode: "摸鱼模式",
+      funModeDesc: "在空闲页面显示小游戏等趣味彩蛋（如 Commit Runner）。",
     },
     title: "设置",
     close: "关闭",

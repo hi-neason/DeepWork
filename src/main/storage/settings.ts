@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS: Settings = {
   fontScale: 1,
   telemetry: false,
   showReasoning: true,
+  funMode: false,
   memories: [],
 };
 

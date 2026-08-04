@@ -53,6 +53,8 @@ const enUS = {
         "Keep the computer awake and the screen on during long tasks or automations.",
       showReasoning: "Show thinking",
       showReasoningDesc: "Show the model's reasoning/thinking content in replies.",
+      funMode: "Fun mode",
+      funModeDesc: "Show playful easter eggs (e.g. the Commit Runner) on idle screens.",
     },
     title: "Settings",
     close: "Close",

@@ -138,6 +138,8 @@ export interface Settings {
   telemetry: boolean;
   /** Show reasoning/thinking blocks inline instead of hiding them. */
   showReasoning: boolean;
+  /** Enable playful easter-egg mini-games (e.g. the Commit Runner) on idle screens. */
+  funMode: boolean;
   /** Global memory entries injected into the system prompt (denormalized for renderer). */
   memories: MemoryItem[];
 }
