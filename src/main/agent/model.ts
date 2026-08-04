@@ -6,6 +6,7 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import { getApiKey } from "../storage/settings";
 import { PROVIDER_PRESETS } from "../../shared/providers";
 import type { ModelConfig, ProviderKind, VerifyResult } from "../../shared/types";
+import i18n from "../i18n";
 
 /**
  * Resolve credentials/endpoint with this precedence (highest first):
@@ -91,11 +92,11 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
     if (cfg.provider === "ollama") {
       const base = (cfg.baseUrl || PROVIDER_PRESETS.ollama.baseUrl).replace(/\/$/, "");
       const res = await fetch(base + "/api/tags", { method: "GET" });
-      if (!res.ok) return { ok: false, message: `Ollama returned ${res.status}` };
+      if (!res.ok) return { ok: false, message: i18n.t("errors.ollamaReturned", { status: res.status }) };
       const data = (await res.json()) as { models?: Array<{ name: string }> };
       return {
         ok: true,
-        message: "Connected to Ollama",
+        message: i18n.t("errors.connectedOllama"),
         models: (data.models ?? []).map((m) => m.name),
       };
     }
@@ -103,7 +104,7 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
     if (cfg.provider === "anthropic") {
       const authToken = process.env.ANTHROPIC_AUTH_TOKEN;
       const key = authToken || getApiKey("anthropic") || process.env.ANTHROPIC_API_KEY;
-      if (!key) return { ok: false, message: "No API key configured" };
+      if (!key) return { ok: false, message: i18n.t("errors.noApiKey") };
       const base = cfg.baseUrl || process.env.ANTHROPIC_BASE_URL;
       const headers: Record<string, string> = {
         "anthropic-version": "2023-06-01",
@@ -113,11 +114,11 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
       };
       const url = (base ? base.replace(/\/$/, "") : "https://api.anthropic.com") + "/v1/models?limit=5";
       const res = await fetch(url, { headers });
-      if (!res.ok) return { ok: false, message: `Anthropic returned ${res.status}: ${await res.text().catch(() => "")}` };
+      if (!res.ok) return { ok: false, message: i18n.t("errors.anthropicReturned", { status: res.status, detail: await res.text().catch(() => "") }) };
       const data = (await res.json()) as { data?: Array<{ id: string }> };
       return {
         ok: true,
-        message: "Anthropic key verified",
+        message: i18n.t("errors.anthropicKeyVerified"),
         models: (data.data ?? []).map((m) => m.id),
       };
     }
@@ -126,18 +127,18 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
     const preset = PROVIDER_PRESETS[cfg.provider];
     const key = getApiKey(cfg.provider) || (preset.envKey ? process.env[preset.envKey] ?? "" : "");
     if (!key && cfg.provider !== "custom") {
-      return { ok: false, message: "No API key configured" };
+      return { ok: false, message: i18n.t("errors.noApiKey") };
     }
     const base = (cfg.baseUrl || preset.baseUrl).replace(/\/$/, "");
-    if (!base) return { ok: false, message: "A Base URL is required for this provider" };
+    if (!base) return { ok: false, message: i18n.t("errors.baseUrlRequired") };
     const res = await fetch(base + "/models", {
       headers: key ? { Authorization: `Bearer ${key}` } : {},
     });
-    if (!res.ok) return { ok: false, message: `Provider returned ${res.status}: ${await res.text().catch(() => "")}` };
+    if (!res.ok) return { ok: false, message: i18n.t("errors.providerReturned", { status: res.status, detail: await res.text().catch(() => "") }) };
     const data = (await res.json()) as { data?: Array<{ id: string }> };
     return {
       ok: true,
-      message: `${preset.label} key verified`,
+      message: i18n.t("errors.keyVerified", { provider: preset.label }),
       models: (data.data ?? []).map((m) => m.id),
     };
   } catch (err) {

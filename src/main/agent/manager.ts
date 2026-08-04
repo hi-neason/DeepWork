@@ -13,6 +13,7 @@ import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { RemoveMessage, HumanMessage } from "@langchain/core/messages";
+import i18n from "../i18n";
 import type { DeepAgent } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
@@ -296,7 +297,7 @@ export class AgentManager {
    */
   async getAgentForModel(modelId?: string): Promise<DeepAgent> {
     await this.ensureAgent();
-    if (!this.shared) throw new Error("Agent not initialized");
+    if (!this.shared) throw new Error(i18n.t("errors.agentNotInitialized"));
     const settings = loadSettings();
     let provider = settings.model.provider;
     let modelName = settings.model.model;
@@ -319,7 +320,7 @@ export class AgentManager {
   }
 
   private compileAgent(model: ReturnType<typeof createChatModel>): DeepAgent {
-    if (!this.shared) throw new Error("Agent not initialized");
+    if (!this.shared) throw new Error(i18n.t("errors.agentNotInitialized"));
     const self = this;
     const { tools, middleware, stateSchema, defaultWorkspace } = this.shared;
     return createDeepAgent({
@@ -573,7 +574,7 @@ export class AgentManager {
       }
     }
     if (lastHuman < 0) {
-      yield { type: "turn_error", message: "Nothing to regenerate." };
+      yield { type: "turn_error", message: i18n.t("errors.nothingToRegenerate") };
       return;
     }
     const lastHumanMsg = messages[lastHuman];

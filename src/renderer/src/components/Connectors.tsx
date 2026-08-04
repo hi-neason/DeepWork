@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { McpServerConfig, Settings as SettingsType, Skill } from "../../../shared/types";
 
 interface Props {
@@ -7,15 +8,26 @@ interface Props {
 
 type Tab = "mcp" | "skills";
 
-const SKILL_TEMPLATES: { label: string; name: string; description: string; body: string }[] = [
+// `label` is the cosmetic display label; `labelKey` is its i18n key. The
+// `description`/`body` are written into the created skill verbatim and are NOT
+// translated (they are prompt content authored by the user/templates).
+const SKILL_TEMPLATES: {
+  label: string;
+  labelKey: string;
+  name: string;
+  description: string;
+  body: string;
+}[] = [
   {
     label: "Blank skill",
+    labelKey: "connectors.tplBlank",
     name: "my-skill",
     description: "Describe when this skill should be used.",
     body: "# Instructions\n\nWhat the agent should do when this skill is loaded.\n",
   },
   {
     label: "Code reviewer",
+    labelKey: "connectors.tplReviewer",
     name: "code-review",
     description: "Review code changes for bugs, style and security before committing.",
     body:
@@ -28,6 +40,7 @@ const SKILL_TEMPLATES: { label: string; name: string; description: string; body:
   },
   {
     label: "Commit message writer",
+    labelKey: "connectors.tplCommit",
     name: "commit-writer",
     description: "Write concise Conventional Commits messages from staged changes.",
     body:
@@ -38,6 +51,7 @@ const SKILL_TEMPLATES: { label: string; name: string; description: string; body:
 ];
 
 export function Connectors({ onClose }: Props): React.ReactElement {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("mcp");
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -53,7 +67,7 @@ export function Connectors({ onClose }: Props): React.ReactElement {
     void refreshSkills();
   }, []);
 
-  if (!settings) return <div className="settings">Loading…</div>;
+  if (!settings) return <div className="settings">{t("common.loading")}</div>;
 
   const updateMcp = (id: string, patch: Partial<McpServerConfig>): void => {
     setSettings({
@@ -118,9 +132,9 @@ export function Connectors({ onClose }: Props): React.ReactElement {
   return (
     <div className="settings">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2>Connectors</h2>
+        <h2>{t("connectors.title")}</h2>
         <button className="btn" onClick={onClose}>
-          Close
+          {t("common.close")}
         </button>
       </div>
 
@@ -129,26 +143,23 @@ export function Connectors({ onClose }: Props): React.ReactElement {
           className={`tab ${tab === "mcp" ? "active" : ""}`}
           onClick={() => setTab("mcp")}
         >
-          🧩 MCP servers ({settings.mcpServers.length})
+          🧩 {t("connectors.tabMcp", { count: settings.mcpServers.length })}
         </button>
         <button
           className={`tab ${tab === "skills" ? "active" : ""}`}
           onClick={() => setTab("skills")}
         >
-          ✨ Skills ({skills.length})
+          ✨ {t("connectors.tabSkills", { count: skills.length })}
         </button>
       </div>
 
       {tab === "mcp" && (
         <>
-          <p className="tab-hint">
-            MCP servers extend the agent with external tools. stdio servers run locally; SSE/HTTP
-            servers connect over the network.
-          </p>
+          <p className="tab-hint">{t("connectors.mcpHint")}</p>
           {settings.mcpServers.map((m) => (
             <div key={m.id} className="mcp-card">
               <div className="field">
-                <label>Label</label>
+                <label>{t("connectors.label")}</label>
                 <input value={m.label} onChange={(e) => updateMcp(m.id, { label: e.target.value })} />
               </div>
               <div className="field">
@@ -166,7 +177,7 @@ export function Connectors({ onClose }: Props): React.ReactElement {
               {m.transport === "stdio" ? (
                 <>
                   <div className="field">
-                    <label>Command</label>
+                    <label>{t("connectors.command")}</label>
                     <input
                       value={m.command ?? ""}
                       onChange={(e) => updateMcp(m.id, { command: e.target.value })}
@@ -174,7 +185,7 @@ export function Connectors({ onClose }: Props): React.ReactElement {
                     />
                   </div>
                   <div className="field">
-                    <label>Args (space separated)</label>
+                    <label>{t("connectors.args")}</label>
                     <input
                       value={(m.args ?? []).join(" ")}
                       onChange={(e) =>
@@ -186,7 +197,7 @@ export function Connectors({ onClose }: Props): React.ReactElement {
                 </>
               ) : (
                 <div className="field">
-                  <label>URL</label>
+                  <label>{t("connectors.url")}</label>
                   <input
                     value={m.url ?? ""}
                     onChange={(e) => updateMcp(m.id, { url: e.target.value })}
@@ -201,32 +212,29 @@ export function Connectors({ onClose }: Props): React.ReactElement {
                     checked={m.enabled}
                     onChange={(e) => updateMcp(m.id, { enabled: e.target.checked })}
                   />{" "}
-                  Enabled
+                  {t("connectors.enabled")}
                 </label>
                 <button className="btn danger" onClick={() => removeMcp(m.id)}>
-                  Remove
+                  {t("connectors.remove")}
                 </button>
               </div>
             </div>
           ))}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button className="btn" onClick={addMcp}>
-              + Add MCP server
+              {t("connectors.addMcp")}
             </button>
             <button className="btn primary" onClick={saveMcp}>
-              Save &amp; apply
+              {t("common.saveAndApply")}
             </button>
-            {saved && <span style={{ color: "var(--ok)", alignSelf: "center" }}>Saved ✓</span>}
+            {saved && <span style={{ color: "var(--ok)", alignSelf: "center" }}>{t("settings.saved")} ✓</span>}
           </div>
         </>
       )}
 
       {tab === "skills" && (
         <>
-          <p className="tab-hint">
-            Skills are reusable instruction packs (SKILL.md). The agent sees a catalog of all skills
-            and loads the full instructions on demand. Stored locally in your DeepWork data folder.
-          </p>
+          <p className="tab-hint">{t("connectors.skillsHint")}</p>
 
           {editingSkill ? (
             <SkillEditor
@@ -251,13 +259,13 @@ export function Connectors({ onClose }: Props): React.ReactElement {
                     className="skill-template"
                     onClick={() => createFromTemplate(tpl)}
                   >
-                    + {tpl.label}
+                    + {t(tpl.labelKey)}
                   </button>
                 ))}
               </div>
               <div className="skill-list">
                 {skills.length === 0 && (
-                  <p className="artifacts-empty">No skills yet. Create one from a template above.</p>
+                  <p className="artifacts-empty">{t("connectors.noSkills")}</p>
                 )}
                 {skills.map((s) => (
                   <div key={s.name} className="skill-item">
@@ -272,7 +280,7 @@ export function Connectors({ onClose }: Props): React.ReactElement {
                         onChange={(e) => void toggleSkill(s.name, e.target.checked)}
                       />
                     </label>
-                    <button className="icon-btn" title="Delete" onClick={() => deleteSkill(s.name)}>
+                    <button className="icon-btn" title={t("common.delete")} onClick={() => deleteSkill(s.name)}>
                       ✕
                     </button>
                   </div>
@@ -299,23 +307,24 @@ function SkillEditor({
   onDelete: () => void;
   onClose: () => void;
 }): React.ReactElement {
+  const { t } = useTranslation();
   return (
     <div className="skill-editor">
       <div className="skill-editor-head">
         <code>{skill.name}/SKILL.md</code>
         <button className="btn" onClick={onClose}>
-          ← Back
+          {t("connectors.back")}
         </button>
       </div>
       <div className="field">
-        <label>Description (what it does and when to use it)</label>
+        <label>{t("connectors.descLabel")}</label>
         <input
           value={skill.description}
           onChange={(e) => onChange({ ...skill, description: e.target.value })}
         />
       </div>
       <div className="field">
-        <label>Instructions (markdown)</label>
+        <label>{t("connectors.instructionsLabel")}</label>
         <textarea
           rows={16}
           value={skill.body}
@@ -329,13 +338,13 @@ function SkillEditor({
             checked={skill.enabled}
             onChange={(e) => onChange({ ...skill, enabled: e.target.checked })}
           />{" "}
-          Enabled
+          {t("connectors.enabled")}
         </label>
         <button className="btn primary" onClick={onSave}>
-          Save skill
+          {t("connectors.saveSkill")}
         </button>
         <button className="btn danger" onClick={onDelete}>
-          Delete
+          {t("common.delete")}
         </button>
       </div>
     </div>

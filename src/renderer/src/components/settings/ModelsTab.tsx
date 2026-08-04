@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   ConfiguredModel,
   ModelConfig,
@@ -22,6 +23,7 @@ export function ModelsTab({
   onChange,
   onSettingsChange,
 }: Props): React.ReactElement {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState<ConfiguredModel | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -81,33 +83,29 @@ export function ModelsTab({
 
   return (
     <div className="settings-section">
-      <h2>模型</h2>
+      <h2>{t("settings.models.title")}</h2>
 
-      <h3>模型管理</h3>
-      <p className="section-desc">
-        配置 API key 并添加可用模型，勾选启用后会出现在输入框的模型选择器中。
-      </p>
+      <h3>{t("settings.models.manage")}</h3>
+      <p className="section-desc">{t("settings.models.manageDesc")}</p>
 
       <button className="btn secondary add-model-btn" onClick={startCreate}>
-        + 添加模型
+        {t("settings.models.addModel")}
       </button>
 
       <div className="info-banner">
         <span className="info-icon">i</span>
-        添加的模型在本地 DeepWork 中使用，需要对应的 API key 或兼容端点。
+        {t("settings.models.infoBanner")}
       </div>
 
       {effectiveList.length === 0 ? (
-        <div className="empty-models">
-          还没有配置模型。点击「添加模型」开始。
-        </div>
+        <div className="empty-models">{t("settings.models.empty")}</div>
       ) : (
         <table className="model-table">
           <thead>
             <tr>
-              <th>模型</th>
-              <th>服务商</th>
-              <th className="col-actions">操作</th>
+              <th>{t("settings.models.colModel")}</th>
+              <th>{t("settings.models.colProvider")}</th>
+              <th className="col-actions">{t("settings.models.colActions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -122,25 +120,25 @@ export function ModelsTab({
                 <tr key={m.id}>
                   <td>
                     <span className="model-name">{shortId(m.id)}</span>
-                    {isDefault && <span className="default-tag">默认</span>}
+                    {isDefault && <span className="default-tag">{t("settings.models.defaultTag")}</span>}
                   </td>
                   <td>{preset?.label ?? m.provider}</td>
                   <td className="col-actions">
                     <button
                       className="icon-btn"
-                      title="编辑"
+                      title={t("settings.models.edit")}
                       onClick={() => startEdit(m)}
                     >
                       ✎
                     </button>
                     <button
                       className="icon-btn"
-                      title="删除"
+                      title={t("settings.models.delete")}
                       onClick={() => removeModel(m.id)}
                     >
                       🗑
                     </button>
-                    <label className="switch small" title="启用">
+                    <label className="switch small" title={t("settings.models.enable")}>
                       <input
                         type="checkbox"
                         checked={m.enabled}
@@ -153,7 +151,7 @@ export function ModelsTab({
                         className="btn small ghost"
                         onClick={() => setDefault(m)}
                       >
-                        设为默认
+                        {t("settings.models.setDefault")}
                       </button>
                     )}
                   </td>
@@ -184,6 +182,7 @@ function ModelEditor({
   onSettingsChange: (patch: Partial<SettingsType>) => void;
   onClose: () => void;
 }): React.ReactElement {
+  const { t } = useTranslation();
   const [provider, setProvider] = useState<ProviderKind>(
     editing?.provider ?? settings.model.provider,
   );
@@ -278,13 +277,13 @@ function ModelEditor({
   return (
     <div className="settings-section">
       <button className="back-btn" onClick={onClose}>
-        ‹ 模型
+        {t("settings.models.backToModels")}
       </button>
-      <h2>{creating ? "添加模型" : "编辑模型"}</h2>
+      <h2>{creating ? t("settings.models.addTitle") : t("settings.models.editTitle")}</h2>
 
       <div className="setting-card">
         <div className="field">
-          <label>服务商</label>
+          <label>{t("settings.models.provider")}</label>
           <div className="provider-grid">
             {Object.values(PROVIDER_PRESETS).map((p) => (
               <button
@@ -299,7 +298,7 @@ function ModelEditor({
         </div>
 
         <div className="field">
-          <label>模型 ID</label>
+          <label>{t("settings.models.modelId")}</label>
           <input
             list="deepwork-model-edit-list"
             value={modelId}
@@ -314,14 +313,12 @@ function ModelEditor({
               </option>
             ))}
           </datalist>
-          <p className="setting-hint">
-            可从建议中选择，或直接输入服务商支持的任意模型名称。
-          </p>
+          <p className="setting-hint">{t("settings.models.modelIdHint")}</p>
         </div>
 
         {!needsKey ? (
           <div className="field">
-            <label>Ollama 地址</label>
+            <label>{t("settings.models.ollamaAddress")}</label>
             <input
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
@@ -331,8 +328,8 @@ function ModelEditor({
         ) : (
           <div className="field">
             <label>
-              {preset.label} API Key
-              {preset.envKey ? `（也可通过环境变量 ${preset.envKey} 提供）` : ""}
+              {preset.label} {t("settings.models.apiKey")}
+              {preset.envKey ? t("settings.models.envKeyHint", { envKey: preset.envKey }) : ""}
             </label>
             <div className="key-input-row">
               <input
@@ -356,36 +353,34 @@ function ModelEditor({
                   type="button"
                   className="btn small ghost"
                   onClick={clearKey}
-                  title="清除已保存的密钥"
+                  title={t("settings.models.clearSavedKey")}
                 >
-                  清除
+                  {t("common.clear")}
                 </button>
               )}
             </div>
             {hasStoredKey && (
-              <p className="setting-hint">已保存密钥。直接输入新值可替换，或点「清除」删除。</p>
+              <p className="setting-hint">{t("settings.models.keySavedHint")}</p>
             )}
           </div>
         )}
 
         <div className="field">
-          <label>Custom endpoint（可选）</label>
+          <label>{t("settings.models.customEndpoint")}</label>
           <input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder={preset.baseUrl || "https://api.example.com/v1"}
           />
-          <p className="setting-hint">
-            用于 OpenRouter、vLLM、火山 Ark 等 OpenAI 兼容服务；留空使用默认端点。
-          </p>
+          <p className="setting-hint">{t("settings.models.customEndpointHint")}</p>
         </div>
 
         <div className="row" style={{ marginTop: 8 }}>
           <button className="btn" onClick={verify} disabled={verifying}>
-            {verifying ? "验证中…" : "测试连接"}
+            {verifying ? t("settings.models.verifying") : t("settings.models.testConnection")}
           </button>
           <button className="btn primary" onClick={save}>
-            保存
+            {t("common.save")}
           </button>
           {result && (
             <span style={{ color: result.ok ? "var(--ok)" : "var(--danger)" }}>
@@ -396,7 +391,8 @@ function ModelEditor({
         </div>
         {result?.models && result.models.length > 0 && (
           <div className="setting-hint" style={{ marginTop: 8 }}>
-            可用模型：{result.models.slice(0, 8).join(", ")}
+            {t("settings.models.availableModels")}
+            {result.models.slice(0, 8).join(", ")}
             {result.models.length > 8 ? "…" : ""}
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   Settings as SettingsType,
   SettingsTab,
@@ -15,11 +16,11 @@ interface Props {
   updateStatus?: UpdateStatus;
 }
 
-const TABS: Array<{ id: SettingsTab; label: string; icon: string }> = [
-  { id: "general", label: "通用", icon: "⚙" },
-  { id: "models", label: "模型", icon: "◇" },
-  { id: "memory", label: "记忆", icon: "🧠" },
-  { id: "shortcuts", label: "快捷键 / 关于", icon: "?" },
+const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string }> = [
+  { id: "general", labelKey: "settings.tabs.general", icon: "⚙" },
+  { id: "models", labelKey: "settings.tabs.models", icon: "◇" },
+  { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠" },
+  { id: "shortcuts", labelKey: "settings.tabs.shortcuts", icon: "?" },
 ];
 
 export function Settings({
@@ -27,6 +28,7 @@ export function Settings({
   initialTab = "general",
   updateStatus,
 }: Props): React.ReactElement {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [saved, setSaved] = useState(false);
@@ -37,7 +39,7 @@ export function Settings({
     })();
   }, []);
 
-  if (!settings) return <div className="settings-shell">Loading…</div>;
+  if (!settings) return <div className="settings-shell">{t("common.loading")}</div>;
 
   const updateModel = (patch: Partial<SettingsType["model"]>): void => {
     setSettings({ ...settings, model: { ...settings.model, ...patch } });
@@ -58,27 +60,27 @@ export function Settings({
   return (
     <div className="settings-shell">
       <aside className="settings-nav">
-        <div className="settings-title">设置</div>
-        {TABS.map((t) => (
+        <div className="settings-title">{t("settings.title")}</div>
+        {TABS.map((tdef) => (
           <button
-            key={t.id}
-            className={`settings-nav-item ${tab === t.id ? "active" : ""}`}
-            onClick={() => setTab(t.id)}
+            key={tdef.id}
+            className={`settings-nav-item ${tab === tdef.id ? "active" : ""}`}
+            onClick={() => setTab(tdef.id)}
           >
-            <span className="nav-icon">{t.icon}</span>
-            {t.label}
+            <span className="nav-icon">{tdef.icon}</span>
+            {t(tdef.labelKey)}
           </button>
         ))}
         <button className="settings-nav-item close" onClick={onClose}>
-          ✕ 关闭
+          ✕ {t("settings.close")}
         </button>
       </aside>
 
       <div className="settings-content">
         <div className="settings-save-bar">
-          {saved && <span style={{ color: "var(--ok)" }}>已保存 ✓</span>}
+          {saved && <span style={{ color: "var(--ok)" }}>{t("settings.saved")} ✓</span>}
           <button className="btn secondary" onClick={save}>
-            保存并应用
+            {t("common.saveAndApply")}
           </button>
         </div>
 

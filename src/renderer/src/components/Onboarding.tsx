@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   ModelConfig,
   ProviderKind,
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function Onboarding({ settings, onDone }: Props): React.ReactElement {
+  const { t } = useTranslation();
   const [provider, setProvider] = useState<ProviderKind>(settings.model.provider);
   const [model, setModel] = useState(settings.model.model);
   const [baseUrl, setBaseUrl] = useState(settings.model.baseUrl ?? "");
@@ -77,13 +79,13 @@ export function Onboarding({ settings, onDone }: Props): React.ReactElement {
     <div className="onboarding">
       <div className="onboarding-card">
         <div className="onboarding-brand">DeepWork</div>
-        <h1>Welcome</h1>
+        <h1>{t("onboarding.welcome")}</h1>
         <p className="onboarding-sub">
-          A local-first desktop AI agent. Choose a model and a workspace to get started.
+          {t("onboarding.sub")}
         </p>
 
         <div className="field">
-          <label>Model provider</label>
+          <label>{t("onboarding.provider")}</label>
           <select value={provider} onChange={(e) => setProvider(e.target.value as ProviderKind)}>
             {Object.values(PROVIDER_PRESETS).map((p) => (
               <option key={p.kind} value={p.kind}>
@@ -94,7 +96,7 @@ export function Onboarding({ settings, onDone }: Props): React.ReactElement {
         </div>
 
         <div className="field">
-          <label>Model</label>
+          <label>{t("onboarding.model")}</label>
           {models.length > 0 && (
             <select
               value={models.some((m) => m.id === model) ? model : ""}
@@ -118,7 +120,7 @@ export function Onboarding({ settings, onDone }: Props): React.ReactElement {
 
         {showBaseUrl && (
           <div className="field">
-            <label>{provider === "ollama" ? "Ollama URL" : "Base URL"}</label>
+            <label>{provider === "ollama" ? t("onboarding.ollamaUrl") : t("onboarding.baseUrl")}</label>
             <input
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
@@ -130,8 +132,9 @@ export function Onboarding({ settings, onDone }: Props): React.ReactElement {
         {needsKey && (
           <div className="field">
             <label>
-              {preset.label} API key
-              {preset.envKey ? ` (or set ${preset.envKey})` : ""}
+              {preset.label}
+              {t("onboarding.apiKey")}
+              {preset.envKey ? t("onboarding.orSet", { envKey: preset.envKey }) : ""}
             </label>
             <input
               type="password"
@@ -143,25 +146,25 @@ export function Onboarding({ settings, onDone }: Props): React.ReactElement {
         )}
 
         <div className="field">
-          <label>Workspace directory</label>
+          <label>{t("onboarding.workspaceDir")}</label>
           <div className="row">
             <input
               value={workspace}
               onChange={(e) => setWorkspace(e.target.value)}
-              placeholder="defaults to your home directory"
+              placeholder={t("onboarding.workspacePlaceholder")}
             />
             <button className="btn" onClick={pickWorkspace}>
-              Browse
+              {t("common.browse")}
             </button>
           </div>
         </div>
 
         <div className="onboarding-actions">
           <button className="btn" onClick={verify} disabled={verifying}>
-            {verifying ? "Verifying…" : "Test connection"}
+            {verifying ? t("onboarding.verifying") : t("common.test")}
           </button>
           <button className="btn primary" onClick={saveAndFinish} disabled={verifying}>
-            Continue →
+            {t("onboarding.continue")}
           </button>
         </div>
 

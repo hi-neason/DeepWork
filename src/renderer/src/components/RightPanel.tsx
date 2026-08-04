@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ArtifactFile, TodoItem } from "../../../shared/types";
 
 interface Props {
@@ -56,6 +57,7 @@ export function RightPanel({
   onClose,
   highlightArtifact,
 }: Props): React.ReactElement | null {
+  const { t } = useTranslation();
   const [progressOpen, setProgressOpen] = useState(true);
   const [artifactsOpen, setArtifactsOpen] = useState(true);
   const listRef = useRef<HTMLUListElement>(null);
@@ -89,7 +91,7 @@ export function RightPanel({
   return (
     <aside className="right-panel">
       <div className="rp-topbar">
-        <span className="rp-title">面板</span>
+        <span className="rp-title">{t("rightPanel.title")}</span>
       </div>
       {hasTasks && (
         <section className="rp-section">
@@ -98,7 +100,7 @@ export function RightPanel({
             onClick={() => setProgressOpen((v) => !v)}
           >
             <span className="rp-caret">{progressOpen ? "▾" : "▸"}</span>
-            <span>任务进程</span>
+            <span>{t("rightPanel.tasks")}</span>
             <span className="rp-count">{todos.length}</span>
           </button>
           {progressOpen && (
@@ -126,12 +128,12 @@ export function RightPanel({
           onClick={() => setArtifactsOpen((v) => !v)}
         >
           <span className="rp-caret">{artifactsOpen ? "▾" : "▸"}</span>
-          <span>产物</span>
+          <span>{t("rightPanel.artifacts")}</span>
           {hasArtifacts && <span className="rp-count">{artifacts.length}</span>}
           <span
             className="rp-refresh"
             role="button"
-            title="刷新"
+            title={t("rightPanel.refresh")}
             onClick={(e) => {
               e.stopPropagation();
               onRefreshArtifacts();
@@ -142,7 +144,7 @@ export function RightPanel({
           <span
             className="rp-open-folder"
             role="button"
-            title="在 Finder 中显示文件夹"
+            title={t("rightPanel.showInFinder")}
             onClick={(e) => {
               e.stopPropagation();
               if (artifacts[0]) {
@@ -173,15 +175,15 @@ export function RightPanel({
                     <button
                       className="rp-artifact-open"
                       onClick={() => window.deepwork.artifacts.open(a.absolutePath)}
-                      title="打开"
+                      title={t("rightPanel.open")}
                     >
-                      打开
+                      {t("rightPanel.open")}
                     </button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="rp-empty">这个会话的产物会显示在这里。</p>
+              <p className="rp-empty">{t("rightPanel.emptyArtifacts")}</p>
             )}
           </>
         )}

@@ -7,6 +7,8 @@ import type {
   TodoItem,
   UpdateStatus,
 } from "../../../shared/types";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import { Markdown } from "./Markdown";
 
 interface RecentFolder {
@@ -92,6 +94,8 @@ export function Chat({
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const { t } = useTranslation();
+
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
@@ -99,14 +103,14 @@ export function Chat({
 
   const activeModel = sessionModel ?? pendingModel ?? enabledModels[0]?.id;
   const activeModelLabel = useMemo(() => {
-    if (!activeModel) return "No model";
+    if (!activeModel) return t("chat.noModel");
     const m = enabledModels.find((x) => x.id === activeModel);
     return m ? shortLabel(m) : activeModel.split(":").pop();
   }, [activeModel, enabledModels]);
 
   const activeWorkspace = workspaceDir ?? pendingWorkspace;
   const folderLabel = useMemo(() => {
-    if (!activeWorkspace) return "选择文件夹（可选）";
+    if (!activeWorkspace) return t("chat.chooseFolderOptional");
     const parts = activeWorkspace.split(/[/\\]/).filter(Boolean);
     return parts[parts.length - 1] || activeWorkspace;
   }, [activeWorkspace]);
@@ -256,8 +260,8 @@ export function Chat({
   };
 
   const placeholder = sessionId
-    ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)"
-    : "Ask anything — a new chat starts automatically";
+    ? t("chat.placeholderActive")
+    : t("chat.placeholderIdle");
 
   return (
     <>
@@ -267,7 +271,7 @@ export function Chat({
           <div className="topbar-menu-wrap search-wrap" ref={searchWrapRef}>
                 <button
                   className={`icon-btn ${showSearch ? "active" : ""}`}
-                  title="搜索对话"
+                  title={t("chat.searchTitle")}
                   onClick={() => {
                     setShowSearch((v) => !v);
                     setShowHistory(false);
@@ -289,7 +293,7 @@ export function Chat({
                         ref={searchInputRef}
                         type="text"
                         className="search-popover-input"
-                        placeholder="搜索对话内容"
+                        placeholder={t("chat.searchPlaceholder")}
                         value={searchQuery}
                         onChange={(e) => {
                           setSearchQuery(e.target.value);
@@ -309,7 +313,7 @@ export function Chat({
                       )}
                       <button
                         className="icon-btn search-nav"
-                        title="上一个"
+                        title={t("chat.prev")}
                         disabled={searchResults.length === 0}
                         onClick={() => navigateSearch(-1)}
                       >
@@ -319,7 +323,7 @@ export function Chat({
                       </button>
                       <button
                         className="icon-btn search-nav"
-                        title="下一个"
+                        title={t("chat.next")}
                         disabled={searchResults.length === 0}
                         onClick={() => navigateSearch(1)}
                       >
@@ -329,7 +333,7 @@ export function Chat({
                       </button>
                       <button
                         className="icon-btn search-close"
-                        title="关闭"
+                        title={t("common.close")}
                         onClick={() => setShowSearch(false)}
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -341,7 +345,7 @@ export function Chat({
                     {searchQuery.trim() && (
                       <div className="search-popover-results">
                         {searchResults.length === 0 ? (
-                          <div className="search-popover-empty">无匹配结果</div>
+                          <div className="search-popover-empty">{t("chat.noResults")}</div>
                         ) : (
                           searchResults.map((item, i) => (
                             <div
@@ -353,7 +357,7 @@ export function Chat({
                               }}
                             >
                               <span className={`search-result-role ${item.role}`}>
-                                {item.role === "user" ? "你" : "AI"}
+                                {item.role === "user" ? t("chat.roleUser") : t("chat.roleAI")}
                               </span>
                               <span className="search-result-text">{item.content}</span>
                             </div>
@@ -367,7 +371,7 @@ export function Chat({
               <div className="topbar-menu-wrap" ref={historyWrapRef}>
                 <button
                   className={`icon-btn ${showHistory ? "active" : ""}`}
-                  title="历史提问"
+                  title={t("chat.historyTitle")}
                   onClick={() => {
                     setShowHistory((v) => !v);
                     setShowSearch(false);
@@ -380,9 +384,9 @@ export function Chat({
                 </button>
                 {showHistory && (
                   <div className="history-menu">
-                    <div className="history-menu-label">历史提问 ({historyItems.length})</div>
+                    <div className="history-menu-label">{t("chat.historyLabel", { count: historyItems.length })}</div>
                     {historyItems.length === 0 ? (
-                      <div className="history-menu-empty">暂无历史提问</div>
+                      <div className="history-menu-empty">{t("chat.noHistory")}</div>
                     ) : (
                       historyItems.map((item, i) => (
                         <div
@@ -400,7 +404,7 @@ export function Chat({
               </div>
           <button
             className={`icon-btn ${terminalOpen ? "active" : ""}`}
-            title={terminalOpen ? "关闭终端" : "打开终端"}
+            title={terminalOpen ? t("chat.closeTerminal") : t("chat.openTerminal")}
             onClick={onToggleTerminal}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -410,7 +414,7 @@ export function Chat({
           </button>
           <button
             className={`icon-btn topbar-panel-toggle ${rightPanelOpen ? "active" : ""}`}
-            title={terminalOpen ? "切换为面板（任务进程+产物）" : rightPanelOpen ? "隐藏右侧面板" : "显示右侧面板"}
+            title={terminalOpen ? t("chat.terminalToPanel") : rightPanelOpen ? t("chat.hidePanel") : t("chat.showPanel")}
             onClick={onToggleRightPanel}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -419,14 +423,14 @@ export function Chat({
             </svg>
           </button>
           {updateStatus.state === "available" && (
-            <span className="update-banner">Update available ({updateStatus.version})</span>
+            <span className="update-banner">{t("chat.updateAvailable", { version: updateStatus.version })}</span>
           )}
           {updateStatus.state === "downloading" && (
-            <span className="update-banner">Downloading update… {updateStatus.percent}%</span>
+            <span className="update-banner">{t("chat.updateDownloading", { percent: updateStatus.percent })}</span>
           )}
           {updateStatus.state === "downloaded" && (
             <button className="btn primary small" onClick={onInstallUpdate}>
-              Restart to update
+              {t("chat.restartToUpdate")}
             </button>
           )}
         </div>
@@ -435,9 +439,9 @@ export function Chat({
         {!sessionId ? (
           <div className="empty">
             <h2>DeepWork</h2>
-            <p>Your local desktop AI agent.</p>
+            <p>{t("chat.emptyDesc")}</p>
             <button className="new-chat" style={{ marginTop: 12 }} onClick={onNewSession}>
-              Start a chat
+              {t("chat.startChat")}
             </button>
           </div>
         ) : (
@@ -447,11 +451,11 @@ export function Chat({
                 const isAssistant = seg.role === "assistant";
                 return (
                   <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
-                    <div className="role">{seg.role}</div>
+                    <div className="role">{seg.role === "user" ? t("chat.roleUser") : t("chat.roleAI")}</div>
                     <div className="bubble">
                       {isAssistant && showReasoning && seg.reasoning && (
                         <details className="reasoning">
-                          <summary>思考过程</summary>
+                          <summary>{t("chat.thinking")}</summary>
                           <div className="reasoning-body">{seg.reasoning}</div>
                         </details>
                       )}
@@ -459,10 +463,10 @@ export function Chat({
                     </div>
                     {isAssistant && (
                       <div className="msg-actions">
-                        <button title="Copy" onClick={() => copy(seg.content)}>
+                        <button title={t("common.copy")} onClick={() => copy(seg.content)}>
                           ⧉
                         </button>
-                        <button title="Regenerate" onClick={onRegenerate} disabled={!canRegenerate}>
+                        <button title={t("chat.regenerate")} onClick={onRegenerate} disabled={!canRegenerate}>
                           ↻
                         </button>
                       </div>
@@ -534,7 +538,7 @@ export function Chat({
               <button
                 className={`ws-picker ${activeWorkspace ? "active" : ""}`}
                 onClick={() => setShowFolderMenu((v) => !v)}
-                title={activeWorkspace ?? "Choose a folder (optional)"}
+                title={activeWorkspace ?? t("chat.chooseFolderOptional")}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                 <span className="ws-picker-label">{folderLabel}</span>
@@ -553,12 +557,12 @@ export function Chat({
               </button>
               {showFolderMenu && (
                 <div className="ws-menu" onMouseLeave={() => setShowFolderMenu(false)}>
-                  <div className="ws-menu-label">选择文件夹</div>
+                  <div className="ws-menu-label">{t("chat.folderMenuTitle")}</div>
                   <div className="ws-menu-item" onClick={pickFolder}>
-                    📂 浏览…
+                    {t("chat.browse")}
                   </div>
                   {recent.length > 0 && <div className="ws-menu-sep" />}
-                  {recent.length > 0 && <div className="ws-menu-label">最近</div>}
+                  {recent.length > 0 && <div className="ws-menu-label">{t("chat.recent")}</div>}
                   {recent.map((r) => (
                     <div
                       key={r.path}
@@ -576,7 +580,7 @@ export function Chat({
                     <>
                       <div className="ws-menu-sep" />
                       <div className="ws-menu-item danger" onClick={clearFolder}>
-                        ✕ 不使用文件夹
+                        {t("chat.noFolder")}
                       </div>
                     </>
                   )}
@@ -585,7 +589,7 @@ export function Chat({
             </div>
             <button
               className="icon-btn"
-              title="Attach image, PDF or text file"
+              title={t("chat.attachTitle")}
               onClick={() => fileRef.current?.click()}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8l-8.57 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
@@ -609,7 +613,7 @@ export function Chat({
                     void onRefreshModels();
                     setShowModelMenu((v) => !v);
                   }}
-                  title="选择模型"
+                  title={t("chat.chooseModel")}
                 >
                   <span className="model-dot" />
                   <span className="model-picker-label">{activeModelLabel}</span>
@@ -619,7 +623,7 @@ export function Chat({
                   <div className="model-menu" onMouseLeave={() => setShowModelMenu(false)}>
                     {enabledModels.length === 0 && (
                       <div className="model-menu-empty">
-                        还没有可用模型。
+                        {t("chat.noModels")}
                       </div>
                     )}
                     {enabledModels.map((m) => (
@@ -633,20 +637,20 @@ export function Chat({
                       </div>
                     ))}
                     <div className="model-menu-sep" />
-                    <div
-                      className="model-menu-item add-model"
-                      onClick={() => {
-                        setShowModelMenu(false);
-                        onAddModel();
-                      }}
-                    >
-                      <span>+ 新增模型</span>
-                    </div>
+                      <div
+                        className="model-menu-item add-model"
+                        onClick={() => {
+                          setShowModelMenu(false);
+                          onAddModel();
+                        }}
+                      >
+                        <span>{t("chat.addModel")}</span>
+                      </div>
                   </div>
                 )}
               </div>
               {chat.streaming ? (
-                <button className="send-btn stop" onClick={onCancel} title="Stop generating">
+                <button className="send-btn stop" onClick={onCancel} title={t("chat.stopGenerating")}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
                 </button>
               ) : (
@@ -654,7 +658,7 @@ export function Chat({
                   className="send-btn"
                   onClick={submit}
                   disabled={!input.trim() && attachments.length === 0}
-                  title="Send"
+                  title={t("chat.send")}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
                 </button>
@@ -678,6 +682,7 @@ function shortLabel(m: ConfiguredModel): string {
  * text or visible tool card exists, since those already convey progress.
  */
 function ThinkingIndicator({ chat }: { chat: ChatState }): React.ReactElement | null {
+  const { t } = useTranslation();
   const hasAssistantText = chat.timeline.some(
     (t) => t.kind === "msg" && t.role === "assistant" && t.content.trim().length > 0,
   );
@@ -687,14 +692,14 @@ function ThinkingIndicator({ chat }: { chat: ChatState }): React.ReactElement | 
   if (hasAssistantText || hasVisibleTool) return null;
   return (
     <div className="msg assistant">
-      <div className="role">assistant</div>
+      <div className="role">{t("chat.roleAI")}</div>
       <div className="bubble thinking">
         <span className="thinking-dots">
           <span />
           <span />
           <span />
         </span>
-        <span className="thinking-label">正在思考…</span>
+        <span className="thinking-label">{t("chat.thinkingNow")}</span>
       </div>
     </div>
   );
@@ -704,19 +709,8 @@ function ThinkingIndicator({ chat }: { chat: ChatState }): React.ReactElement | 
 const HIDDEN_TOOLS = new Set(["write_todos", "Task"]);
 
 function prettyToolName(name: string): string {
-  const labels: Record<string, string> = {
-    write_file: "写入文件",
-    edit_file: "编辑文件",
-    read_file: "读取文件",
-    ls: "列出目录",
-    execute: "执行命令",
-    grep: "搜索",
-    glob: "查找文件",
-    web_search: "网页搜索",
-    web_fetch: "抓取网页",
-    write_todos: "更新任务",
-  };
-  return labels[name] ?? name;
+  const key = `chat.tools.${name}.label`;
+  return i18n.exists(key) ? i18n.t(key) : name;
 }
 
 /** GUI tools always require per-use approval (no "always allow"). */
@@ -740,18 +734,19 @@ function ApprovalBanner({
   approval: Extract<DeepWorkEvent, { type: "approval_requested" }>;
   onRespond: (decision: "allow" | "deny" | "always_allow") => void;
 }): React.ReactElement {
+  const { t } = useTranslation();
   const [peek, setPeek] = useState(approval.name === "execute");
   const isGui = GUI_TOOLS.has(approval.name);
   const hasArgs = !!approval.argsPreview && approval.argsPreview.length > 0;
   return (
     <div className="approval-banner">
       <div className="approval-banner-head">
-        <span className="approval-banner-ico" title={`Tool: ${approval.name}`}>
+        <span className="approval-banner-ico" title={t("chat.toolBadge", { name: prettyToolName(approval.name) })}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
         </span>
         <span className="approval-banner-title">
-          需要授权执行 <b>{prettyToolName(approval.name)}</b>
-          {isGui && <span className="approval-banner-gui">（将控制你的屏幕）</span>}
+          {t("chat.needApproval", { name: <b>{prettyToolName(approval.name)}</b> })}
+          {isGui && <span className="approval-banner-gui">{t("chat.controlsScreen")}</span>}
         </span>
         <span className="approval-banner-scope">{approval.risk}</span>
       </div>
@@ -762,7 +757,7 @@ function ApprovalBanner({
             className="approval-banner-peek"
             onClick={() => setPeek((v) => !v)}
           >
-            {peek ? "收起参数" : "查看参数"}
+            {peek ? t("chat.hideParams") : t("chat.viewParams")}
           </button>
           {peek && (
             <pre className="approval-banner-preview">
@@ -773,16 +768,16 @@ function ApprovalBanner({
       )}
       <div className="approval-banner-actions">
         <button className="btn primary small" onClick={() => onRespond("allow")}>
-          允许一次
+          {t("chat.allowOnce")}
         </button>
         {!isGui && (
           <button className="btn small" onClick={() => onRespond("always_allow")}>
-            本会话总是允许
+            {t("chat.alwaysAllow")}
           </button>
         )}
         <span className="spacer" />
         <button className="btn danger small" onClick={() => onRespond("deny")}>
-          拒绝
+          {t("chat.deny")}
         </button>
       </div>
     </div>
@@ -921,6 +916,7 @@ function StepsGroup({
   isLast: boolean;
   onJumpToArtifact: (path: string) => void;
 }): React.ReactElement {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(true);
   const anyRunning = tools.some((t) => t.status === "running");
   const anyError = tools.some((t) => t.isError);
@@ -931,10 +927,10 @@ function StepsGroup({
   const finished = !streaming && allDone;
   const count = tools.length;
   const title = anyRunning
-    ? `正在执行 ${count} 个步骤…`
+    ? t("chat.stepsRunning", { count })
     : finished
-      ? `已完成 ${count} 个步骤`
-      : `${count} 个步骤`;
+      ? t("chat.stepsFinished", { count })
+      : t("chat.stepsIdle", { count });
   return (
     <div className={`steps-group ${anyError ? "has-error" : ""}`}>
       <button
@@ -961,7 +957,7 @@ function StepsGroup({
           {waiting && (
             <div className="step-row waiting">
               <span className="step-spinner" />
-              <span className="step-label dim">Waiting for agent…</span>
+              <span className="step-label dim">{t("chat.waitingForAgent")}</span>
             </div>
           )}
         </div>
@@ -983,6 +979,7 @@ function ProducedArtifacts({
   allArtifacts: ArtifactFile[];
   onJumpToArtifact: (path: string) => void;
 }): React.ReactElement | null {
+  const { t } = useTranslation();
   const produced: ArtifactFile[] = [];
   const seen = new Set<string>();
   for (const t of tools) {
@@ -1010,7 +1007,7 @@ function ProducedArtifacts({
         >
           <span className="artifact-icon">{fileIcon(f.ext)}</span>
           <span className="artifact-name">{f.name}</span>
-          <span className="artifact-open">在产物中查看 ›</span>
+          <span className="artifact-open">{t("chat.viewInArtifacts")}</span>
         </button>
       ))}
     </div>
@@ -1019,6 +1016,7 @@ function ProducedArtifacts({
 
 /** A single compact step row: status dot + label + expandable detail. */
 function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(!!tool.isError);
   useEffect(() => {
     if (tool.isError) setOpen(true);
@@ -1053,7 +1051,7 @@ function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
           <span
             className="step-copy"
             role="button"
-            title="复制"
+            title={t("common.copy")}
             onClick={copy}
           >
             ⧉
@@ -1078,18 +1076,8 @@ function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
 }
 
 function stepVerb(name: string): string {
-  const verbs: Record<string, string> = {
-    write_file: "写入",
-    edit_file: "编辑",
-    read_file: "读取",
-    ls: "列出目录",
-    execute: "执行命令",
-    grep: "搜索",
-    glob: "查找",
-    web_search: "网页搜索",
-    web_fetch: "抓取网页",
-  };
-  return verbs[name] ?? prettyToolName(name);
+  const key = `chat.tools.${name}.verb`;
+  return i18n.exists(key) ? i18n.t(key) : prettyToolName(name);
 }
 
 function fileIcon(ext: string): string {

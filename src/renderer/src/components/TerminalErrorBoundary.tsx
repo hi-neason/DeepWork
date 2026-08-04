@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import i18n from "../i18n";
 
 interface Props {
   children: ReactNode;
@@ -31,8 +32,8 @@ export class TerminalErrorBoundary extends Component<Props, State> {
       return (
         <div className="terminal-panel">
           <div className="terminal-bar">
-            <span className="terminal-title">终端</span>
-            <button className="icon-btn" onClick={this.props.onClose} title="关闭终端">
+            <span className="terminal-title">{i18n.t("terminal.title")}</span>
+            <button className="icon-btn" onClick={this.props.onClose} title={i18n.t("terminal.close")}>
               <svg
                 width="16"
                 height="16"
@@ -48,7 +49,7 @@ export class TerminalErrorBoundary extends Component<Props, State> {
               </svg>
             </button>
           </div>
-          <div className="terminal-error">终端组件出错：{this.state.error.message}</div>
+          <div className="terminal-error">{i18n.t("terminal.componentError", { message: this.state.error.message })}</div>
         </div>
       );
     }

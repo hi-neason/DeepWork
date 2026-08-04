@@ -10,6 +10,7 @@ import { loadSettings } from "./storage/settings";
 import { ensureDirs } from "./config/paths";
 import { applyOpenAtLogin, setKeepAwake } from "./system";
 import { TRAY_ICON_16, TRAY_ICON_36 } from "./trayIcon";
+import i18n, { i18nReady } from "./i18n";
 
 // Reuse Claude Code's ANTHROPIC_* env (endpoint/auth token/model) at runtime.
 // This must run before the agent/model layer is first used. No secrets are
@@ -73,10 +74,10 @@ function createTray(): void {
     tray = new Tray(img);
     tray.setToolTip("DeepWork");
     const menu = Menu.buildFromTemplate([
-      { label: "Open DeepWork", click: () => win?.show() },
+      { label: i18n.t("tray.open"), click: () => win?.show() },
       { type: "separator" },
       {
-        label: "Quit",
+        label: i18n.t("tray.quit"),
         click: () => {
           isQuitting = true;
           app.quit();
@@ -133,9 +134,10 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   ensureDirs(); // create ~/DeepWork/{app,skills,workspace}
   getDb(); // initialize DB / migrations
+  await i18nReady;
   registerIpc(() => win);
   createWindow();
   createTray();

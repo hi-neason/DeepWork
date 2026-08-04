@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -45,6 +46,7 @@ export function TerminalPanel({
 }): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const el = containerRef.current;
@@ -98,14 +100,14 @@ export function TerminalPanel({
         void window.deepwork.terminal
           .spawn(id, cwd ?? "")
           .catch((e: unknown) =>
-            setError(`终端启动失败：${String((e as Error)?.message ?? e)}`),
+            setError(t("terminal.startFailed", { message: String((e as Error)?.message ?? e) })),
           );
         window.addEventListener("resize", onResize);
         // Refit when the container is resized (e.g. the right panel is dragged).
         ro = new ResizeObserver(() => onResize());
         ro.observe(node);
       } catch (e) {
-        setError(`终端初始化失败：${String((e as Error)?.message ?? e)}`);
+        setError(t("terminal.initFailed", { message: String((e as Error)?.message ?? e) }));
       }
     });
 
@@ -126,9 +128,9 @@ export function TerminalPanel({
     return (
       <div className="terminal-panel">
         <div className="terminal-bar">
-          <span className="terminal-title">终端</span>
+          <span className="terminal-title">{t("terminal.title")}</span>
           {cwd && <span className="terminal-cwd">{cwd}</span>}
-          <button className="icon-btn" onClick={onClose} title="关闭终端">
+          <button className="icon-btn" onClick={onClose} title={t("terminal.close")}>
             <svg
               width="16"
               height="16"
@@ -152,9 +154,9 @@ export function TerminalPanel({
   return (
     <div className="terminal-panel">
       <div className="terminal-bar">
-        <span className="terminal-title">终端</span>
+        <span className="terminal-title">{t("terminal.title")}</span>
         {cwd && <span className="terminal-cwd">{cwd}</span>}
-        <button className="icon-btn" onClick={onClose} title="关闭终端">
+        <button className="icon-btn" onClick={onClose} title={t("terminal.close")}>
           <svg
             width="16"
             height="16"

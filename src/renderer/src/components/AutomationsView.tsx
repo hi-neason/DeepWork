@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Automation } from "../../../shared/types";
 
 interface Props {
   onClose: () => void;
 }
 
-const PRESETS: { label: string; schedule: string }[] = [
-  { label: "Every day at 9:00", schedule: "0 9 * * *" },
-  { label: "Every weekday at 9:00", schedule: "0 9 * * 1-5" },
-  { label: "Every Monday at 9:00", schedule: "0 9 * * 1" },
-  { label: "Every hour", schedule: "0 * * * *" },
+const PRESETS: { label: string; labelKey: string; schedule: string }[] = [
+  { label: "Every day at 9:00", labelKey: "automations.presetDaily", schedule: "0 9 * * *" },
+  { label: "Every weekday at 9:00", labelKey: "automations.presetWeekday", schedule: "0 9 * * 1-5" },
+  { label: "Every Monday at 9:00", labelKey: "automations.presetMonday", schedule: "0 9 * * 1" },
+  { label: "Every hour", labelKey: "automations.presetHour", schedule: "0 * * * *" },
 ];
 
 export function AutomationsView({ onClose }: Props): React.ReactElement {
+  const { t } = useTranslation();
   const [items, setItems] = useState<Automation[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -64,18 +66,17 @@ export function AutomationsView({ onClose }: Props): React.ReactElement {
   return (
     <div className="settings">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2>Automations</h2>
+        <h2>{t("automations.title")}</h2>
         <button className="btn" onClick={onClose}>
-          Close
+          {t("common.close")}
         </button>
       </div>
       <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: -4 }}>
-        Run a task on a schedule. Each run creates its own chat session; approvals are parked
-        until you return.
+        {t("automations.intro")}
       </p>
 
       {items.length === 0 && !showForm && (
-        <p style={{ color: "var(--text-dim)" }}>No automations yet.</p>
+        <p style={{ color: "var(--text-dim)" }}>{t("automations.empty")}</p>
       )}
 
       {items.map((a) => (
@@ -87,10 +88,10 @@ export function AutomationsView({ onClose }: Props): React.ReactElement {
             </label>
             <div className="auto-actions">
               <button className="btn small" onClick={() => runNow(a.id)} disabled={running === a.id}>
-                {running === a.id ? "Running…" : "Run now"}
+                {running === a.id ? t("automations.running") : t("automations.runNow")}
               </button>
               <button className="btn danger small" onClick={() => remove(a.id)}>
-                Delete
+                {t("common.delete")}
               </button>
             </div>
           </div>
@@ -98,7 +99,7 @@ export function AutomationsView({ onClose }: Props): React.ReactElement {
           <div className="auto-meta">
             <code>{a.schedule}</code>
             {a.lastStatus && (
-              <span className={`auto-status ${a.lastStatus}`}>last: {a.lastStatus}</span>
+              <span className={`auto-status ${a.lastStatus}`}>{t("automations.last", { status: a.lastStatus })}</span>
             )}
           </div>
         </div>
@@ -107,41 +108,41 @@ export function AutomationsView({ onClose }: Props): React.ReactElement {
       {showForm ? (
         <div className="auto-form">
           <div className="field">
-            <label>Title</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Morning brief" />
+            <label>{t("automations.titleLabel")}</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("automations.titlePlaceholder")} />
           </div>
           <div className="field">
-            <label>Instructions</label>
+            <label>{t("automations.instructionsLabel")}</label>
             <textarea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               rows={4}
-              placeholder="Summarize unread GitHub notifications and prepare a short standup note."
+              placeholder={t("automations.instructionsPlaceholder")}
             />
           </div>
           <div className="field">
-            <label>Schedule (cron: minute hour day month weekday)</label>
+            <label>{t("automations.scheduleLabel")}</label>
             <input value={schedule} onChange={(e) => setSchedule(e.target.value)} />
             <div className="presets">
               {PRESETS.map((p) => (
                 <button key={p.schedule} className="btn small" onClick={() => setSchedule(p.schedule)}>
-                  {p.label}
+                  {t(p.labelKey)}
                 </button>
               ))}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn primary" onClick={create}>
-              Create
+              {t("common.create")}
             </button>
             <button className="btn" onClick={() => setShowForm(false)}>
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </div>
       ) : (
         <button className="btn" style={{ marginTop: 12 }} onClick={() => setShowForm(true)}>
-          + New automation
+          {t("automations.new")}
         </button>
       )}
     </div>

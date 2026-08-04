@@ -20,6 +20,7 @@ import { AutomationsView } from "./components/AutomationsView";
 import { Connectors } from "./components/Connectors";
 import { fileToAttachment } from "./lib/attachments";
 import { applyAppearance, watchSystemTheme } from "./lib/theme";
+import i18n from "./i18n";
 
 type ToolRecord = {
   id: string;
@@ -207,7 +208,13 @@ export function App(): React.ReactElement {
     setSettings(s);
     setNeedsOnboarding(!s.onboarded);
     applyAppearance(s);
+    void i18n.changeLanguage(s.language);
   }, []);
+
+  // Apply the selected interface language to i18n as soon as it changes.
+  useEffect(() => {
+    if (settings?.language) void i18n.changeLanguage(settings.language);
+  }, [settings?.language]);
 
   useEffect(() => {
     void (async () => {

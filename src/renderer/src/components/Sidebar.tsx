@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Session, SessionSort } from "../../../shared/types";
 
 export type ViewKey = "chat" | "connectors" | "automations" | "settings";
+
+/** Storage sentinel for sessions with no explicit group. Kept untranslated in
+ * storage; the UI shows a localized label via sidebar.defaultGroup. */
+const DEFAULT_GROUP = "默认";
 
 interface Props {
   sessions: Session[];
@@ -47,6 +52,7 @@ export function Sidebar({
   const [sort, setSort] = useState<SessionSort>("recent");
   const [query, setQuery] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (editingSession || editingGroup) editRef.current?.focus();
@@ -79,7 +85,7 @@ export function Sidebar({
       return b.updatedAt - a.updatedAt;
     });
     for (const s of sorted) {
-      const g = s.group || "默认";
+      const g = s.group || DEFAULT_GROUP;
       if (!map.has(g)) {
         map.set(g, []);
         order.push(g);
@@ -88,8 +94,8 @@ export function Sidebar({
     }
     // Default group always first.
     order.sort((a, b) => {
-      if (a === "默认") return -1;
-      if (b === "默认") return 1;
+      if (a === DEFAULT_GROUP) return -1;
+      if (b === DEFAULT_GROUP) return 1;
       return a.localeCompare(b);
     });
     return order.map((name) => ({ name, sessions: map.get(name)! }));
@@ -159,27 +165,27 @@ export function Sidebar({
             onOpenView("chat");
           }}
         >
-          <span className="nav-icon">✚</span>
-          <span>新建任务</span>
+              <span className="nav-icon">✚</span>
+          <span>{t("sidebar.newTask")}</span>
         </div>
-        {navItem("connectors", "🧩", "Connectors")}
-        {navItem("automations", "⏰", "Automations")}
+        {navItem("connectors", "🧩", t("sidebar.connectors"))}
+        {navItem("automations", "⏰", t("sidebar.automations"))}
       </nav>
 
       <div className="task-section">
         <div className="task-header">
-          <span>任务列表</span>
+          <span>{t("sidebar.taskList")}</span>
           <div className="task-header-actions">
             <button
               className="icon-btn"
-              title={allCollapsed ? "Expand all" : "Collapse all"}
+              title={allCollapsed ? t("sidebar.expandAll") : t("sidebar.collapseAll")}
               onClick={toggleAll}
             >
               {allCollapsed ? "⤢" : "⤡"}
             </button>
             <button
               className="icon-btn"
-              title="Sort / filter"
+              title={t("sidebar.sortFilter")}
               onClick={(e) =>
                 setMenu({ kind: "header", target: "", x: e.clientX, y: e.clientY })
               }
@@ -190,7 +196,7 @@ export function Sidebar({
         </div>
         <input
           className="task-search"
-          placeholder="Search tasks…"
+          placeholder={t("sidebar.searchTasks")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -227,7 +233,7 @@ export function Sidebar({
                 />
               ) : (
                 <span className="group-name">
-                  <span className="group-folder">📁</span> {g.name}
+                  <span className="group-folder">📁</span> {g.name === DEFAULT_GROUP ? t("sidebar.defaultGroup") : g.name}
                 </span>
               )}
               <span className="group-count">{g.sessions.length}</span>
@@ -282,7 +288,7 @@ export function Sidebar({
 
       <div className="sidebar-footer">
         <div className="session-item" onClick={() => onOpenView("settings")}>
-          ⚙ Settings
+          ⚙ {t("sidebar.settings")}
         </div>
       </div>
 
@@ -301,10 +307,10 @@ export function Sidebar({
                   if (s) startRenameSession(s);
                 }}
               >
-                Rename
+                {t("sidebar.rename")}
               </div>
               <div className="ctx-sub">
-                <div className="ctx-item">Move to ▸</div>
+                <div className="ctx-item">{t("sidebar.moveTo")}</div>
                 <div className="ctx-submenu">
                   {groups.map((g) => (
                     <div
@@ -315,13 +321,13 @@ export function Sidebar({
                         setMenu(null);
                       }}
                     >
-                      {g.name}
+                      {g.name === DEFAULT_GROUP ? t("sidebar.defaultGroup") : g.name}
                     </div>
                   ))}
                   <div
                     className="ctx-item"
                     onClick={() => {
-                      const name = prompt("New group name");
+                      const name = prompt(t("sidebar.newGroup"));
                       if (name?.trim()) {
                         onCreateGroup(name.trim());
                         onMoveToGroup(menu.target, name.trim());
@@ -329,7 +335,7 @@ export function Sidebar({
                       setMenu(null);
                     }}
                   >
-                    + New group…
+                    {t("sidebar.newGroup")}
                   </div>
                 </div>
               </div>
@@ -340,16 +346,16 @@ export function Sidebar({
                   setMenu(null);
                 }}
               >
-                Delete
+                {t("sidebar.delete")}
               </div>
             </>
           )}
           {menu.kind === "group" && (
             <>
               <div className="ctx-item" onClick={() => startRenameGroup(menu.target)}>
-                Rename group
+                {t("sidebar.renameGroup")}
               </div>
-              {menu.target !== "默认" && (
+              {menu.target !== DEFAULT_GROUP && (
                 <div
                   className="ctx-item danger"
                   onClick={() => {
@@ -357,14 +363,14 @@ export function Sidebar({
                     setMenu(null);
                   }}
                 >
-                  Delete group
+                  {t("sidebar.deleteGroup")}
                 </div>
               )}
             </>
           )}
           {menu.kind === "header" && (
             <>
-              <div className="ctx-label">Sort by</div>
+              <div className="ctx-label">{t("sidebar.sortBy")}</div>
               {(["recent", "title", "created"] as SessionSort[]).map((s) => (
                 <div
                   key={s}
@@ -374,19 +380,19 @@ export function Sidebar({
                     setMenu(null);
                   }}
                 >
-                  {s === "recent" ? "Most recent" : s === "created" ? "Date created" : "Title"}
+                  {s === "recent" ? t("sidebar.sortRecent") : s === "created" ? t("sidebar.sortCreated") : t("sidebar.sortTitle")}
                 </div>
               ))}
               <div className="ctx-sep" />
               <div
                 className="ctx-item"
                 onClick={() => {
-                  const name = prompt("New group name");
+                  const name = prompt(t("sidebar.newGroup"));
                   if (name?.trim()) onCreateGroup(name.trim());
                   setMenu(null);
                 }}
               >
-                + New group
+                {t("sidebar.newGroup")}
               </div>
             </>
           )}
