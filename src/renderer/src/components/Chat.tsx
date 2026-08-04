@@ -268,7 +268,9 @@ export function Chat({
       <div className="topbar">
         <span className="title">{sessionTitle || "DeepWork"}</span>
         <div className="topbar-right">
-          <div className="topbar-menu-wrap search-wrap" ref={searchWrapRef}>
+          {sessionId && (
+            <>
+              <div className="topbar-menu-wrap search-wrap" ref={searchWrapRef}>
                 <button
                   className={`icon-btn ${showSearch ? "active" : ""}`}
                   title={t("chat.searchTitle")}
@@ -422,6 +424,8 @@ export function Chat({
               <line x1="15" y1="4" x2="15" y2="20" />
             </svg>
           </button>
+          </>
+          )}
           {updateStatus.state === "available" && (
             <span className="update-banner">{t("chat.updateAvailable", { version: updateStatus.version })}</span>
           )}
