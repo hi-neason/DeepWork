@@ -921,7 +921,7 @@ function StepsGroup({
   onJumpToArtifact: (path: string) => void;
 }): React.ReactElement {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const anyRunning = tools.some((t) => t.status === "running");
   const anyError = tools.some((t) => t.isError);
   const allDone = tools.every((t) => t.status === "done");
