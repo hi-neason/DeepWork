@@ -3,6 +3,7 @@ import type { ChatState } from "../App";
 import type {
   ArtifactFile,
   ConfiguredModel,
+  DeepWorkEvent,
   TodoItem,
   UpdateStatus,
 } from "../../../shared/types";
@@ -38,6 +39,11 @@ interface Props {
   onInstallUpdate: () => void;
   rightPanelOpen: boolean;
   onToggleRightPanel: () => void;
+  /** A pending approval request rendered inline above the composer (null when none). */
+  approval?: Extract<DeepWorkEvent, { type: "approval_requested" }> | null;
+  onRespondApproval: (decision: "allow" | "deny" | "always_allow") => void;
+  /** Open the right panel and highlight a produced artifact. */
+  onJumpToArtifact: (path: string) => void;
 }
 
 export function Chat({
@@ -60,6 +66,9 @@ export function Chat({
   onInstallUpdate,
   rightPanelOpen,
   onToggleRightPanel,
+  approval,
+  onRespondApproval,
+  onJumpToArtifact,
 }: Props): React.ReactElement {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -72,6 +81,15 @@ export function Chat({
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const segmentRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const historyWrapRef = useRef<HTMLDivElement>(null);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchIndex, setSearchIndex] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
 
   const activeModel = sessionModel ?? pendingModel ?? enabledModels[0]?.id;
   const activeModelLabel = useMemo(() => {
@@ -107,6 +125,31 @@ export function Chat({
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   }, [input]);
+
+  // Focus search input when opened; close search with Escape.
+  useEffect(() => {
+    if (!showSearch) return;
+    searchInputRef.current?.focus();
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setShowSearch(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSearch]);
+
+  useEffect(() => {
+    if (!showHistory && !showSearch) return;
+    const onClick = (e: MouseEvent): void => {
+      if (!historyWrapRef.current?.contains(e.target as Node)) {
+        setShowHistory(false);
+      }
+      if (!searchWrapRef.current?.contains(e.target as Node)) {
+        setShowSearch(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [showHistory, showSearch]);
 
   const submit = (): void => {
     const text = input.trim();
@@ -160,6 +203,52 @@ export function Chat({
   const canRegenerate =
     !chat.streaming && chat.timeline.some((t) => t.kind === "msg" && t.role === "assistant");
 
+  const historyItems = useMemo(() => {
+    const items: { idx: number; content: string }[] = [];
+    buildSegments(chat).forEach((seg, idx) => {
+      if (seg.kind === "msg" && seg.role === "user") {
+        items.push({ idx, content: seg.content });
+      }
+    });
+    return items;
+  }, [chat]);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const items: { idx: number; content: string; role: "user" | "assistant" }[] = [];
+    buildSegments(chat).forEach((seg, idx) => {
+      if (seg.kind !== "msg") return;
+      if (
+        seg.content.toLowerCase().includes(q) ||
+        (seg.reasoning?.toLowerCase().includes(q) ?? false)
+      ) {
+        items.push({ idx, content: seg.content, role: seg.role });
+      }
+    });
+    return items;
+  }, [chat, searchQuery]);
+
+  const scrollToSegment = (idx: number, closePanels = true): void => {
+    const el = segmentRefs.current[idx];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("highlight-pulse");
+      setTimeout(() => el.classList.remove("highlight-pulse"), 1500);
+    }
+    if (closePanels) {
+      setShowSearch(false);
+      setShowHistory(false);
+    }
+  };
+
+  const navigateSearch = (delta: number): void => {
+    if (searchResults.length === 0) return;
+    const next = (searchIndex + delta + searchResults.length) % searchResults.length;
+    setSearchIndex(next);
+    scrollToSegment(searchResults[next].idx, false);
+  };
+
   const placeholder = sessionId
     ? "Message DeepWork…  (Enter to send, Shift+Enter for newline)"
     : "Ask anything — a new chat starts automatically";
@@ -169,16 +258,154 @@ export function Chat({
       <div className="topbar">
         <span className="title">{sessionId ? "Chat" : "DeepWork"}</span>
         <div className="topbar-right">
-          <button
-            className={`icon-btn topbar-panel-toggle ${rightPanelOpen ? "active" : ""}`}
-            title={rightPanelOpen ? "隐藏右侧面板" : "显示右侧面板"}
-            onClick={onToggleRightPanel}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <line x1="15" y1="4" x2="15" y2="20" />
-            </svg>
-          </button>
+          {sessionId && (
+            <>
+              <div className="topbar-menu-wrap search-wrap" ref={searchWrapRef}>
+                <button
+                  className={`icon-btn ${showSearch ? "active" : ""}`}
+                  title="搜索对话"
+                  onClick={() => {
+                    setShowSearch((v) => !v);
+                    setShowHistory(false);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </button>
+                {showSearch && (
+                  <div className="search-popover">
+                    <div className="search-popover-head">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="search-popover-input"
+                        placeholder="搜索对话内容"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setSearchIndex(0);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && searchResults[searchIndex]) {
+                            e.preventDefault();
+                            scrollToSegment(searchResults[searchIndex].idx, false);
+                          }
+                        }}
+                      />
+                      {searchResults.length > 0 && (
+                        <span className="search-counter">
+                          {searchIndex + 1}/{searchResults.length}
+                        </span>
+                      )}
+                      <button
+                        className="icon-btn search-nav"
+                        title="上一个"
+                        disabled={searchResults.length === 0}
+                        onClick={() => navigateSearch(-1)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="18 15 12 9 6 15" />
+                        </svg>
+                      </button>
+                      <button
+                        className="icon-btn search-nav"
+                        title="下一个"
+                        disabled={searchResults.length === 0}
+                        onClick={() => navigateSearch(1)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                      <button
+                        className="icon-btn search-close"
+                        title="关闭"
+                        onClick={() => setShowSearch(false)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                    {searchQuery.trim() && (
+                      <div className="search-popover-results">
+                        {searchResults.length === 0 ? (
+                          <div className="search-popover-empty">无匹配结果</div>
+                        ) : (
+                          searchResults.map((item, i) => (
+                            <div
+                              key={i}
+                              className={`search-popover-result ${i === searchIndex ? "active" : ""}`}
+                              onClick={() => {
+                                setSearchIndex(i);
+                                scrollToSegment(item.idx, false);
+                              }}
+                            >
+                              <span className={`search-result-role ${item.role}`}>
+                                {item.role === "user" ? "你" : "AI"}
+                              </span>
+                              <span className="search-result-text">{item.content}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="topbar-menu-wrap" ref={historyWrapRef}>
+                <button
+                  className={`icon-btn ${showHistory ? "active" : ""}`}
+                  title="历史提问"
+                  onClick={() => {
+                    setShowHistory((v) => !v);
+                    setShowSearch(false);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="12 7 12 12 15 15" />
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                </button>
+                {showHistory && (
+                  <div className="history-menu">
+                    <div className="history-menu-label">历史提问 ({historyItems.length})</div>
+                    {historyItems.length === 0 ? (
+                      <div className="history-menu-empty">暂无历史提问</div>
+                    ) : (
+                      historyItems.map((item, i) => (
+                        <div
+                          key={i}
+                          className="history-menu-item"
+                          title={item.content}
+                          onClick={() => scrollToSegment(item.idx)}
+                        >
+                          {item.content}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                className={`icon-btn topbar-panel-toggle ${rightPanelOpen ? "active" : ""}`}
+                title={rightPanelOpen ? "隐藏右侧面板" : "显示右侧面板"}
+                onClick={onToggleRightPanel}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <line x1="15" y1="4" x2="15" y2="20" />
+                </svg>
+              </button>
+            </>
+          )}
           {updateStatus.state === "available" && (
             <span className="update-banner">Update available ({updateStatus.version})</span>
           )}
@@ -207,7 +434,7 @@ export function Chat({
               if (seg.kind === "msg") {
                 const isAssistant = seg.role === "assistant";
                 return (
-                  <div key={i} className={`msg ${seg.role}`}>
+                  <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
                     <div className="role">{seg.role}</div>
                     <div className="bubble">
                       {isAssistant && showReasoning && seg.reasoning && (
@@ -232,13 +459,15 @@ export function Chat({
                 );
               }
               return (
-                <StepsGroup
-                  key={i}
-                  tools={seg.tools}
-                  allArtifacts={artifacts}
-                  streaming={chat.streaming}
-                  isLast={seg.isLast}
-                />
+                <div key={i} ref={(el) => { segmentRefs.current[i] = el; }}>
+                  <StepsGroup
+                    tools={seg.tools}
+                    allArtifacts={artifacts}
+                    streaming={chat.streaming}
+                    isLast={seg.isLast}
+                    onJumpToArtifact={onJumpToArtifact}
+                  />
+                </div>
               );
             })}
           </>
@@ -253,6 +482,9 @@ export function Chat({
         )}
       </div>
       <div className="composer">
+        {approval && (
+          <ApprovalBanner approval={approval} onRespond={onRespondApproval} />
+        )}
         {attachments.length > 0 && (
           <div className="attachments">
             {attachments.map((f, i) => (
@@ -475,6 +707,76 @@ function prettyToolName(name: string): string {
   return labels[name] ?? name;
 }
 
+/** GUI tools always require per-use approval (no "always allow"). */
+const GUI_TOOLS = new Set([
+  "screenshot",
+  "mouse_move",
+  "mouse_click",
+  "keyboard_type",
+  "keyboard_press",
+]);
+
+/**
+ * Inline approval prompt rendered above the composer (OpenWorker approvalSlot-style)
+ * instead of a blocking modal. Shows what the agent wants to do, the risk level, and
+ * allow / always-allow / deny actions.
+ */
+function ApprovalBanner({
+  approval,
+  onRespond,
+}: {
+  approval: Extract<DeepWorkEvent, { type: "approval_requested" }>;
+  onRespond: (decision: "allow" | "deny" | "always_allow") => void;
+}): React.ReactElement {
+  const [peek, setPeek] = useState(approval.name === "execute");
+  const isGui = GUI_TOOLS.has(approval.name);
+  const hasArgs = !!approval.argsPreview && approval.argsPreview.length > 0;
+  return (
+    <div className="approval-banner">
+      <div className="approval-banner-head">
+        <span className="approval-banner-ico" title={`Tool: ${approval.name}`}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+        </span>
+        <span className="approval-banner-title">
+          需要授权执行 <b>{prettyToolName(approval.name)}</b>
+          {isGui && <span className="approval-banner-gui">（将控制你的屏幕）</span>}
+        </span>
+        <span className="approval-banner-scope">{approval.risk}</span>
+      </div>
+      {hasArgs && (
+        <>
+          <button
+            type="button"
+            className="approval-banner-peek"
+            onClick={() => setPeek((v) => !v)}
+          >
+            {peek ? "收起参数" : "查看参数"}
+          </button>
+          {peek && (
+            <pre className="approval-banner-preview">
+              {formatArgs(approval.name, approval.argsPreview)}
+            </pre>
+          )}
+        </>
+      )}
+      <div className="approval-banner-actions">
+        <button className="btn primary small" onClick={() => onRespond("allow")}>
+          允许一次
+        </button>
+        {!isGui && (
+          <button className="btn small" onClick={() => onRespond("always_allow")}>
+            本会话总是允许
+          </button>
+        )}
+        <span className="spacer" />
+        <button className="btn danger small" onClick={() => onRespond("deny")}>
+          拒绝
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface ToolCardData {
   id: string;
   name: string;
@@ -537,11 +839,13 @@ function StepsGroup({
   allArtifacts,
   streaming,
   isLast,
+  onJumpToArtifact,
 }: {
   tools: ToolCardData[];
   allArtifacts: ArtifactFile[];
   streaming: boolean;
   isLast: boolean;
+  onJumpToArtifact: (path: string) => void;
 }): React.ReactElement {
   const [open, setOpen] = useState(true);
   const anyRunning = tools.some((t) => t.status === "running");
@@ -574,7 +878,11 @@ function StepsGroup({
             <StepRow key={t.id} tool={t} />
           ))}
           {finished && !anyError && (
-            <ProducedArtifacts tools={tools} allArtifacts={allArtifacts} />
+            <ProducedArtifacts
+              tools={tools}
+              allArtifacts={allArtifacts}
+              onJumpToArtifact={onJumpToArtifact}
+            />
           )}
           {waiting && (
             <div className="step-row waiting">
@@ -595,9 +903,11 @@ function StepsGroup({
 function ProducedArtifacts({
   tools,
   allArtifacts,
+  onJumpToArtifact,
 }: {
   tools: ToolCardData[];
   allArtifacts: ArtifactFile[];
+  onJumpToArtifact: (path: string) => void;
 }): React.ReactElement | null {
   const produced: ArtifactFile[] = [];
   const seen = new Set<string>();
@@ -621,12 +931,12 @@ function ProducedArtifacts({
           key={f.absolutePath}
           type="button"
           className="artifact-chip"
-          onClick={() => void window.deepwork.artifacts.open(f.absolutePath)}
+          onClick={() => onJumpToArtifact(f.absolutePath)}
           title={f.absolutePath}
         >
           <span className="artifact-icon">{fileIcon(f.ext)}</span>
           <span className="artifact-name">{f.name}</span>
-          <span className="artifact-open">Open ›</span>
+          <span className="artifact-open">在产物中查看 ›</span>
         </button>
       ))}
     </div>

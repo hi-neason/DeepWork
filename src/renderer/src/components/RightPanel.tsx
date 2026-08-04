@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ArtifactFile, TodoItem } from "../../../shared/types";
 
 interface Props {
@@ -7,6 +7,8 @@ interface Props {
   artifacts: ArtifactFile[];
   onRefreshArtifacts: () => void;
   onClose?: () => void;
+  /** When set, scroll the matching artifact into view and flash-highlight it. */
+  highlightArtifact?: { path: string; n: number } | null;
 }
 
 const ICONS: Record<string, string> = {
@@ -52,15 +54,33 @@ export function RightPanel({
   artifacts,
   onRefreshArtifacts,
   onClose,
+  highlightArtifact,
 }: Props): React.ReactElement | null {
   const [progressOpen, setProgressOpen] = useState(true);
   const [artifactsOpen, setArtifactsOpen] = useState(true);
+  const listRef = useRef<HTMLUListElement>(null);
 
   // Auto-refresh artifacts when the session first loads.
   useEffect(() => {
     if (sessionId) onRefreshArtifacts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Jump-to-artifact: open the section, scroll the row into view, flash it.
+  useEffect(() => {
+    if (!highlightArtifact) return;
+    setArtifactsOpen(true);
+    const raf = requestAnimationFrame(() => {
+      const sel = `[data-path="${CSS.escape(highlightArtifact.path)}"]`;
+      const el = listRef.current?.querySelector<HTMLElement>(sel);
+      if (!el) return;
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      el.classList.remove("flash");
+      void el.offsetWidth; // restart the animation
+      el.classList.add("flash");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [highlightArtifact]);
 
   // Auto-collapse the progress section when there are no steps.
   const hasTasks = todos.length > 0;
@@ -72,11 +92,6 @@ export function RightPanel({
     <aside className="right-panel">
       <div className="rp-topbar">
         <span className="rp-title">面板</span>
-        {onClose && (
-          <button className="icon-btn" onClick={onClose} title="折叠右栏">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>
-          </button>
-        )}
       </div>
       {hasTasks && (
         <section className="rp-section">
@@ -143,9 +158,9 @@ export function RightPanel({
         {artifactsOpen && (
           <>
             {hasArtifacts ? (
-              <ul className="rp-artifacts">
+              <ul className="rp-artifacts" ref={listRef}>
                 {artifacts.map((a) => (
-                  <li key={a.absolutePath} className="rp-artifact">
+                  <li key={a.absolutePath} className="rp-artifact" data-path={a.absolutePath}>
                     <div className="rp-artifact-main">
                       <span className="rp-artifact-icon">{ICONS[a.ext] ?? "📄"}</span>
                       <div className="rp-artifact-meta">

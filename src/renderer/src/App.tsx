@@ -11,7 +11,6 @@ import type {
 } from "../../shared/types";
 import { Sidebar, type ViewKey } from "./components/Sidebar";
 import { Chat } from "./components/Chat";
-import { ApprovalModal } from "./components/ApprovalModal";
 import { Settings } from "./components/Settings";
 import { Onboarding } from "./components/Onboarding";
 import { RightPanel } from "./components/RightPanel";
@@ -175,6 +174,9 @@ export function App(): React.ReactElement {
     return saved && saved >= 240 && saved <= 720 ? saved : 320;
   });
   const [resizing, setResizing] = useState(false);
+  // A produced-artifact the user jumped to from the chat: opens the right panel
+  // and briefly highlights the matching entry. `n` re-triggers for repeats.
+  const [highlightArtifact, setHighlightArtifact] = useState<{ path: string; n: number } | null>(null);
 
   const refreshSessions = useCallback(async (): Promise<void> => {
     setSessions(await window.deepwork.sessions.list());
@@ -274,6 +276,12 @@ export function App(): React.ReactElement {
       // ignore
     }
   }, [sessionId]);
+
+  // Open the right panel (if collapsed) and flash-highlight a produced artifact.
+  const jumpToArtifact = useCallback((path: string): void => {
+    setRightCollapsed(false);
+    setHighlightArtifact({ path, n: Date.now() });
+  }, []);
 
   // When returning to chat from settings/connectors, reload settings so newly
   // added models and appearance changes show up immediately.
@@ -436,7 +444,10 @@ export function App(): React.ReactElement {
     return <Onboarding settings={settings} onDone={finishOnboarding} />;
   }
 
-  const showRight = view === "chat" && !rightCollapsed;
+  const showRight = view === "chat" && !rightCollapsed && !!sessionId;
+  // Narrow the pending approval event for the inline banner (null when none/other type).
+  const approvalRequest =
+    approval && approval.type === "approval_requested" ? approval : null;
 
   return (
     <div
@@ -495,6 +506,9 @@ export function App(): React.ReactElement {
             onInstallUpdate={() => window.deepwork.updates.install()}
             rightPanelOpen={showRight}
             onToggleRightPanel={() => setRightCollapsed((v) => !v)}
+            approval={approvalRequest}
+            onRespondApproval={respondApproval}
+            onJumpToArtifact={jumpToArtifact}
           />
         )}
       </main>
@@ -510,21 +524,9 @@ export function App(): React.ReactElement {
             artifacts={artifacts}
             onRefreshArtifacts={refreshArtifacts}
             onClose={() => setRightCollapsed(true)}
+            highlightArtifact={highlightArtifact}
           />
         </div>
-      )}
-      {approval && approval.type === "approval_requested" && (
-        <ApprovalModal
-          name={approval.name}
-          risk={approval.risk}
-          argsPreview={approval.argsPreview}
-          isGuiTool={["screenshot", "mouse_move", "mouse_click", "keyboard_type", "keyboard_press"].includes(
-            approval.name,
-          )}
-          onAllow={() => respondApproval("allow")}
-          onAlwaysAllow={() => respondApproval("always_allow")}
-          onDeny={() => respondApproval("deny")}
-        />
       )}
     </div>
   );
