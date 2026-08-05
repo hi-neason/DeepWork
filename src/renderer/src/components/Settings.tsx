@@ -11,6 +11,7 @@ import { MemoryTab } from "./settings/MemoryTab";
 import { AboutTab } from "./settings/AboutTab";
 import { Connectors } from "./Connectors";
 import { AutomationsView } from "./AutomationsView";
+import { SkillsView } from "./SkillsView";
 
 interface Props {
   onClose: () => void;
@@ -23,6 +24,7 @@ const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string }> = [
   { id: "general", labelKey: "settings.tabs.general", icon: "⚙" },
   { id: "models", labelKey: "settings.tabs.models", icon: "◇" },
   { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠" },
+  { id: "skills", labelKey: "settings.tabs.skills", icon: "✨" },
   { id: "connectors", labelKey: "settings.tabs.connectors", icon: "🧩" },
   { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰" },
   { id: "shortcuts", labelKey: "settings.tabs.shortcuts", icon: "?" },
@@ -128,6 +130,7 @@ export function Settings({
             />
           )}
           {tab === "memory" && <MemoryTab />}
+          {tab === "skills" && <SkillsView settings={settings} />}
           {tab === "connectors" && (
             <Connectors settings={settings} onChange={update} />
           )}

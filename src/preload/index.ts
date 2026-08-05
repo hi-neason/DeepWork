@@ -50,13 +50,24 @@ const api = {
   },
   skills: {
     list: (): Promise<Skill[]> => ipcRenderer.invoke("skills:list"),
-    create: (input: { name: string; description?: string; body?: string }): Promise<Skill> =>
-      ipcRenderer.invoke("skills:create", input),
+    create: (input: {
+      name: string;
+      description?: string;
+      body?: string;
+    }): Promise<Skill> => ipcRenderer.invoke("skills:create", input),
     update: (
       name: string,
-      patch: Partial<{ description: string; body: string; enabled: boolean }>,
-    ): Promise<Skill> => ipcRenderer.invoke("skills:update", name, patch),
-    delete: (name: string): Promise<void> => ipcRenderer.invoke("skills:delete", name),
+      patch: Partial<Pick<Skill, "description" | "body" | "enabled" | "license" | "compatibility" | "metadata" | "allowedTools">>,
+    ): Promise<Skill | null> =>
+      ipcRenderer.invoke("skills:update", name, patch),
+    delete: (name: string): Promise<void> =>
+      ipcRenderer.invoke("skills:delete", name),
+    rename: (oldName: string, newName: string): Promise<Skill | null> =>
+      ipcRenderer.invoke("skills:rename", oldName, newName),
+    import: (sourceDir: string, newName?: string): Promise<Skill> =>
+      ipcRenderer.invoke("skills:import", sourceDir, newName),
+    export: (name: string, targetDir: string): Promise<string> =>
+      ipcRenderer.invoke("skills:export", name, targetDir),
     rebuild: (): Promise<void> => ipcRenderer.invoke("skills:rebuild"),
   },
   settings: {

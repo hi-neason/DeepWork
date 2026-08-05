@@ -20,10 +20,23 @@ function isLikelySecret(key: string): boolean {
   return /(key|token|secret|password|passwd|apikey|authorization|auth|cookie)/i.test(key);
 }
 
+// Debugging payloads we want to keep mostly intact (system prompt, full model
+// response, tool args, reasoning text, etc.) rather than collapsing to 200 chars.
+const VERBOSE_KEYS = /(prompt|response|reasoning|message|content|system|args|output|body|text|preview|messages|tool)/i;
+
 function redact(key: string, value: unknown): unknown {
   if (isLikelySecret(key)) return "<redacted>";
-  if (typeof value === "string" && value.length > 500) {
-    return value.slice(0, 200) + ` …[truncated +${value.length - 200} chars]`;
+  if (typeof value === "string") {
+    if (VERBOSE_KEYS.test(key)) {
+      // Verbose debugging fields: keep large payloads, only cap extreme sizes.
+      if (value.length > 12000) {
+        return value.slice(0, 10000) + ` …[truncated +${value.length - 10000} chars]`;
+      }
+      return value;
+    }
+    if (value.length > 500) {
+      return value.slice(0, 200) + ` …[truncated +${value.length - 200} chars]`;
+    }
   }
   return value;
 }

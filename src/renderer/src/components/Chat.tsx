@@ -4,6 +4,7 @@ import type {
   ArtifactFile,
   ConfiguredModel,
   DeepWorkEvent,
+  Skill,
   TodoItem,
   TurnStats,
   UpdateStatus,
@@ -105,6 +106,26 @@ export function Chat({
   const [searchIndex, setSearchIndex] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
 
+  // Slash command: type "/" at start of input to search/insert skills.
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [skills, setSkills] = useState<Skill[]>([]);
+
+  // Derived: slash-command matches.
+  const slashMatches = useMemo(() => {
+    if (!slashOpen) return [];
+    const q = slashQuery.toLowerCase();
+    if (!q) return skills.slice(0, 8);
+    return skills
+      .filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.description.toLowerCase().includes(q),
+      )
+      .slice(0, 8);
+  }, [slashOpen, slashQuery, skills]);
+
   const activeModel = sessionModel ?? pendingModel ?? enabledModels[0]?.id;
   const activeModelLabel = useMemo(() => {
     if (!activeModel) return t("chat.noModel");
@@ -118,6 +139,13 @@ export function Chat({
     const parts = activeWorkspace.split(/[/\\]/).filter(Boolean);
     return parts[parts.length - 1] || activeWorkspace;
   }, [activeWorkspace]);
+
+  // Load enabled skills for slash command on mount.
+  useEffect(() => {
+    void window.deepwork.skills.list().then((list) => {
+      setSkills(list.filter((s) => s.enabled));
+    });
+  }, []);
 
   useEffect(() => {
     void window.deepwork.sessions.recentFolders().then(setRecent);
@@ -170,9 +198,18 @@ export function Chat({
     if ((!text && attachments.length === 0) || chat.streaming) return;
     setInput("");
     setAttachments([]);
+    setSlashOpen(false);
     void onSend(text, attachments, activeWorkspace, activeModel);
     setPendingWorkspace(undefined);
     setPendingModel(undefined);
+  };
+
+  /** Replace "/query" with "/skill-name " and close the slash menu. */
+  const selectSlashSkill = (name: string): void => {
+    setInput(`/${name} `);
+    setSlashOpen(false);
+    // Refocus textarea; caret will be at end after the trailing space.
+    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   const chooseModel = (id: string): void => {
@@ -534,14 +571,74 @@ export function Chat({
           </div>
         )}
         <div className="composer-box">
+          {slashOpen && (
+            <div className="slash-menu">
+              {slashMatches.length === 0 ? (
+                <div className="slash-empty">{t("skills.slashEmpty")}</div>
+              ) : (
+                slashMatches.map((s, i) => (
+                  <div
+                    key={s.name}
+                    className={`slash-item ${i === slashIndex ? "active" : ""}`}
+                    onMouseEnter={() => setSlashIndex(i)}
+                    onClick={() => selectSlashSkill(s.name)}
+                  >
+                    <span className="slash-name">/{s.name}</span>
+                    <span className="slash-desc">{s.description}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
           <textarea
             ref={taRef}
             value={input}
             placeholder={placeholder}
             autoFocus
             rows={1}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setInput(val);
+              // Detect slash command: input starts with "/" and no whitespace yet.
+              const slashMatch = val.match(/^\/(\S*)$/);
+              if (slashMatch) {
+                setSlashOpen(true);
+                setSlashQuery(slashMatch[1]);
+                setSlashIndex(0);
+              } else {
+                setSlashOpen(false);
+              }
+            }}
             onKeyDown={(e) => {
+              if (slashOpen) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSlashIndex((i) => Math.min(i + 1, slashMatches.length - 1));
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSlashIndex((i) => Math.max(i - 1, 0));
+                  return;
+                }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (slashMatches[slashIndex]) {
+                    selectSlashSkill(slashMatches[slashIndex].name);
+                  }
+                  return;
+                }
+                if (e.key === "Tab" && slashMatches[slashIndex]) {
+                  e.preventDefault();
+                  selectSlashSkill(slashMatches[slashIndex].name);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSlashOpen(false);
+                  return;
+                }
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 submit();

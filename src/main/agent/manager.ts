@@ -185,6 +185,8 @@ export class AgentManager {
     stateSchema: StateSchemaT;
     defaultWorkspace: string;
   } | null = null;
+  /** The active skills middleware instance (rebuilt on skill changes). */
+  private skillsMiddleware: ReturnType<typeof createSkillsMiddleware> | null = null;
   private aborters = new Map<string, AbortController>();
   /** First-run timestamp per session — used to bound artifact scanning. */
   private sessionStartedAt = new Map<string, number>();
@@ -282,9 +284,12 @@ export class AgentManager {
       trimTokensToSummarize: 4000,
     });
 
-    const skills = createSkillsMiddleware({
+    // Skills: user-global (~/DeepWork/skills). The middleware injects
+    // skill names+descriptions into the system prompt and loads full
+    // SKILL.md content on demand.
+    this.skillsMiddleware = createSkillsMiddleware({
       backend: new FilesystemBackend({
-        rootDir: skillsSourcePath(),
+        rootDir: skillsSourcePath().replace(/\/$/, ""),
         virtualMode: true,
       }),
       sources: ["/"],
@@ -308,7 +313,7 @@ export class AgentManager {
       middleware: [
         createSanitizeMiddleware(),
         summarization,
-        skills,
+        this.skillsMiddleware!,
         createContextMiddleware(),
         approvalMiddleware,
       ],
@@ -374,6 +379,43 @@ export class AgentManager {
     this.shared = null;
     this.alwaysAllow.clear();
     await this.ensureAgent();
+  }
+
+  /**
+   * Lightweight reload after a skill change: rebuild only the skills
+   * middleware, swap it into the shared middleware array, and recompile
+   * agents. Does NOT close MCP connections or clear always-allow state.
+   * Never throws — errors are logged and the app stays alive.
+   */
+  async rebuildSkills(): Promise<void> {
+    try {
+      // If agent has never been built, do a full build.
+      if (!this.shared) {
+        await this.ensureAgent();
+        return;
+      }
+      this.skillsMiddleware = createSkillsMiddleware({
+        backend: new FilesystemBackend({
+          rootDir: skillsSourcePath().replace(/\/$/, ""),
+          virtualMode: true,
+        }),
+        sources: ["/"],
+      });
+      // Swap the skills middleware (index 2 in the middleware array).
+      const mw = [...this.shared.middleware];
+      mw[2] = this.skillsMiddleware;
+      this.shared.middleware = mw;
+      // Recompile the default agent so it picks up the new middleware.
+      this.agents.clear();
+      const settings = loadSettings();
+      const model = createChatModel(settings.model);
+      this.agents.set(this.modelKey(settings.model), this.compileAgent(model));
+      logger.info("agent", "skills_reloaded");
+    } catch (err) {
+      logger.error("agent", "skills_reload_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /** Request cancellation of an in-flight turn for a session. */
@@ -1197,6 +1239,26 @@ class LoggingCallbackHandler extends BaseCallbackHandler {
       },
       this.sessionId,
     );
+    // The actual serialized prompt handed to the model (system prompt + history
+    // + tool schemas) — this is what's really sent, unlike the top-level
+    // input.messages recorded by call_input. Verbose field, kept intact.
+    if (Array.isArray(prompts) && prompts.length) {
+      logger.debug(
+        "llm",
+        "prompt",
+        {
+          session: this.sessionId,
+          runId,
+          model,
+          prompts: prompts.map((p, i) => ({
+            index: i,
+            len: p?.length ?? 0,
+            text: typeof p === "string" ? p : String(p),
+          })),
+        },
+        this.sessionId,
+      );
+    }
   }
 
   handleLLMEnd(output: any, runId: string): void {

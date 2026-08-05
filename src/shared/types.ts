@@ -151,10 +151,21 @@ export type SettingsTab =
   | "general"
   | "models"
   | "memory"
+  | "skills"
   | "connectors"
   | "automations"
   | "shortcuts"
   | "about";
+
+/** A file inside a skill's directory (scripts, references, assets). */
+export interface SkillFile {
+  /** Relative path from the skill directory, e.g. "scripts/deploy.sh". */
+  path: string;
+  /** Bytes (files only). */
+  size: number;
+  /** One of "script" | "reference" | "asset" | "other". */
+  kind: "script" | "reference" | "asset" | "other";
+}
 
 export interface Session {
   id: string;
@@ -180,6 +191,16 @@ export interface Skill {
   body: string;
   enabled: boolean;
   updatedAt: number;
+  /** SPDX license identifier (optional). */
+  license?: string;
+  /** Compatibility / platform notes (optional). */
+  compatibility?: string;
+  /** Arbitrary key-value metadata from frontmatter. */
+  metadata?: Record<string, string>;
+  /** Tool names this skill is allowed to use (optional, experimental). */
+  allowedTools?: string[];
+  /** Files inside the skill directory (scripts/references/assets). */
+  files: SkillFile[];
 }
 
 export type SessionSort = "recent" | "title" | "created";

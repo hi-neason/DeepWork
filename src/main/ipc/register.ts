@@ -31,6 +31,9 @@ import {
   createSkill,
   updateSkill,
   deleteSkill,
+  renameSkill,
+  importSkill,
+  exportSkill,
 } from "../skills/store";
 import {
   loadSettings,
@@ -150,11 +153,23 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
   ipcMain.handle(
     "skills:update",
-    (_e, name: string, patch: Partial<{ description: string; body: string; enabled: boolean }>) =>
-      updateSkill(name, patch),
+    (_e, name: string, patch: Record<string, unknown>) =>
+      updateSkill(name, patch as Parameters<typeof updateSkill>[1]),
   );
   ipcMain.handle("skills:delete", (_e, name: string) => deleteSkill(name));
-  ipcMain.handle("skills:rebuild", () => agentManager.rebuild());
+  ipcMain.handle(
+    "skills:rename",
+    (_e, oldName: string, newName: string) => renameSkill(oldName, newName),
+  );
+  ipcMain.handle(
+    "skills:import",
+    async (_e, sourceDir: string, newName?: string) => importSkill(sourceDir, newName),
+  );
+  ipcMain.handle(
+    "skills:export",
+    async (_e, name: string, targetDir: string) => exportSkill(name, targetDir),
+  );
+  ipcMain.handle("skills:rebuild", () => agentManager.rebuildSkills());
 
   // ---- settings / keys ----
   ipcMain.handle("settings:get", () => loadSettings());
