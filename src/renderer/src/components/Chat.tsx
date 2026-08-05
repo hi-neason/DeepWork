@@ -237,8 +237,9 @@ export function Chat({
           items.push({ idx, content: seg.content, role: seg.role });
         }
       } else if (seg.kind === "reasoning") {
-        if (seg.text.toLowerCase().includes(q)) {
-          items.push({ idx, content: seg.text, role: "assistant" });
+        const joined = seg.texts.join("\n");
+        if (joined.toLowerCase().includes(q)) {
+          items.push({ idx, content: joined, role: "assistant" });
         }
       }
     });
@@ -484,13 +485,9 @@ export function Chat({
                 }
                 if (seg.kind === "reasoning") {
                   if (!showReasoning) return null;
-                  const isStreamingPhase =
-                    chat.streaming && (seg.phase !== "final" || i === segments.length - 1);
                   return (
                     <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className="reasoning-row">
-                      <div className="reasoning-box">
-                        <ReasoningRow text={seg.text} streaming={isStreamingPhase} />
-                      </div>
+                      <ReasoningsGroup texts={seg.texts} streaming={chat.streaming} isLast={seg.isLast} />
                     </div>
                   );
                 }
@@ -817,7 +814,7 @@ interface ToolCardData {
 
 type Segment =
   | { kind: "msg"; role: "user" | "assistant"; content: string; stats?: TurnStats }
-  | { kind: "reasoning"; text: string; phase?: "tool" | "final" }
+  | { kind: "reasoning"; texts: string[]; isLast: boolean }
   | { kind: "tools"; tools: ToolCardData[]; isLast: boolean };
 
 /** Group consecutive visible tool calls into a single "steps" segment. */
@@ -867,14 +864,22 @@ function isActionMarker(content: string): boolean {
 }
 
 function buildSegments(chat: ChatState): Segment[] {
-  const toolIndices: number[] = [];
+  const tailIndices: number[] = [];
   const segments: Segment[] = [];
   let toolBuffer: ToolCardData[] = [];
-  const flush = (): void => {
+  let reasoningBuffer: string[] = [];
+  const flushTools = (): void => {
     if (toolBuffer.length) {
-      toolIndices.push(segments.length);
+      tailIndices.push(segments.length);
       segments.push({ kind: "tools", tools: toolBuffer, isLast: false });
       toolBuffer = [];
+    }
+  };
+  const flushReasoning = (): void => {
+    if (reasoningBuffer.length) {
+      tailIndices.push(segments.length);
+      segments.push({ kind: "reasoning", texts: reasoningBuffer, isLast: false });
+      reasoningBuffer = [];
     }
   };
   // Always keep the final assistant message so the summary (if any) is visible.
@@ -886,7 +891,8 @@ function buildSegments(chat: ChatState): Segment[] {
   for (let i = 0; i < chat.timeline.length; i++) {
     const item = chat.timeline[i];
     if (item.kind === "msg") {
-      flush();
+      flushTools();
+      flushReasoning();
       // Suppress internal action markers that precede a tool call, but never
       // suppress the final assistant message — that one may be the summary.
       if (
@@ -904,21 +910,24 @@ function buildSegments(chat: ChatState): Segment[] {
         stats: item.stats,
       });
     } else if (item.kind === "reasoning") {
-      flush();
-      segments.push({ kind: "reasoning", text: item.text, phase: item.phase });
+      flushTools();
+      // Merge consecutive thinking phases into one group, mirroring how
+      // consecutive tool calls become a steps group.
+      reasoningBuffer.push(item.text);
     } else {
+      flushReasoning();
       const t = chat.tools[item.id];
       if (!t || HIDDEN_TOOLS.has(t.name)) continue;
       toolBuffer.push(t);
     }
   }
-  flush();
-  if (toolIndices.length) {
-    const last = segments[toolIndices[toolIndices.length - 1]] as Extract<
-      Segment,
-      { kind: "tools" }
-    >;
-    last.isLast = true;
+  flushTools();
+  flushReasoning();
+  if (tailIndices.length) {
+    const last = segments[tailIndices[tailIndices.length - 1]];
+    if (last && (last.kind === "tools" || last.kind === "reasoning")) {
+      last.isLast = true;
+    }
   }
   return segments;
 }
@@ -1105,12 +1114,58 @@ function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
 }
 
 /**
- * A single thinking phase rendered in the same command-style row as a tool
- * step: a status dot (always blue), a "思考过程 · N 字" label, and an
- * expandable body that keeps the existing reasoning text style. Each phase is
- * its own row so thinking and tool steps interleave in timeline order.
+ * A run of consecutive thinking phases, rendered as a collapsible group that
+ * mirrors StepsGroup: a "深度思考 N 次" header (blue dot, same size/weight as
+ * the steps header), and an expandable body listing each thinking phase as its
+ * own row. The phases stay in timeline order.
  */
-function ReasoningRow({
+function ReasoningsGroup({
+  texts,
+  streaming,
+  isLast,
+}: {
+  texts: string[];
+  streaming: boolean;
+  isLast: boolean;
+}): React.ReactElement {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const count = texts.length;
+  // The latest thinking phase is in progress while the turn is still streaming
+  // and this is the tail group (a subsequent tool/step group would flush it).
+  const running = streaming && isLast;
+  const title = running
+    ? t("chat.thinkingRunning", { count })
+    : t("chat.thinkingFinished", { count });
+  return (
+    <div className="steps-group reasoning-group">
+      <button
+        type="button"
+        className="steps-head"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="steps-caret">{open ? "▾" : "▸"}</span>
+        <span className={`steps-dot ${running ? "running thinking" : "done thinking"}`} />
+        <span className="steps-title">{title}</span>
+      </button>
+      {open && (
+        <div className="steps-body">
+          {texts.map((text, i) => {
+            const isLive = running && i === texts.length - 1;
+            return <ReasoningItem key={i} text={text} streaming={isLive} />;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A single thinking phase inside an expanded ReasoningsGroup. Mirrors StepRow:
+ * blue dot, a "深度思考" verb, the char count (or "正在思考…" while live), and
+ * an expandable body with the reasoning text.
+ */
+function ReasoningItem({
   text,
   streaming,
 }: {
@@ -1121,25 +1176,27 @@ function ReasoningRow({
   const [open, setOpen] = useState(false);
   const hasContent = text.trim().length > 0;
   return (
-    <div className={`reasoning-box ${open ? "open" : ""}`}>
+    <div className={`step-row ${open ? "open" : ""}`}>
       <button
         type="button"
         className="step-head"
         onClick={() => hasContent && setOpen((v) => !v)}
         disabled={!hasContent}
       >
-        <span className="step-caret">{hasContent ? (open ? "▾" : "▸") : ""}</span>
         <span className="step-dot thinking" />
         <span className="step-label">
           <span className="step-verb">{t("chat.thinking")}</span>
           {streaming ? (
             <span className="reasoning-status">{t("chat.thinkingNow")}</span>
           ) : (
-            <span className="step-target">
-              {text.length} {t("chat.chars")}
-            </span>
+            hasContent && (
+              <span className="step-target">
+                {text.length} {t("chat.chars")}
+              </span>
+            )
           )}
         </span>
+        <span className="step-caret">{hasContent ? (open ? "▾" : "▸") : ""}</span>
       </button>
       {open && hasContent && (
         <div className="step-detail">

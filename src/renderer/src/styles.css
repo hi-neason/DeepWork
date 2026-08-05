@@ -1770,9 +1770,8 @@ body,
 /* theme-independent scrollbar polish */
 .settings-scroll, .session-scroll { scrollbar-width: thin; }
 
-/* ---- reasoning (rendered as a command-style step row) ---- */
-.reasoning-row,
-.steps-group,
+/* ---- reasoning (grouped like steps) ---- */
+.steps-segment,
 .step-row {
   width: 100%;
   padding: 0 28px;
@@ -1781,7 +1780,7 @@ body,
   flex-direction: column;
   align-items: flex-start;
 }
-.steps-segment {
+.reasoning-row {
   width: 100%;
   padding: 0;
   margin: -5px 0;
@@ -1789,32 +1788,17 @@ body,
   flex-direction: column;
   align-items: flex-start;
 }
-.reasoning-box {
-  width: 100%;
-  max-width: min(70%, 700px);
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-}
-/* the thinking dot is always blue, distinct from step done/running/error */
+/* the thinking dot is always blue, distinct from step done(green)/running/error */
 .step-dot.thinking {
   background: var(--accent);
 }
-.reasoning-row .step-head {
-  margin-left: -6px;
+.steps-dot.done.thinking {
+  background: var(--accent);
 }
 .reasoning-status {
   font-size: 11px;
   font-style: italic;
   opacity: 0.65;
-}
-.reasoning-box.open {
-  background: var(--bg-elev2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  margin: 1px 0;
 }
 .reasoning-body {
   font-size: 12.5px;
