@@ -220,6 +220,27 @@ body,
 .sidebar-footer {
   margin-top: auto;
 }
+.settings-footer-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-dim);
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+}
+.settings-footer-item:hover {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+.settings-footer-item.active {
+  background: var(--bg-elev);
+  color: var(--text);
+}
 
 .rename-input {
   flex: 1;

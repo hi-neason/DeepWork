@@ -275,8 +275,12 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <div className="session-item" onClick={() => onOpenView("settings")}>
-          ⚙ {t("sidebar.settings")}
+        <div
+          className={`settings-footer-item ${activeView === "settings" ? "active" : ""}`}
+          onClick={() => onOpenView("settings")}
+        >
+          <span className="nav-icon">⚙</span>
+          <span>{t("sidebar.settings")}</span>
         </div>
       </div>
 
