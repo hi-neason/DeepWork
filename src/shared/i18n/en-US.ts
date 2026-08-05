@@ -66,6 +66,8 @@ const enUS = {
       general: "General",
       models: "Models",
       memory: "Memory",
+      connectors: "Connectors",
+      automations: "Automations",
       shortcuts: "Shortcuts / About",
     },
     memory: {
@@ -285,6 +287,7 @@ const enUS = {
     tabMcp: "MCP servers ({{count}})",
     tabSkills: "Skills ({{count}})",
     mcpHint: "MCP servers extend the agent with external tools. stdio servers run locally; SSE/HTTP servers connect over the network.",
+    autoSaveHint: "Changes save and apply automatically",
     label: "Label",
     command: "Command",
     args: "Args (space separated)",

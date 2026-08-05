@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { McpServerConfig, Settings as SettingsType, Skill } from "../../../shared/types";
 
 interface Props {
-  onClose: () => void;
+  settings: SettingsType;
+  onChange: (patch: Partial<SettingsType>) => void;
 }
 
 type Tab = "mcp" | "skills";
@@ -50,12 +51,10 @@ const SKILL_TEMPLATES: {
   },
 ];
 
-export function Connectors({ onClose }: Props): React.ReactElement {
+export function Connectors({ settings, onChange }: Props): React.ReactElement {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("mcp");
-  const [settings, setSettings] = useState<SettingsType | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [saved, setSaved] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
 
   const refreshSkills = async (): Promise<void> => {
@@ -63,15 +62,11 @@ export function Connectors({ onClose }: Props): React.ReactElement {
   };
 
   useEffect(() => {
-    void window.deepwork.settings.get().then(setSettings);
     void refreshSkills();
   }, []);
 
-  if (!settings) return <div className="settings">{t("common.loading")}</div>;
-
   const updateMcp = (id: string, patch: Partial<McpServerConfig>): void => {
-    setSettings({
-      ...settings,
+    onChange({
       mcpServers: settings.mcpServers.map((m) => (m.id === id ? { ...m, ...patch } : m)),
     });
   };
@@ -84,17 +79,10 @@ export function Connectors({ onClose }: Props): React.ReactElement {
       args: [],
       enabled: true,
     };
-    setSettings({ ...settings, mcpServers: [...settings.mcpServers, srv] });
+    onChange({ mcpServers: [...settings.mcpServers, srv] });
   };
   const removeMcp = (id: string): void => {
-    setSettings({ ...settings, mcpServers: settings.mcpServers.filter((m) => m.id !== id) });
-  };
-
-  const saveMcp = async (): Promise<void> => {
-    await window.deepwork.settings.save(settings);
-    await window.deepwork.settings.rebuildAgent();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    onChange({ mcpServers: settings.mcpServers.filter((m) => m.id !== id) });
   };
 
   const createFromTemplate = async (tpl: (typeof SKILL_TEMPLATES)[number]): Promise<void> => {
@@ -130,13 +118,8 @@ export function Connectors({ onClose }: Props): React.ReactElement {
   };
 
   return (
-    <div className="settings">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2>{t("connectors.title")}</h2>
-        <button className="btn" onClick={onClose}>
-          {t("common.close")}
-        </button>
-      </div>
+    <div className="settings-section connectors-section">
+      <h2>{t("connectors.title")}</h2>
 
       <div className="tabs">
         <button
@@ -224,10 +207,7 @@ export function Connectors({ onClose }: Props): React.ReactElement {
             <button className="btn" onClick={addMcp}>
               {t("connectors.addMcp")}
             </button>
-            <button className="btn primary" onClick={saveMcp}>
-              {t("common.saveAndApply")}
-            </button>
-            {saved && <span style={{ color: "var(--ok)", alignSelf: "center" }}>{t("settings.saved")} ✓</span>}
+            <span className="auto-save-hint">{t("connectors.autoSaveHint")}</span>
           </div>
         </>
       )}

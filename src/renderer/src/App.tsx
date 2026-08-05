@@ -17,8 +17,6 @@ import { Onboarding } from "./components/Onboarding";
 import { RightPanel } from "./components/RightPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { TerminalErrorBoundary } from "./components/TerminalErrorBoundary";
-import { AutomationsView } from "./components/AutomationsView";
-import { Connectors } from "./components/Connectors";
 import { fileToAttachment } from "./lib/attachments";
 import { applyAppearance, watchSystemTheme } from "./lib/theme";
 import i18n from "./i18n";
@@ -556,10 +554,6 @@ export function App(): React.ReactElement {
             initialTab={settingsTab}
             onSaved={() => void refreshSettings()}
           />
-        ) : view === "connectors" ? (
-          <Connectors onClose={() => setView("chat")} />
-        ) : view === "automations" ? (
-          <AutomationsView onClose={() => setView("chat")} />
         ) : (
           <>
             <Chat

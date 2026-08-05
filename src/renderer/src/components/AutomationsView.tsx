@@ -2,10 +2,6 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Automation } from "../../../shared/types";
 
-interface Props {
-  onClose: () => void;
-}
-
 const PRESETS: { label: string; labelKey: string; schedule: string }[] = [
   { label: "Every day at 9:00", labelKey: "automations.presetDaily", schedule: "0 9 * * *" },
   { label: "Every weekday at 9:00", labelKey: "automations.presetWeekday", schedule: "0 9 * * 1-5" },
@@ -13,7 +9,7 @@ const PRESETS: { label: string; labelKey: string; schedule: string }[] = [
   { label: "Every hour", labelKey: "automations.presetHour", schedule: "0 * * * *" },
 ];
 
-export function AutomationsView({ onClose }: Props): React.ReactElement {
+export function AutomationsView(): React.ReactElement {
   const { t } = useTranslation();
   const [items, setItems] = useState<Automation[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -64,13 +60,8 @@ export function AutomationsView({ onClose }: Props): React.ReactElement {
   };
 
   return (
-    <div className="settings">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2>{t("automations.title")}</h2>
-        <button className="btn" onClick={onClose}>
-          {t("common.close")}
-        </button>
-      </div>
+    <div className="settings-section">
+      <h2>{t("automations.title")}</h2>
       <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: -4 }}>
         {t("automations.intro")}
       </p>

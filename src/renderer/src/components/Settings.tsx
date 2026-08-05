@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   Settings as SettingsType,
@@ -9,6 +9,8 @@ import { GeneralTab } from "./settings/GeneralTab";
 import { ModelsTab } from "./settings/ModelsTab";
 import { MemoryTab } from "./settings/MemoryTab";
 import { AboutTab } from "./settings/AboutTab";
+import { Connectors } from "./Connectors";
+import { AutomationsView } from "./AutomationsView";
 
 interface Props {
   onClose: () => void;
@@ -21,8 +23,13 @@ const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string }> = [
   { id: "general", labelKey: "settings.tabs.general", icon: "⚙" },
   { id: "models", labelKey: "settings.tabs.models", icon: "◇" },
   { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠" },
+  { id: "connectors", labelKey: "settings.tabs.connectors", icon: "🧩" },
+  { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰" },
   { id: "shortcuts", labelKey: "settings.tabs.shortcuts", icon: "?" },
 ];
+
+// Debounce window for auto-saving settings changes to disk.
+const SAVE_DEBOUNCE_MS = 500;
 
 export function Settings({
   onClose,
@@ -41,6 +48,36 @@ export function Settings({
     })();
   }, []);
 
+  // Auto-save: whenever the settings object changes (driven by the tab forms),
+  // debounce a persist + applySystem + rebuildAgent. There is no global save
+  // button — every control saves itself.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstSkip = useRef(true);
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
+  useEffect(() => {
+    if (!settings) return;
+    // Skip the initial load (we just read it, nothing to save).
+    if (firstSkip.current) {
+      firstSkip.current = false;
+      return;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void (async () => {
+        await window.deepwork.settings.save(settings);
+        await window.deepwork.settings.applySystem();
+        await window.deepwork.settings.rebuildAgent();
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1200);
+        onSavedRef.current?.();
+      })();
+    }, SAVE_DEBOUNCE_MS);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [settings]);
+
   if (!settings) return <div className="settings-shell">{t("common.loading")}</div>;
 
   const updateModel = (patch: Partial<SettingsType["model"]>): void => {
@@ -49,15 +86,6 @@ export function Settings({
 
   const update = (patch: Partial<SettingsType>): void => {
     setSettings({ ...settings, ...patch });
-  };
-
-  const save = async (): Promise<void> => {
-    await window.deepwork.settings.save(settings);
-    await window.deepwork.settings.applySystem();
-    await window.deepwork.settings.rebuildAgent();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-    onSaved?.();
   };
 
   return (
@@ -82,9 +110,6 @@ export function Settings({
       <div className="settings-content">
         <div className="settings-save-bar">
           {saved && <span style={{ color: "var(--ok)" }}>{t("settings.saved")} ✓</span>}
-          <button className="btn secondary" onClick={save}>
-            {t("common.saveAndApply")}
-          </button>
         </div>
 
         <div className="settings-scroll">
@@ -103,6 +128,10 @@ export function Settings({
             />
           )}
           {tab === "memory" && <MemoryTab />}
+          {tab === "connectors" && (
+            <Connectors settings={settings} onChange={update} />
+          )}
+          {tab === "automations" && <AutomationsView />}
           {tab === "shortcuts" && <AboutTab updateStatus={updateStatus ?? { state: "idle" }} />}
         </div>
       </div>

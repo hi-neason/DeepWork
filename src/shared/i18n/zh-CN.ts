@@ -64,6 +64,8 @@ const zhCN = {
       general: "通用",
       models: "模型",
       memory: "记忆",
+      connectors: "连接器",
+      automations: "自动化",
       shortcuts: "快捷键 / 关于",
     },
     memory: {
@@ -277,6 +279,7 @@ const zhCN = {
     tabMcp: "MCP 服务器 ({{count}})",
     tabSkills: "技能 ({{count}})",
     mcpHint: "MCP 服务器为 agent 提供外部工具。stdio 服务在本地运行；SSE/HTTP 服务通过网络连接。",
+    autoSaveHint: "修改后自动保存并生效",
     label: "标签",
     command: "命令",
     args: "参数（空格分隔）",

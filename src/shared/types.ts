@@ -147,7 +147,14 @@ export interface Settings {
 }
 
 /** Settings sections shown in the settings sidebar. */
-export type SettingsTab = "general" | "models" | "memory" | "shortcuts" | "about";
+export type SettingsTab =
+  | "general"
+  | "models"
+  | "memory"
+  | "connectors"
+  | "automations"
+  | "shortcuts"
+  | "about";
 
 export interface Session {
   id: string;

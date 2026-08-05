@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Session, SessionSort } from "../../../shared/types";
 
-export type ViewKey = "chat" | "connectors" | "automations" | "settings";
+export type ViewKey = "chat" | "settings";
 
 /** Storage sentinel for sessions with no explicit group. Kept untranslated in
  * storage; the UI shows a localized label via sidebar.defaultGroup. */
@@ -143,16 +143,6 @@ export function Sidebar({
     setDraft("");
   };
 
-  const navItem = (view: ViewKey, icon: string, label: string): React.ReactElement => (
-    <div
-      className={`nav-item ${activeView === view ? "active" : ""}`}
-      onClick={() => onOpenView(view)}
-    >
-      <span className="nav-icon">{icon}</span>
-      <span>{label}</span>
-    </div>
-  );
-
   return (
     <aside className="sidebar">
       <h1>DeepWork</h1>
@@ -168,8 +158,6 @@ export function Sidebar({
               <span className="nav-icon">✚</span>
           <span>{t("sidebar.newTask")}</span>
         </div>
-        {navItem("connectors", "🧩", t("sidebar.connectors"))}
-        {navItem("automations", "⏰", t("sidebar.automations"))}
       </nav>
 
       <div className="task-section">
