@@ -558,6 +558,11 @@ body,
 .steps-dot.error {
   background: var(--danger);
 }
+/* group header dot is always neutral gray; status color lives on each row */
+.steps-dot.group {
+  background: var(--text-dim);
+  opacity: 0.5;
+}
 .steps-title {
   font-weight: 500;
 }
@@ -1786,11 +1791,8 @@ body,
   flex-direction: column;
   align-items: flex-start;
 }
-/* the thinking dot is always blue, distinct from command done(green)/running/error */
+/* the thinking row dot is always blue, distinct from command done(green)/running/error */
 .step-dot.thinking {
-  background: var(--accent);
-}
-.steps-dot.thinking {
   background: var(--accent);
 }
 .reasoning-status {

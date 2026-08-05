@@ -1002,18 +1002,12 @@ function ActivityGroup({
         ? t("chat.stepsFinished", { count })
         : t("chat.stepsIdle", { count });
 
-  const headDotClass = isThinking
-    ? anyRunning
-      ? "running thinking"
-      : "done thinking"
-    : anyRunning || waiting
-      ? "running"
-      : anyError
-        ? "error"
-        : "done";
+  // Group header dot is always neutral gray; the concrete status color
+  // (blue=running, green=done, red=error) is shown on each expanded row.
+  const headDotClass = "group";
 
   return (
-    <div className={`steps-group activity-group ${variant} ${anyError ? "has-error" : ""}`}>
+    <div className={`steps-group activity-group ${variant}`}>
       <button
         type="button"
         className="steps-head"
