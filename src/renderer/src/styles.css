@@ -237,6 +237,10 @@ body,
   background: var(--bg-elev);
   color: var(--text);
 }
+.settings-footer-item .nav-icon {
+  width: auto;
+  font-size: 15px;
+}
 .settings-footer-item.active {
   background: var(--bg-elev);
   color: var(--text);
