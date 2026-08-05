@@ -19,12 +19,13 @@ export const DEFAULT_WORKSPACE_DIR = path.join(DEEPWORK_ROOT, "workspace");
 
 /**
  * Per-session working directory under the chosen workspace base. Each session
- * gets its own folder named after its stable id (titles can change).
- *   <base>/<sessionId>/
+ * gets its own folder named after its stable id (titles can change), grouped
+ * under a shared `sessions/` directory.
+ *   <base>/sessions/<sessionId>/
  */
 export function sessionRootDir(sessionId: string, base?: string): string {
   const parent = base && base.trim() ? base : DEFAULT_WORKSPACE_DIR;
-  return path.join(parent, sessionId);
+  return path.join(parent, "sessions", sessionId);
 }
 
 /** Legacy Electron userData location used before the ~/DeepWork unification. */

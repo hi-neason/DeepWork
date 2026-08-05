@@ -317,7 +317,7 @@ body,
   display: none;
 }
 .bubble {
-  max-width: min(70%, 720px);
+  max-width: min(70%, 700px);
   background: var(--bg-elev);
   border: 1px solid var(--border);
   padding: 10px 14px;
@@ -338,6 +338,7 @@ body,
   text-decoration: underline;
 }
 .msg.assistant .bubble {
+  width: 100%;
   border-bottom-left-radius: 4px;
 }
 .bubble pre {
@@ -387,7 +388,7 @@ body,
   align-items: flex-start;
 }
 .tool-card .tc-head {
-  max-width: min(72%, 760px);
+  max-width: min(70%, 700px);
   width: 100%;
   display: flex;
   align-items: center;
@@ -459,7 +460,7 @@ body,
   to { transform: rotate(360deg); }
 }
 .tool-card .tc-body {
-  max-width: min(72%, 760px);
+  max-width: min(70%, 700px);
   width: 100%;
   margin-top: 6px;
   display: flex;
@@ -518,7 +519,7 @@ body,
   gap: 8px;
   background: none;
   border: 0;
-  padding: 3px 6px;
+  padding: 3px 8px;
   margin-left: -6px;
   border-radius: 8px;
   cursor: pointer;
@@ -564,11 +565,14 @@ body,
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 2px 0 2px 14px;
-  padding-left: 11px;
+  margin: 1px 0 1px 0;
+  padding: 8px 12px;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
   border-left: 1px solid var(--border);
+  border-radius: 8px;
   width: 100%;
-  max-width: min(72%, 760px);
+  max-width: min(70%, 700px);
 }
 @keyframes steps-spin {
   to {
@@ -593,7 +597,7 @@ body,
   width: 100%;
   background: none;
   border: 0;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
@@ -649,6 +653,14 @@ body,
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+.step-dur {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.7;
 }
 .step-copy {
   flex: none;
@@ -1290,6 +1302,27 @@ body,
 .msg-actions button:hover { background: var(--bg-elev2); color: var(--text); opacity: 1; }
 .msg-actions button:disabled { opacity: 0.3; cursor: default; }
 
+/* Per-reply telemetry footer (model · tokens · latency). */
+.msg-meta {
+  width: 100%;
+  max-width: min(70%, 720px);
+  margin: 4px 0 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  user-select: none;
+}
+.msg-meta .meta-model { color: var(--text); font-weight: 600; }
+.msg-meta .meta-sep { opacity: 0.5; }
+.msg-meta .meta-warn {
+  color: var(--warning, #c47f1a);
+  font-weight: 600;
+  margin-left: 2px;
+}
+
 /* ---- topbar extras ---- */
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .update-banner {
@@ -1737,27 +1770,60 @@ body,
 /* theme-independent scrollbar polish */
 .settings-scroll, .session-scroll { scrollbar-width: thin; }
 
-/* ---- reasoning ---- */
-.reasoning-card {
-  margin: 4px 0 2px;
-  padding: 10px 12px;
-  background: var(--bg-elev);
+/* ---- reasoning (rendered as a command-style step row) ---- */
+.reasoning-row,
+.steps-group,
+.step-row {
+  width: 100%;
+  padding: 0 28px;
+  margin: -5px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.steps-segment {
+  width: 100%;
+  padding: 0;
+  margin: -5px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.reasoning-box {
+  width: 100%;
+  max-width: min(70%, 700px);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+/* the thinking dot is always blue, distinct from step done/running/error */
+.step-dot.thinking {
+  background: var(--accent);
+}
+.reasoning-row .step-head {
+  margin-left: -6px;
+}
+.reasoning-status {
+  font-size: 11px;
+  font-style: italic;
+  opacity: 0.65;
+}
+.reasoning-box.open {
+  background: var(--bg-elev2);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: 10px;
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 1px 0;
 }
-.reasoning { margin-bottom: 0; }
-.reasoning summary {
-  cursor: pointer; font-size: 12px; color: var(--text-dim);
-  text-transform: uppercase; letter-spacing: 0.5px;
-  display: flex; align-items: center; gap: 6px;
-}
-.reasoning-icon { font-size: 13px; text-transform: none; }
-.reasoning[open] summary { margin-bottom: 6px; }
 .reasoning-body {
-  font-size: 12.5px; color: var(--text-dim);
-  border-left: 2px solid var(--border); padding-left: 10px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-dim);
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  opacity: 0.9;
 }
 
 /* ---- models config (screenshot-style) ---- */

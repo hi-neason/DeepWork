@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
 import type {
   ArtifactFile,
   ConfiguredModel,
   DeepWorkEvent,
   TodoItem,
+  TurnStats,
   UpdateStatus,
 } from "../../../shared/types";
 import { useTranslation } from "react-i18next";
@@ -231,12 +232,14 @@ export function Chat({
     if (!q) return [];
     const items: { idx: number; content: string; role: "user" | "assistant" }[] = [];
     buildSegments(chat).forEach((seg, idx) => {
-      if (seg.kind !== "msg") return;
-      if (
-        seg.content.toLowerCase().includes(q) ||
-        (seg.reasoning?.toLowerCase().includes(q) ?? false)
-      ) {
-        items.push({ idx, content: seg.content, role: seg.role });
+      if (seg.kind === "msg") {
+        if (seg.content.toLowerCase().includes(q)) {
+          items.push({ idx, content: seg.content, role: seg.role });
+        }
+      } else if (seg.kind === "reasoning") {
+        if (seg.text.toLowerCase().includes(q)) {
+          items.push({ idx, content: seg.text, role: "assistant" });
+        }
       }
     });
     return items;
@@ -454,24 +457,13 @@ export function Chat({
           </div>
         ) : (
           <>
-            {buildSegments(chat).map((seg, i) => {
-              if (seg.kind === "msg") {
-                const isAssistant = seg.role === "assistant";
-                const reasoningVisible = isAssistant && showReasoning && !!seg.reasoning;
-                return (
-                  <Fragment key={i}>
-                    {reasoningVisible && (
-                      <div className="reasoning-card">
-                        <details className="reasoning" open>
-                          <summary>
-                            <span className="reasoning-icon">✨</span>
-                            {t("chat.thinking")}
-                          </summary>
-                          <div className="reasoning-body">{seg.reasoning}</div>
-                        </details>
-                      </div>
-                    )}
-                    <div ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
+            {(() => {
+              const segments = buildSegments(chat);
+              return segments.map((seg, i) => {
+                if (seg.kind === "msg") {
+                  const isAssistant = seg.role === "assistant";
+                  return (
+                    <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
                       <div className="role">{seg.role === "user" ? t("chat.roleUser") : t("chat.roleAI")}</div>
                       <div className="bubble">
                         {isAssistant ? <Markdown content={seg.content} /> : seg.content}
@@ -486,22 +478,35 @@ export function Chat({
                           </button>
                         </div>
                       )}
+                      {isAssistant && seg.stats && <TurnMeta stats={seg.stats} />}
                     </div>
-                  </Fragment>
+                  );
+                }
+                if (seg.kind === "reasoning") {
+                  if (!showReasoning) return null;
+                  const isStreamingPhase =
+                    chat.streaming && (seg.phase !== "final" || i === segments.length - 1);
+                  return (
+                    <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className="reasoning-row">
+                      <div className="reasoning-box">
+                        <ReasoningRow text={seg.text} streaming={isStreamingPhase} />
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className="steps-segment">
+                    <StepsGroup
+                      tools={seg.tools}
+                      allArtifacts={artifacts}
+                      streaming={chat.streaming}
+                      isLast={seg.isLast}
+                      onJumpToArtifact={onJumpToArtifact}
+                    />
+                  </div>
                 );
-              }
-              return (
-                <div key={i} ref={(el) => { segmentRefs.current[i] = el; }}>
-                  <StepsGroup
-                    tools={seg.tools}
-                    allArtifacts={artifacts}
-                    streaming={chat.streaming}
-                    isLast={seg.isLast}
-                    onJumpToArtifact={onJumpToArtifact}
-                  />
-                </div>
-              );
-            })}
+              });
+            })()}
           </>
         )}
         {chat.streaming && <ThinkingIndicator chat={chat} />}
@@ -807,10 +812,12 @@ interface ToolCardData {
   outputPreview?: string;
   isError?: boolean;
   status: "running" | "done";
+  durationMs?: number;
 }
 
 type Segment =
-  | { kind: "msg"; role: "user" | "assistant"; content: string; reasoning?: string }
+  | { kind: "msg"; role: "user" | "assistant"; content: string; stats?: TurnStats }
+  | { kind: "reasoning"; text: string; phase?: "tool" | "final" }
   | { kind: "tools"; tools: ToolCardData[]; isLast: boolean };
 
 /** Group consecutive visible tool calls into a single "steps" segment. */
@@ -894,8 +901,11 @@ function buildSegments(chat: ChatState): Segment[] {
         kind: "msg",
         role: item.role,
         content: item.content,
-        reasoning: item.reasoning,
+        stats: item.stats,
       });
+    } else if (item.kind === "reasoning") {
+      flush();
+      segments.push({ kind: "reasoning", text: item.text, phase: item.phase });
     } else {
       const t = chat.tools[item.id];
       if (!t || HIDDEN_TOOLS.has(t.name)) continue;
@@ -1062,6 +1072,9 @@ function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
         <span className="step-label">
           <span className="step-verb">{stepVerb(tool.name)}</span>
           {summarize(tool) && <span className="step-target" title={summarize(tool)}>{summarize(tool)}</span>}
+          {tool.durationMs !== undefined && !running && (
+            <span className="step-dur">{fmtSec(tool.durationMs)}</span>
+          )}
         </span>
         {hasDetail && (
           <span
@@ -1085,6 +1098,52 @@ function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
               {tool.outputPreview}
             </pre>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A single thinking phase rendered in the same command-style row as a tool
+ * step: a status dot (always blue), a "思考过程 · N 字" label, and an
+ * expandable body that keeps the existing reasoning text style. Each phase is
+ * its own row so thinking and tool steps interleave in timeline order.
+ */
+function ReasoningRow({
+  text,
+  streaming,
+}: {
+  text: string;
+  streaming: boolean;
+}): React.ReactElement {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const hasContent = text.trim().length > 0;
+  return (
+    <div className={`reasoning-box ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="step-head"
+        onClick={() => hasContent && setOpen((v) => !v)}
+        disabled={!hasContent}
+      >
+        <span className="step-caret">{hasContent ? (open ? "▾" : "▸") : ""}</span>
+        <span className="step-dot thinking" />
+        <span className="step-label">
+          <span className="step-verb">{t("chat.thinking")}</span>
+          {streaming ? (
+            <span className="reasoning-status">{t("chat.thinkingNow")}</span>
+          ) : (
+            <span className="step-target">
+              {text.length} {t("chat.chars")}
+            </span>
+          )}
+        </span>
+      </button>
+      {open && hasContent && (
+        <div className="step-detail">
+          <div className="reasoning-body">{text}</div>
         </div>
       )}
     </div>
@@ -1147,6 +1206,49 @@ function shortPath(p: string): string {
   // Collapse an absolute sandbox path to its last two segments.
   const parts = p.split(/[/\\]/).filter(Boolean);
   return parts.length > 2 ? "…/" + parts.slice(-2).join("/") : p;
+}
+
+/** Compact token count, e.g. 1280 -> "1.3k". */
+function fmtTokens(n: number): string {
+  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
+  return String(n);
+}
+
+/** Milliseconds -> "1.2s" (sub-second kept to one decimal). */
+function fmtSec(ms: number): string {
+  return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";
+}
+
+/** Strip a provider prefix ("openai:gpt-4o" -> "gpt-4o"). */
+function modelLabel(model: string): string {
+  const i = model.indexOf(":");
+  return i >= 0 ? model.slice(i + 1) : model;
+}
+
+/** Per-reply telemetry footer: model · tokens · latency (+ truncation warn). */
+function TurnMeta({ stats }: { stats: TurnStats }): React.ReactElement {
+  const { t } = useTranslation();
+  const truncated = stats.finishReason === "length";
+  const filtered = stats.finishReason === "content_filter";
+  return (
+    <div className="msg-meta">
+      <span className="meta-model">{modelLabel(stats.model)}</span>
+      <span className="meta-sep">·</span>
+      <span>{t("chat.tokensIn", { n: fmtTokens(stats.inputTokens) })}</span>
+      <span className="meta-sep">/</span>
+      <span>{t("chat.tokensOut", { n: fmtTokens(stats.outputTokens) })}</span>
+      {stats.firstTokenMs !== undefined && (
+        <>
+          <span className="meta-sep">·</span>
+          <span>{t("chat.firstToken", { t: fmtSec(stats.firstTokenMs) })}</span>
+        </>
+      )}
+      <span className="meta-sep">·</span>
+      <span>{t("chat.totalTime", { t: fmtSec(stats.durationMs) })}</span>
+      {truncated && <span className="meta-warn">⚠ {t("chat.truncated")}</span>}
+      {filtered && <span className="meta-warn">⚠ {t("chat.contentFiltered")}</span>}
+    </div>
+  );
 }
 
 /** Pretty, readable representation of the args for the expanded body. */

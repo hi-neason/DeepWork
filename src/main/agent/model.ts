@@ -55,12 +55,23 @@ function resolveOpenAICompat(provider: ProviderKind, cfg: ModelConfig): Construc
   const preset = PROVIDER_PRESETS[provider];
   const apiKey = getApiKey(provider) || (preset.envKey ? process.env[preset.envKey] : "") || undefined;
   const baseUrl = cfg.baseUrl || preset.baseUrl || undefined;
-  return {
+  // Pass the (already wrapped) global fetch so the OpenAI-compatible SDK routes
+  // its requests through our HTTP logging wrapper even if it captures fetch at
+  // construction time. The global wrapper covers the fallback path too.
+  const configuration: Record<string, unknown> = { fetch: globalThis.fetch };
+  if (baseUrl) configuration.baseURL = baseUrl;
+  const opts: Record<string, unknown> = {
     model: cfg.model || preset.defaultModel,
     apiKey: apiKey ?? "not-needed",
-    configuration: baseUrl ? { baseURL: baseUrl } : undefined,
+    configuration,
     maxRetries: 2,
   };
+  // Ask the provider to include token usage in the final streaming chunk so
+  // local logs can record input/output token counts per model call.
+  // (streamOptions exists at runtime in @langchain/openai but is not in this
+  // version's published types, hence the cast below.)
+  opts.streamOptions = { includeUsage: true };
+  return opts as ConstructorParameters<typeof ChatOpenAI>[0];
 }
 
 export function createChatModel(cfg: ModelConfig): BaseChatModel {

@@ -7,6 +7,7 @@ import type {
   Settings as AppSettings,
   SettingsTab,
   TodoItem,
+  TurnStats,
   UpdateStatus,
 } from "../../shared/types";
 import { Sidebar, type ViewKey } from "./components/Sidebar";
@@ -29,20 +30,24 @@ type ToolRecord = {
   outputPreview?: string;
   isError?: boolean;
   status: "running" | "done";
+  durationMs?: number;
 };
 
 export type TimelineEntry =
-  | { kind: "msg"; role: "user" | "assistant"; content: string; reasoning?: string }
+  | { kind: "msg"; role: "user" | "assistant"; content: string; stats?: TurnStats }
+  | { kind: "reasoning"; text: string; phase?: "tool" | "final" }
   | { kind: "tool"; id: string };
 
 export type ChatState = {
   timeline: TimelineEntry[];
   tools: Record<string, ToolRecord>;
+  /** Wall-clock time each tool call started, used to compute tool latency. */
+  toolStart: Record<string, number>;
   streaming: boolean;
   error?: string;
 };
 
-const initialChat: ChatState = { timeline: [], tools: {}, streaming: false };
+const initialChat: ChatState = { timeline: [], tools: {}, toolStart: {}, streaming: false };
 
 type Action =
   | { type: "user"; text: string }
@@ -69,7 +74,14 @@ function reducer(state: ChatState, action: Action): ChatState {
     const tools: Record<string, ToolRecord> = {};
     for (const item of action.timeline) {
       if (item.kind === "msg" && item.role && item.content) {
-        timeline.push({ kind: "msg", role: item.role, content: item.content });
+        // Legacy history stored reasoning on the assistant message itself.
+        // Render it as a preceding reasoning block for chronological parity.
+        if (item.role === "assistant" && item.reasoning) {
+          timeline.push({ kind: "reasoning", text: item.reasoning, phase: "final" });
+        }
+        timeline.push({ kind: "msg", role: item.role, content: item.content, stats: item.stats });
+      } else if (item.kind === "reasoning" && item.text) {
+        timeline.push({ kind: "reasoning", text: item.text, phase: item.phase ?? "final" });
       } else if (item.kind === "tool" && item.id) {
         timeline.push({ kind: "tool", id: item.id });
         if (item.name) {
@@ -84,7 +96,7 @@ function reducer(state: ChatState, action: Action): ChatState {
         }
       }
     }
-    return { timeline, tools, streaming: false };
+    return { timeline, tools, toolStart: {}, streaming: false };
   }
   if (action.type === "user") {
     return {
@@ -109,15 +121,36 @@ function reducer(state: ChatState, action: Action): ChatState {
       timeline.push({ kind: "msg", role: "assistant", content: e.text });
       return { ...state, timeline };
     }
+    case "reasoning_phase_started": {
+      return {
+        ...state,
+        timeline: [...state.timeline, { kind: "reasoning", text: "", phase: "tool" }],
+      };
+    }
     case "reasoning_delta": {
       const timeline = [...state.timeline];
       for (let i = timeline.length - 1; i >= 0; i--) {
         const item = timeline[i];
-        if (item.kind === "msg" && item.role === "assistant") {
-          timeline[i] = { ...item, reasoning: (item.reasoning ?? "") + e.text };
+        if (item.kind === "reasoning") {
+          timeline[i] = { ...item, text: item.text + e.text };
           return { ...state, timeline };
         }
-        if (item.kind === "msg" && item.role === "user") break;
+      }
+      return state;
+    }
+    case "reasoning_phase_finished": {
+      const timeline = [...state.timeline];
+      for (let i = timeline.length - 1; i >= 0; i--) {
+        const item = timeline[i];
+        if (item.kind === "reasoning") {
+          if (!item.text) {
+            // Non-reasoning models can open an empty phase; drop it.
+            timeline.splice(i, 1);
+          } else {
+            timeline[i] = { ...item, phase: e.phase };
+          }
+          return { ...state, timeline };
+        }
       }
       return state;
     }
@@ -129,10 +162,12 @@ function reducer(state: ChatState, action: Action): ChatState {
       const timeline = state.tools[e.id]
         ? state.timeline
         : [...state.timeline, { kind: "tool" as const, id: e.id }];
-      return { ...state, tools, timeline };
+      return { ...state, tools, timeline, toolStart: { ...state.toolStart, [e.id]: Date.now() } };
     }
     case "tool_call_finished": {
       const existing = state.tools[e.id];
+      const startedAt = state.toolStart[e.id];
+      const durationMs = startedAt ? Date.now() - startedAt : undefined;
       const tools = {
         ...state.tools,
         [e.id]: {
@@ -142,9 +177,22 @@ function reducer(state: ChatState, action: Action): ChatState {
           outputPreview: e.outputPreview,
           isError: e.isError,
           status: "done" as const,
+          ...(durationMs !== undefined ? { durationMs } : {}),
         },
       };
       return { ...state, tools };
+    }
+    case "turn_stats": {
+      // Attach telemetry to the most recent assistant message in the timeline.
+      const timeline = [...state.timeline];
+      for (let i = timeline.length - 1; i >= 0; i--) {
+        const item = timeline[i];
+        if (item.kind === "msg" && item.role === "assistant") {
+          timeline[i] = { ...item, stats: e };
+          break;
+        }
+      }
+      return { ...state, timeline };
     }
     case "turn_completed":
       return { ...state, streaming: false };

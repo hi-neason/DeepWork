@@ -38,7 +38,7 @@ function sanitize(meta?: Record<string, unknown>): Record<string, unknown> | und
 function dirFor(sessionId?: string): string | null {
   if (cachedWorkspace) {
     const sid = sessionId && sessionId.trim() ? sessionId : "global";
-    return path.join(cachedWorkspace, "logs", sid);
+    return path.join(cachedWorkspace, "sessions", sid);
   }
   return null;
 }
@@ -55,7 +55,7 @@ function ensure(dir: string): Promise<void> {
 }
 
 /**
- * Write one structured log line (JSONL) to <workspace>/logs/<session>/deepwork.log.
+ * Write one structured log line (JSONL) to <workspace>/sessions/<session>/deepwork.log.
  * Gated by cachedEnabled (the settings toggle). When no workspace is set, only
  * ERROR-level lines fall back to the app-data dir so fatal crashes are never lost;
  * all other levels are suppressed with a one-time console warning.

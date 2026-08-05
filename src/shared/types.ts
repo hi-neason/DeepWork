@@ -140,7 +140,7 @@ export interface Settings {
   showReasoning: boolean;
   /** Enable playful easter-egg mini-games (e.g. the Commit Runner) on idle screens. */
   funMode: boolean;
-  /** Write structured debug logs to <workspace>/logs/<sessionId>/deepwork.log. */
+  /** Write structured debug logs to <workspace>/sessions/<sessionId>/deepwork.log. */
   logEnabled: boolean;
   /** Global memory entries injected into the system prompt (denormalized for renderer). */
   memories: MemoryItem[];
@@ -179,9 +179,23 @@ export type SessionSort = "recent" | "title" | "created";
 
 export type RiskLevel = "read" | "write" | "exec" | "external";
 
+/** Per-turn model/telemetry stats surfaced to the user under each reply. */
+export interface TurnStats {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  llmCalls: number;
+  durationMs: number;
+  firstTokenMs?: number;
+  finishReason?: string;
+}
+
 export type DeepWorkEvent =
   | { type: "message_delta"; text: string }
   | { type: "reasoning_delta"; text: string }
+  | { type: "reasoning_phase_started" }
+  | { type: "reasoning_phase_finished"; phase: "tool" | "final" }
   | { type: "tool_call_started"; id: string; name: string; argsPreview: string }
   | { type: "tool_call_finished"; id: string; name: string; outputPreview: string; isError?: boolean }
   | {
@@ -192,6 +206,17 @@ export type DeepWorkEvent =
       argsPreview: string;
     }
   | { type: "session_renamed"; title: string }
+  | {
+      type: "turn_stats";
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      llmCalls: number;
+      durationMs: number;
+      firstTokenMs?: number;
+      finishReason?: string;
+    }
   | { type: "turn_completed" }
   | { type: "turn_aborted" }
   | { type: "turn_error"; message: string }
@@ -210,15 +235,25 @@ export interface ChatMessage {
 
 /** A reconstructed item from a session's persisted history. */
 export interface HistoryItem {
-  kind: "msg" | "tool";
+  kind: "msg" | "tool" | "reasoning";
   role?: "user" | "assistant";
   content?: string;
+  /** Model reasoning/thinking text, restored from history (reasoning models). */
+  reasoning?: string;
+  /** For kind="reasoning": the thinking text for this phase. */
+  text?: string;
+  /** For kind="reasoning": whether this phase preceded a tool call or the final answer. */
+  phase?: "tool" | "final";
+  /** Telemetry for assistant replies (only present for live turns). */
+  stats?: TurnStats;
   id?: string;
   name?: string;
   argsPreview?: string;
   status?: "running" | "done";
   outputPreview?: string;
   isError?: boolean;
+  /** Tool execution time in ms (live turns only). */
+  durationMs?: number;
 }
 
 /** Curated model shown in the model picker. */

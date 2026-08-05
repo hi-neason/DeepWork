@@ -13,6 +13,7 @@ import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { RemoveMessage, HumanMessage } from "@langchain/core/messages";
+import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import i18n from "../i18n";
 import type { DeepAgent } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
@@ -78,6 +79,11 @@ function extractReasoning(
   additional: Record<string, unknown> | undefined,
 ): string {
   if (typeof additional?.reasoning === "string") return additional.reasoning;
+  // Volcengine Ark / DeepSeek / Qwen-thinking and other OpenAI-compatible
+  // gateways expose thinking text under `reasoning_content` (a per-chunk
+  // delta in streaming mode). @langchain/openai leaves it raw in
+  // additional_kwargs, so we read it explicitly here.
+  if (typeof additional?.reasoning_content === "string") return additional.reasoning_content;
   if (Array.isArray(content)) {
     let out = "";
     for (const block of content) {
@@ -92,6 +98,32 @@ function extractReasoning(
     return out;
   }
   return "";
+}
+
+/** Flatten any message content (string | block[] | object) into plain text, truncated. */
+function previewText(content: unknown, max = 800): string {
+  let text = "";
+  if (typeof content === "string") {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content
+      .map((b) => {
+        if (typeof b === "string") return b;
+        if (b && typeof b === "object") {
+          if (typeof (b as any).text === "string") return (b as any).text;
+          if (typeof (b as any).thinking === "string") return (b as any).thinking;
+          return JSON.stringify(b);
+        }
+        return String(b);
+      })
+      .join("");
+  } else if (content && typeof content === "object") {
+    if (typeof (content as any).text === "string") text = (content as any).text;
+    else text = JSON.stringify(content);
+  } else {
+    text = String(content ?? "");
+  }
+  return text.length > max ? text.slice(0, max) + `…(+${text.length - max})` : text;
 }
 
 /** Turn a user message + attachments into a LangChain multi-block content array. */
@@ -429,12 +461,30 @@ export class AgentManager {
       modelId,
       userText,
     );
+    // Surface per-turn telemetry to the renderer (model / tokens / latency).
+    yield {
+      type: "turn_stats",
+      model: result.model,
+      inputTokens: result.tokens.inputTokens,
+      outputTokens: result.tokens.outputTokens,
+      totalTokens: result.tokens.totalTokens,
+      llmCalls: result.llmCalls,
+      durationMs: result.durationMs,
+      ...(result.firstTokenMs !== undefined ? { firstTokenMs: result.firstTokenMs } : {}),
+      ...(result.finishReason ? { finishReason: result.finishReason } : {}),
+    };
     // Unlock the input immediately after the turn finishes.
     yield { type: "turn_completed" };
     logger.info(
       "agent",
       "turn_completed",
-      { session: sessionId, durationMs: Date.now() - tTurn, replyLen: result.replyText.length },
+      {
+        session: sessionId,
+        durationMs: Date.now() - tTurn,
+        replyLen: result.replyText.length,
+        tokens: result.tokens,
+        llmCalls: result.llmCalls,
+      },
       sessionId,
     );
     if (result.aborted) {
@@ -459,7 +509,20 @@ export class AgentManager {
     input: Record<string, unknown>,
     modelId?: string,
     userText?: string,
-  ): AsyncGenerator<DeepWorkEvent, { replyText: string; aborted: boolean }, void> {
+  ): AsyncGenerator<
+    DeepWorkEvent,
+    {
+      replyText: string;
+      aborted: boolean;
+      tokens: { inputTokens: number; outputTokens: number; totalTokens: number };
+      llmCalls: number;
+      durationMs: number;
+      firstTokenMs?: number;
+      model: string;
+      finishReason?: string;
+    },
+    void
+  > {
     try {
       await this.ensureAgent();
     } catch (e) {
@@ -492,12 +555,16 @@ export class AgentManager {
     // with the agent's first token delivery.
     if (userText) {
       setImmediate(() => {
-        void this.maybeGenerateTitle(sessionId, userText, modelId);
+        void this.maybeGenerateTitle(sessionId, userText, modelId, [logHandler]);
       });
     }
 
     const queue: DeepWorkEvent[] = [];
     let waiter: ((() => void) | null) = null;
+    let reasoningChars = 0;
+    let reasoningText = "";
+    const tStreamStart = Date.now();
+    let firstTokenMs: number | undefined;
     const scanArtifacts = (): void => {
       try {
         const files = this.listArtifacts(sessionId);
@@ -508,43 +575,39 @@ export class AgentManager {
     };
     const onEvent = (e: DeepWorkEvent) => {
       queue.push(e);
-      if (e.type === "tool_call_started") {
-        logger.info(
-          "agent",
-          "tool_start",
-          { session: sessionId, name: e.name, argsPreview: e.argsPreview },
-          sessionId,
-        );
+      if (e.type === "reasoning_delta") {
+        reasoningChars += e.text?.length ?? 0;
       } else if (e.type === "tool_call_finished") {
         // Refresh the artifact list after every tool call (write/edit/exec/…).
         // The file write is complete by the time tool_call_finished fires.
+        // (Tool start/end/error are logged from the LangChain callback layer
+        // in LoggingCallbackHandler, which also carries runId linkage.)
         scanArtifacts();
-        logger.info(
-          "agent",
-          "tool_finished",
-          {
-            session: sessionId,
-            name: e.name,
-            isError: e.isError ?? false,
-            outputLen: e.outputPreview?.length ?? 0,
-          },
-          sessionId,
-        );
       }
       waiter?.();
     };
     emitter.on("event", onEvent);
 
+    const logHandler = new LoggingCallbackHandler(sessionId, emitter);
     const ac = new AbortController();
     this.aborters.set(sessionId, ac);
     const config = {
       configurable: { thread_id: sessionId },
       recursionLimit: 50,
       signal: ac.signal,
+      callbacks: [logHandler],
     };
 
     let replyText = "";
     let aborted = false;
+    let lastResponseMeta: Record<string, unknown> | undefined;
+    let lastUsageMeta: Record<string, unknown> | undefined;
+    // Probe: capture what the provider actually returns so we can see why
+    // reasoning isn't surfaced (wrong field name / dropped by the SDK).
+    let probeSeenReasoning = false;
+    const probeReasoningKeys = new Set<string>();
+    let lastAdditionalKeys: string[] = [];
+    let lastContentTypes: string[] = [];
     const consumed = (async () => {
       const t0 = Date.now();
       let firstToken = false;
@@ -552,6 +615,31 @@ export class AgentManager {
         "agent",
         "stream_start",
         { session: sessionId, model: modelId ?? this.sessionModel.get(sessionId) },
+        sessionId,
+      );
+      // Structured view of what we send to the model: per-message role, size and
+      // a short text preview (DEBUG — noisy, for deep troubleshooting).
+      const inMessages = Array.isArray((input as any)?.messages)
+        ? (input as any).messages
+        : [];
+      logger.debug(
+        "llm",
+        "call_input",
+        {
+          session: sessionId,
+          model: modelId ?? this.sessionModel.get(sessionId),
+          count: inMessages.length,
+          messages: inMessages.map((m: any) => {
+            const c = m?.content;
+            const len =
+              c == null
+                ? 0
+                : typeof c === "string"
+                  ? c.length
+                  : JSON.stringify(c).length;
+            return { role: m?.getType?.() ?? m?.role ?? "?", len, preview: previewText(c, 200) };
+          }),
+        },
         sessionId,
       );
       const stream = await agent.stream(input, {
@@ -564,9 +652,23 @@ export class AgentManager {
         if (!msg) continue;
         const type = msg.getType?.() ?? msg._getType?.();
         if (type !== "ai" && type !== "AIMessageChunk") continue;
+        const rm = msg.response_metadata;
+        if (rm && typeof rm === "object") lastResponseMeta = rm;
+        const um = msg.usage_metadata;
+        if (um && typeof um === "object") lastUsageMeta = um;
+        // Probe the shape of each AI chunk (DEBUG only, used to diagnose why
+        // reasoning may be missing — wrong field name or dropped by the SDK).
+        const ak = (msg.additional_kwargs || {}) as Record<string, unknown>;
+        lastAdditionalKeys = Object.keys(ak);
+        lastContentTypes = Array.isArray(msg.content)
+          ? msg.content.map((b: any) => b?.type ?? typeof b)
+          : ["string"];
+        if (ak.reasoning != null) { probeSeenReasoning = true; probeReasoningKeys.add("reasoning"); }
+        if ((ak as any).reasoning_content != null) { probeSeenReasoning = true; probeReasoningKeys.add("reasoning_content"); }
         const reasoning = extractReasoning(msg.content, msg.additional_kwargs);
         if (reasoning) {
           emitter.emit("event", { type: "reasoning_delta", text: reasoning });
+          if (reasoningText.length < 1600) reasoningText += reasoning;
         }
         const text = extractText(msg.content);
         if (text) {
@@ -574,15 +676,38 @@ export class AgentManager {
           emitter.emit("event", { type: "message_delta", text });
           if (!firstToken) {
             firstToken = true;
+            firstTokenMs = Date.now() - t0;
             logger.info(
               "agent",
               "first_token",
-              { session: sessionId, latencyMs: Date.now() - t0 },
+              { session: sessionId, latencyMs: firstTokenMs },
               sessionId,
             );
           }
         }
       }
+      logger.debug(
+        "agent",
+        "stream_end",
+        {
+          session: sessionId,
+          finishReason: (lastResponseMeta?.finish_reason as string) || undefined,
+          responseModel:
+            (lastResponseMeta?.model as string) ||
+            (lastUsageMeta?.model as string) ||
+            undefined,
+          usageMetadata: lastUsageMeta ?? undefined,
+          reasoningChars,
+          reasoningPreview: reasoningText ? previewText(reasoningText, 1200) : undefined,
+          probe: {
+            additionalKeys: lastAdditionalKeys,
+            contentTypes: lastContentTypes,
+            reasoningFields: [...probeReasoningKeys],
+            hasReasoning: probeSeenReasoning,
+          },
+        },
+        sessionId,
+      );
     })();
 
     try {
@@ -630,7 +755,20 @@ export class AgentManager {
       emitter.removeListener("event", onEvent);
       unregisterTurnEmitter(sessionId);
     }
-    return { replyText, aborted };
+    return {
+      replyText,
+      aborted,
+      tokens: {
+        inputTokens: logHandler.totals.inputTokens,
+        outputTokens: logHandler.totals.outputTokens,
+        totalTokens: logHandler.totals.inputTokens + logHandler.totals.outputTokens,
+      },
+      llmCalls: logHandler.totals.calls,
+      durationMs: Date.now() - tStreamStart,
+      firstTokenMs,
+      model: modelId ?? this.sessionModel.get(sessionId) ?? "unknown",
+      finishReason: (lastResponseMeta?.finish_reason as string) || undefined,
+    };
   }
 
   respondApproval(toolCallId: string, decision: "allow" | "deny" | "always_allow"): void {
@@ -671,6 +809,17 @@ export class AgentManager {
     const result = yield* this.runStream(sessionId, {
       messages: [new HumanMessage(humanContent)],
     });
+    yield {
+      type: "turn_stats",
+      model: result.model,
+      inputTokens: result.tokens.inputTokens,
+      outputTokens: result.tokens.outputTokens,
+      totalTokens: result.tokens.totalTokens,
+      llmCalls: result.llmCalls,
+      durationMs: result.durationMs,
+      ...(result.firstTokenMs !== undefined ? { firstTokenMs: result.firstTokenMs } : {}),
+      ...(result.finishReason ? { finishReason: result.finishReason } : {}),
+    };
     yield { type: "turn_completed" };
     if (result.aborted) yield { type: "turn_aborted" };
   }
@@ -719,6 +868,7 @@ export class AgentManager {
     sessionId: string,
     userText: string,
     modelId?: string,
+    callbacks?: unknown[],
   ): Promise<void> {
     if (this.titledSessions.has(sessionId)) return;
     this.titledSessions.add(sessionId);
@@ -741,6 +891,7 @@ export class AgentManager {
       const stream = await model.stream([new HumanMessage(prompt)], {
         maxTokens: 16,
         temperature: 0,
+        ...(callbacks ? { callbacks } : {}),
       } as Record<string, unknown>);
       const parts: string[] = [];
       for await (const chunk of stream) {
@@ -875,7 +1026,26 @@ export class AgentManager {
         if (content) timeline.push({ kind: "msg", role: "user", content });
       } else if (role === "ai" || role === "AIMessageChunk") {
         const text = stringContent(m.content);
-        if (text) timeline.push({ kind: "msg", role: "assistant", content: text });
+        // Restore reasoning/thinking for reasoning models. Each LLM invocation
+        // is persisted as a separate AIMessage with its own reasoning_content,
+        // even when the message content is empty (tool-call planning messages).
+        // Preserve them as standalone reasoning timeline entries so they survive
+        // reload and interleave correctly with tool calls.
+        const reasoning = extractReasoning(m.content, m.additional_kwargs);
+        if (reasoning) {
+          timeline.push({
+            kind: "reasoning",
+            text: reasoning.slice(0, 8000),
+            phase: m.tool_calls?.length ? "tool" : "final",
+          });
+        }
+        if (text) {
+          timeline.push({
+            kind: "msg",
+            role: "assistant",
+            content: text,
+          });
+        }
         for (const tc of m.tool_calls ?? []) {
           if (!tc?.id) continue;
           if (tc.name === "write_todos") {
@@ -950,6 +1120,325 @@ function parseTodos(args: unknown): TodoItem[] | null {
       .filter((x): x is TodoItem => x !== null);
   } catch {
     return null;
+  }
+}
+
+/** Pull token usage from a LangChain LLMResult for OpenAI/Anthropic/compat shapes. */
+function extractUsage(llmOutput: any): {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+} | undefined {
+  if (!llmOutput) return undefined;
+  const u = llmOutput.usage ?? llmOutput.token_usage ?? llmOutput.tokenUsage;
+  if (!u) return undefined;
+  const inputTokens = u.input_tokens ?? u.prompt_tokens ?? 0;
+  const outputTokens = u.output_tokens ?? u.completion_tokens ?? 0;
+  const totalTokens = u.total_tokens ?? inputTokens + outputTokens;
+  return { inputTokens, outputTokens, totalTokens };
+}
+
+/** Pull a best-effort finish reason from an LLMResult. */
+function extractFinishReason(output: any): string | undefined {
+  const g = output?.generations?.[0]?.[0];
+  return (
+    g?.generationInfo?.finish_reason ??
+    g?.message?.response_metadata?.finish_reason ??
+    output?.llmOutput?.finish_reason ??
+    undefined
+  );
+}
+
+/**
+ * LangChain callback that mirrors every LLM invocation (including the ones
+ * deepagents fires internally — summarization, context, approval) into the
+ * structured log. Captures model, provider, latency, token usage and finish
+ * reason, and accumulates per-turn totals for the turn_completed line.
+ */
+class LoggingCallbackHandler extends BaseCallbackHandler {
+  name = "deepwork-logger";
+  private sessionId: string;
+  private emitter?: EventEmitter;
+  private startedAt = new Map<string, number>();
+  private reasoningPhaseOpen = false;
+  totals = { inputTokens: 0, outputTokens: 0, calls: 0 };
+
+  constructor(sessionId: string, emitter?: EventEmitter) {
+    super();
+    this.sessionId = sessionId;
+    this.emitter = emitter;
+  }
+
+  handleLLMStart(llm: any, prompts: string[], runId: string): void {
+    const id = Array.isArray(llm?.id) ? llm.id : [];
+    const provider = id[2] ?? id.at(-1);
+    const model = llm?.kwargs?.model ?? id.at(-1);
+    this.startedAt.set(runId, Date.now());
+    // Each handleLLMStart marks the beginning of a new model invocation.
+    // Close any still-open reasoning phase (defensive) and start a fresh one;
+    // the UI will drop empty phases for non-reasoning models on finish.
+    if (this.emitter) {
+      if (this.reasoningPhaseOpen) {
+        this.emitter.emit("event", { type: "reasoning_phase_finished", phase: "tool" });
+      }
+      this.emitter.emit("event", { type: "reasoning_phase_started" });
+      this.reasoningPhaseOpen = true;
+      logger.debug("agent", "reasoning_phase_started", { session: this.sessionId, runId, model }, this.sessionId);
+    }
+    logger.info(
+      "llm",
+      "call_start",
+      {
+        session: this.sessionId,
+        runId,
+        provider,
+        model,
+        promptChars: prompts?.reduce((a, p) => a + (p?.length ?? 0), 0) ?? 0,
+      },
+      this.sessionId,
+    );
+  }
+
+  handleLLMEnd(output: any, runId: string): void {
+    const start = this.startedAt.get(runId);
+    const latencyMs = start ? Date.now() - start : undefined;
+    this.startedAt.delete(runId);
+    const usage = extractUsage(output?.llmOutput);
+    const model = output?.llmOutput?.model ?? undefined;
+    const finishReason = extractFinishReason(output);
+    // Close the reasoning phase that opened in handleLLMStart for this call.
+    if (this.emitter && this.reasoningPhaseOpen) {
+      const phase = finishReason === "tool_calls" ? "tool" : "final";
+      this.emitter.emit("event", { type: "reasoning_phase_finished", phase });
+      this.reasoningPhaseOpen = false;
+      logger.debug("agent", "reasoning_phase_finished", { session: this.sessionId, runId, finishReason, phase }, this.sessionId);
+    }
+    if (usage) {
+      this.totals.inputTokens += usage.inputTokens;
+      this.totals.outputTokens += usage.outputTokens;
+      this.totals.calls += 1;
+    }
+    logger.info(
+      "llm",
+      "call_end",
+      {
+        session: this.sessionId,
+        runId,
+        model,
+        finishReason,
+        latencyMs,
+        usage,
+      },
+      this.sessionId,
+    );
+    // DEBUG: the model's actual response text (truncated). For reasoning models
+    // the reasoning lives in the stream blocks, captured separately at stream_end.
+    const gens = output?.generations?.[0]?.[0];
+    let respText = "";
+    if (gens) {
+      if (typeof gens.text === "string") respText = gens.text;
+      else if (gens.message?.content != null) respText = previewText(gens.message.content, 100000);
+    }
+    if (respText.length > 0) {
+      logger.debug(
+        "llm",
+        "call_output",
+        {
+          session: this.sessionId,
+          runId,
+          model,
+          finishReason,
+          latencyMs,
+          responseLen: respText.length,
+          responsePreview: previewText(respText, 800),
+        },
+        this.sessionId,
+      );
+    }
+  }
+
+  handleLLMError(err: any, runId: string): void {
+    const start = this.startedAt.get(runId);
+    const latencyMs = start ? Date.now() - start : undefined;
+    this.startedAt.delete(runId);
+    // Make sure the UI closes the reasoning phase even on error.
+    if (this.emitter && this.reasoningPhaseOpen) {
+      this.emitter.emit("event", { type: "reasoning_phase_finished", phase: "final" });
+      this.reasoningPhaseOpen = false;
+      logger.debug("agent", "reasoning_phase_finished", { session: this.sessionId, runId, error: true, phase: "final" }, this.sessionId);
+    }
+    logger.error(
+      "llm",
+      "call_error",
+      {
+        session: this.sessionId,
+        runId,
+        latencyMs,
+        error: err instanceof Error ? err.message : String(err),
+      },
+      this.sessionId,
+    );
+  }
+
+  /**
+   * LangGraph runs the agent as a graph; every node (planner, react loop,
+   * retrieval, …) enters/exits as a "chain". These hooks trace which subgraph
+   * ran, for how long, and with roughly how much data in/out — the fastest way
+   * to see where a turn is spending its time.
+   */
+  handleChainStart(
+    chain: any,
+    inputs: any,
+    runId: string,
+    _runType?: string,
+    _tags?: string[],
+    _metadata?: any,
+    runName?: string,
+    parentRunId?: string,
+  ): void {
+    this.startedAt.set(runId, Date.now());
+    const name =
+      runName ||
+      (Array.isArray(chain?.id) ? chain.id.at(-1) : undefined) ||
+      chain?.name;
+    logger.debug(
+      "chain",
+      "start",
+      {
+        session: this.sessionId,
+        runId,
+        parentRunId,
+        name,
+        inputSize: estSize(inputs),
+      },
+      this.sessionId,
+    );
+  }
+
+  handleChainEnd(outputs: any, runId: string, parentRunId?: string): void {
+    const start = this.startedAt.get(runId);
+    const latencyMs = start ? Date.now() - start : undefined;
+    this.startedAt.delete(runId);
+    logger.debug(
+      "chain",
+      "end",
+      {
+        session: this.sessionId,
+        runId,
+        parentRunId,
+        latencyMs,
+        outputSize: estSize(outputs),
+      },
+      this.sessionId,
+    );
+  }
+
+  handleChainError(err: any, runId: string, parentRunId?: string): void {
+    const start = this.startedAt.get(runId);
+    const latencyMs = start ? Date.now() - start : undefined;
+    this.startedAt.delete(runId);
+    logger.error(
+      "chain",
+      "error",
+      {
+        session: this.sessionId,
+        runId,
+        parentRunId,
+        latencyMs,
+        error: err instanceof Error ? err.message : String(err),
+      },
+      this.sessionId,
+    );
+  }
+
+  /**
+   * Tool calls at the LangChain layer. Carries runId + parentRunId so each
+   * tool invocation can be linked back to the exact model call that decided
+   * it — building the model→tool call tree used for debugging failures.
+   */
+  handleToolStart(
+    tool: any,
+    input: string,
+    runId: string,
+    parentRunId?: string,
+    _tags?: string[],
+    _metadata?: any,
+    runName?: string,
+    toolCallId?: string,
+  ): void {
+    this.startedAt.set(runId, Date.now());
+    const name =
+      runName || tool?.name || (Array.isArray(tool?.id) ? tool.id.at(-1) : undefined);
+    const inputPreview =
+      typeof input === "string" ? input.slice(0, 500) : preview(input);
+    logger.info(
+      "tool",
+      "start",
+      {
+        session: this.sessionId,
+        runId,
+        parentRunId,
+        toolCallId,
+        name,
+        inputPreview,
+      },
+      this.sessionId,
+    );
+  }
+
+  handleToolEnd(output: any, runId: string, parentRunId?: string): void {
+    const start = this.startedAt.get(runId);
+    const latencyMs = start ? Date.now() - start : undefined;
+    this.startedAt.delete(runId);
+    const s = typeof output === "string" ? output : safeStringify(output);
+    logger.info(
+      "tool",
+      "end",
+      {
+        session: this.sessionId,
+        runId,
+        parentRunId,
+        latencyMs,
+        outputLen: s?.length ?? 0,
+      },
+      this.sessionId,
+    );
+  }
+
+  handleToolError(err: any, runId: string, parentRunId?: string): void {
+    const start = this.startedAt.get(runId);
+    const latencyMs = start ? Date.now() - start : undefined;
+    this.startedAt.delete(runId);
+    logger.error(
+      "tool",
+      "error",
+      {
+        session: this.sessionId,
+        runId,
+        parentRunId,
+        latencyMs,
+        error: err instanceof Error ? err.message : String(err),
+      },
+      this.sessionId,
+    );
+  }
+}
+
+/** Coarse serialized size of an object, in characters. */
+function estSize(v: unknown): number {
+  try {
+    return JSON.stringify(v)?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Stringify without throwing on circular refs (tools sometimes return those). */
+function safeStringify(v: unknown): string {
+  try {
+    return JSON.stringify(v) ?? String(v);
+  } catch {
+    return String(v);
   }
 }
 

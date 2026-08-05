@@ -12,6 +12,7 @@ import { applyOpenAtLogin, setKeepAwake } from "./system";
 import { TRAY_ICON_16, TRAY_ICON_36 } from "./trayIcon";
 import i18n, { i18nReady } from "./i18n";
 import { logger, configureLogger } from "./log/logger";
+import { installHttpLogging } from "./log/http";
 
 // Reuse Claude Code's ANTHROPIC_* env (endpoint/auth token/model) at runtime.
 // This must run before the agent/model layer is first used. No secrets are
@@ -156,6 +157,9 @@ app.whenReady().then(async () => {
     enabled: bootSettings.logEnabled,
     workspaceDir: bootSettings.model.workspaceDir,
   });
+  // Instrument the main process fetch so every model/provider HTTP call is
+  // mirrored into the structured log (network failures, latency, status).
+  installHttpLogging();
   logger.info("app", "ready", { version: app.getVersion() });
   await i18nReady;
   registerIpc(() => win);
