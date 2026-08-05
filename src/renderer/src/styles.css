@@ -1770,17 +1770,8 @@ body,
 /* theme-independent scrollbar polish */
 .settings-scroll, .session-scroll { scrollbar-width: thin; }
 
-/* ---- reasoning (grouped like steps) ---- */
-.steps-segment,
-.step-row {
-  width: 100%;
-  padding: 0 28px;
-  margin: -5px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.reasoning-row {
+/* ---- activity groups (commands + thinking share one component) ---- */
+.activity-segment {
   width: 100%;
   padding: 0;
   margin: -5px 0;
@@ -1788,11 +1779,18 @@ body,
   flex-direction: column;
   align-items: flex-start;
 }
-/* the thinking dot is always blue, distinct from step done(green)/running/error */
+.step-row {
+  width: 100%;
+  margin: -5px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+/* the thinking dot is always blue, distinct from command done(green)/running/error */
 .step-dot.thinking {
   background: var(--accent);
 }
-.steps-dot.done.thinking {
+.steps-dot.thinking {
   background: var(--accent);
 }
 .reasoning-status {

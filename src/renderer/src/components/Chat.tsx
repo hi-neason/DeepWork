@@ -236,10 +236,12 @@ export function Chat({
         if (seg.content.toLowerCase().includes(q)) {
           items.push({ idx, content: seg.content, role: seg.role });
         }
-      } else if (seg.kind === "reasoning") {
-        const joined = seg.texts.join("\n");
-        if (joined.toLowerCase().includes(q)) {
-          items.push({ idx, content: joined, role: "assistant" });
+      } else if (seg.kind === "activity") {
+        if (seg.variant === "thinking") {
+          const joined = seg.entries.map((e) => e.text ?? "").join("\n");
+          if (joined.toLowerCase().includes(q)) {
+            items.push({ idx, content: joined, role: "assistant" });
+          }
         }
       }
     });
@@ -483,25 +485,21 @@ export function Chat({
                     </div>
                   );
                 }
-                if (seg.kind === "reasoning") {
-                  if (!showReasoning) return null;
+                if (seg.kind === "activity") {
+                  if (seg.variant === "thinking" && !showReasoning) return null;
                   return (
-                    <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className="reasoning-row">
-                      <ReasoningsGroup texts={seg.texts} streaming={chat.streaming} isLast={seg.isLast} />
+                    <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className="activity-segment">
+                      <ActivityGroup
+                        variant={seg.variant}
+                        entries={seg.entries}
+                        allArtifacts={artifacts}
+                        streaming={chat.streaming}
+                        isLast={seg.isLast}
+                        onJumpToArtifact={onJumpToArtifact}
+                      />
                     </div>
                   );
                 }
-                return (
-                  <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className="steps-segment">
-                    <StepsGroup
-                      tools={seg.tools}
-                      allArtifacts={artifacts}
-                      streaming={chat.streaming}
-                      isLast={seg.isLast}
-                      onJumpToArtifact={onJumpToArtifact}
-                    />
-                  </div>
-                );
               });
             })()}
           </>
@@ -812,10 +810,23 @@ interface ToolCardData {
   durationMs?: number;
 }
 
+interface ActivityEntry {
+  // command variant
+  tool?: ToolCardData;
+  // thinking variant
+  text?: string;
+  // true while this specific entry is streaming (only the last thinking entry)
+  live?: boolean;
+}
+
 type Segment =
   | { kind: "msg"; role: "user" | "assistant"; content: string; stats?: TurnStats }
-  | { kind: "reasoning"; texts: string[]; isLast: boolean }
-  | { kind: "tools"; tools: ToolCardData[]; isLast: boolean };
+  | {
+      kind: "activity";
+      variant: "command" | "thinking";
+      entries: ActivityEntry[];
+      isLast: boolean;
+    };
 
 /** Group consecutive visible tool calls into a single "steps" segment. */
 /**
@@ -866,21 +877,22 @@ function isActionMarker(content: string): boolean {
 function buildSegments(chat: ChatState): Segment[] {
   const tailIndices: number[] = [];
   const segments: Segment[] = [];
-  let toolBuffer: ToolCardData[] = [];
-  let reasoningBuffer: string[] = [];
-  const flushTools = (): void => {
-    if (toolBuffer.length) {
+  let bufferVariant: "command" | "thinking" | null = null;
+  let buffer: ActivityEntry[] = [];
+  const flush = (): void => {
+    if (buffer.length && bufferVariant) {
       tailIndices.push(segments.length);
-      segments.push({ kind: "tools", tools: toolBuffer, isLast: false });
-      toolBuffer = [];
+      segments.push({ kind: "activity", variant: bufferVariant, entries: buffer, isLast: false });
+      buffer = [];
+      bufferVariant = null;
     }
   };
-  const flushReasoning = (): void => {
-    if (reasoningBuffer.length) {
-      tailIndices.push(segments.length);
-      segments.push({ kind: "reasoning", texts: reasoningBuffer, isLast: false });
-      reasoningBuffer = [];
+  const pushActivity = (variant: "command" | "thinking", entry: ActivityEntry): void => {
+    if (bufferVariant !== variant) {
+      flush();
+      bufferVariant = variant;
     }
+    buffer.push(entry);
   };
   // Always keep the final assistant message so the summary (if any) is visible.
   let lastAssistantIndex = -1;
@@ -891,18 +903,20 @@ function buildSegments(chat: ChatState): Segment[] {
   for (let i = 0; i < chat.timeline.length; i++) {
     const item = chat.timeline[i];
     if (item.kind === "msg") {
-      flushTools();
-      flushReasoning();
-      // Suppress internal action markers that precede a tool call, but never
-      // suppress the final assistant message — that one may be the summary.
-      if (
+      // Suppress internal fragments that sit between activity phases so they
+      // don't split otherwise-consecutive thinking/command groups. This covers:
+      //  - empty assistant messages (content:"") created by stray message_delta
+      //  - short action-marker fragments ("create", "执行", …) that immediately
+      //    precede a tool call or another reasoning phase.
+      // The final assistant message is never suppressed — it may be the summary.
+      const nextKind = chat.timeline[i + 1]?.kind;
+      const suppressed =
         i !== lastAssistantIndex &&
         item.role === "assistant" &&
         isActionMarker(item.content) &&
-        chat.timeline[i + 1]?.kind === "tool"
-      ) {
-        continue;
-      }
+        (nextKind === "tool" || nextKind === "reasoning" || item.content.trim().length === 0);
+      if (suppressed) continue;
+      flush();
       segments.push({
         kind: "msg",
         role: item.role,
@@ -910,42 +924,53 @@ function buildSegments(chat: ChatState): Segment[] {
         stats: item.stats,
       });
     } else if (item.kind === "reasoning") {
-      flushTools();
-      // Merge consecutive thinking phases into one group, mirroring how
-      // consecutive tool calls become a steps group.
-      reasoningBuffer.push(item.text);
+      pushActivity("thinking", { text: item.text });
     } else {
-      flushReasoning();
       const t = chat.tools[item.id];
       if (!t || HIDDEN_TOOLS.has(t.name)) continue;
-      toolBuffer.push(t);
+      pushActivity("command", { tool: t });
     }
   }
-  flushTools();
-  flushReasoning();
+  flush();
   if (tailIndices.length) {
     const last = segments[tailIndices[tailIndices.length - 1]];
-    if (last && (last.kind === "tools" || last.kind === "reasoning")) {
-      last.isLast = true;
+    if (last && last.kind === "activity") last.isLast = true;
+  }
+  // Mark the last thinking entry as live while the turn is still streaming and
+  // this is the tail group (so it shows "正在思考…" instead of a char count).
+  if (chat.streaming) {
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const seg = segments[i];
+      if (seg.kind === "activity" && seg.variant === "thinking" && seg.isLast) {
+        const last = seg.entries[seg.entries.length - 1];
+        if (last) last.live = true;
+      }
+      break;
     }
   }
   return segments;
 }
 
 /**
- * A run of consecutive tool calls, rendered as a collapsible "N steps" group
- * (OpenWorker-style). Each step is a compact row with a status dot:
- * blue = running, green = done, red = failed. While the last group is still
- * running and no tool is currently in flight, "Waiting for agent…" is shown.
+ * A run of consecutive same-variant activities (tool commands OR thinking
+ * phases), rendered as one collapsible group. Command and thinking share the
+ * exact same DOM and styles — only the title wording, dot color, and row
+ * content differ via the `variant` prop.
+ *
+ * Command: blue spinner while running, green when done, red on error; shows a
+ * "等待 agent…" row between steps and inlines produced artifacts when finished.
+ * Thinking: the dot is always blue; the last entry shows "正在思考…" while live.
  */
-function StepsGroup({
-  tools,
+function ActivityGroup({
+  variant,
+  entries,
   allArtifacts,
   streaming,
   isLast,
   onJumpToArtifact,
 }: {
-  tools: ToolCardData[];
+  variant: "command" | "thinking";
+  entries: ActivityEntry[];
   allArtifacts: ArtifactFile[];
   streaming: boolean;
   isLast: boolean;
@@ -953,34 +978,59 @@ function StepsGroup({
 }): React.ReactElement {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const anyRunning = tools.some((t) => t.status === "running");
-  const anyError = tools.some((t) => t.isError);
-  const allDone = tools.every((t) => t.status === "done");
+  const tools = variant === "command" ? entries.map((e) => e.tool!).filter(Boolean) : [];
+  const isThinking = variant === "thinking";
+
+  const anyRunning = isThinking
+    ? entries.some((e) => e.live)
+    : tools.some((tl) => tl.status === "running");
+  const anyError = !isThinking && tools.some((tl) => tl.isError);
+  const allDone = !isThinking && tools.every((tl) => tl.status === "done");
   // The agent is "between steps" when the turn is still streaming, this is the
-  // latest group, and no tool is currently executing (model is thinking/calling).
-  const waiting = streaming && isLast && !anyRunning;
-  const finished = !streaming && allDone;
-  const count = tools.length;
-  const title = anyRunning
-    ? t("chat.stepsRunning", { count })
-    : finished
-      ? t("chat.stepsFinished", { count })
-      : t("chat.stepsIdle", { count });
+  // latest group, and no command is currently in flight (model is thinking/calling).
+  const waiting = !isThinking && streaming && isLast && !anyRunning;
+  const finished = !isThinking && !streaming && allDone;
+  const count = entries.length;
+
+  const title = isThinking
+    ? anyRunning
+      ? t("chat.thinkingRunning", { count })
+      : t("chat.thinkingFinished", { count })
+    : anyRunning
+      ? t("chat.stepsRunning", { count })
+      : finished
+        ? t("chat.stepsFinished", { count })
+        : t("chat.stepsIdle", { count });
+
+  const headDotClass = isThinking
+    ? anyRunning
+      ? "running thinking"
+      : "done thinking"
+    : anyRunning || waiting
+      ? "running"
+      : anyError
+        ? "error"
+        : "done";
+
   return (
-    <div className={`steps-group ${anyError ? "has-error" : ""}`}>
+    <div className={`steps-group activity-group ${variant} ${anyError ? "has-error" : ""}`}>
       <button
         type="button"
         className="steps-head"
         onClick={() => setOpen((v) => !v)}
       >
         <span className="steps-caret">{open ? "▾" : "▸"}</span>
-        <span className={`steps-dot ${anyRunning || waiting ? "running" : anyError ? "error" : "done"}`} />
+        <span className={`steps-dot ${headDotClass}`} />
         <span className="steps-title">{title}</span>
       </button>
       {open && (
         <div className="steps-body">
-          {tools.map((t) => (
-            <StepRow key={t.id} tool={t} />
+          {entries.map((entry, i) => (
+            <ActivityRow
+              key={i}
+              variant={variant}
+              entry={entry}
+            />
           ))}
           {finished && !anyError && (
             <ProducedArtifacts
@@ -994,6 +1044,124 @@ function StepsGroup({
               <span className="step-spinner" />
               <span className="step-label dim">{t("chat.waitingForAgent")}</span>
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A single row inside an ActivityGroup. Same shell for both variants; the
+ * content adapts: a command row shows verb/target/duration + expandable
+ * args/output, while a thinking row shows the char count (or "正在思考…") +
+ * expandable reasoning text.
+ */
+function ActivityRow({
+  variant,
+  entry,
+}: {
+  variant: "command" | "thinking";
+  entry: ActivityEntry;
+}): React.ReactElement {
+  const { t } = useTranslation();
+  const tool = entry.tool;
+  const thinkingText = entry.text ?? "";
+  const isThinking = variant === "thinking";
+
+  const [open, setOpen] = useState(!isThinking && !!tool?.isError);
+  useEffect(() => {
+    if (!isThinking && tool?.isError) setOpen(true);
+  }, [isThinking, tool?.isError]);
+
+  const running = isThinking ? !!entry.live : tool?.status === "running";
+
+  const verb = isThinking ? t("chat.thinking") : stepVerb(tool!.name);
+  const target = isThinking
+    ? entry.live
+      ? null
+      : thinkingText.trim()
+        ? `${thinkingText.length} ${t("chat.chars")}`
+        : null
+    : summarize(tool!);
+  const duration = !isThinking && tool?.durationMs !== undefined && !running
+    ? tool.durationMs
+    : undefined;
+
+  const hasDetail = isThinking
+    ? thinkingText.trim().length > 0
+    : (!!tool?.outputPreview && tool.outputPreview.trim().length > 0) ||
+      (!!tool?.argsPreview && tool.argsPreview.length > 20);
+
+  const dotClass = isThinking
+    ? "thinking"
+    : running
+      ? "running"
+      : tool?.isError
+        ? "error"
+        : "done";
+
+  const copy = (e: React.MouseEvent): void => {
+    e.stopPropagation();
+    if (isThinking) {
+      void navigator.clipboard?.writeText(thinkingText);
+      return;
+    }
+    void navigator.clipboard?.writeText(
+      tool!.name === "execute"
+        ? String(parseArgs(tool!.argsPreview)?.command ?? tool!.argsPreview)
+        : tool!.argsPreview,
+    );
+  };
+
+  return (
+    <div className={`step-row ${!isThinking && tool?.isError ? "error" : ""} ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="step-head"
+        onClick={() => hasDetail && setOpen((v) => !v)}
+        disabled={!hasDetail}
+      >
+        <span className={`step-dot ${dotClass}`} />
+        <span className="step-label">
+          <span className="step-verb">{verb}</span>
+          {target && (
+            <span className="step-target" title={isThinking ? undefined : target}>{target}</span>
+          )}
+          {isThinking && entry.live && (
+            <span className="reasoning-status">{t("chat.thinkingNow")}</span>
+          )}
+          {duration !== undefined && (
+            <span className="step-dur">{fmtSec(duration)}</span>
+          )}
+        </span>
+        {hasDetail && (
+          <span
+            className="step-copy"
+            role="button"
+            title={t("common.copy")}
+            onClick={copy}
+          >
+            ⧉
+          </span>
+        )}
+        <span className="step-caret">{hasDetail ? (open ? "▾" : "▸") : ""}</span>
+      </button>
+      {open && hasDetail && (
+        <div className="step-detail">
+          {isThinking ? (
+            <div className="reasoning-body">{thinkingText}</div>
+          ) : (
+            <>
+              {tool!.argsPreview && (
+                <pre className="tc-args">{formatArgs(tool!.name, tool!.argsPreview)}</pre>
+              )}
+              {tool!.outputPreview && (
+                <pre className={`tc-output ${tool!.isError ? "error" : ""}`}>
+                  {tool!.outputPreview}
+                </pre>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1017,9 +1185,9 @@ function ProducedArtifacts({
   const { t } = useTranslation();
   const produced: ArtifactFile[] = [];
   const seen = new Set<string>();
-  for (const t of tools) {
-    if (t.name !== "write_file" && t.name !== "edit_file") continue;
-    const path = String(parseArgs(t.argsPreview)?.file_path ?? "");
+  for (const tool of tools) {
+    if (tool.name !== "write_file" && tool.name !== "edit_file") continue;
+    const path = String(parseArgs(tool.argsPreview)?.file_path ?? "");
     const name = path.split(/[/\\]/).filter(Boolean).pop() ?? path;
     const match =
       allArtifacts.find((a) => a.name === name || a.absolutePath === path) ??
@@ -1045,164 +1213,6 @@ function ProducedArtifacts({
           <span className="artifact-open">{t("chat.viewInArtifacts")}</span>
         </button>
       ))}
-    </div>
-  );
-}
-
-/** A single compact step row: status dot + label + expandable detail. */
-function StepRow({ tool }: { tool: ToolCardData }): React.ReactElement {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(!!tool.isError);
-  useEffect(() => {
-    if (tool.isError) setOpen(true);
-  }, [tool.isError]);
-  const running = tool.status === "running";
-  const hasDetail =
-    (tool.outputPreview && tool.outputPreview.trim().length > 0) ||
-    (tool.argsPreview && tool.argsPreview.length > 20);
-  const dotClass = running ? "running" : tool.isError ? "error" : "done";
-  const copy = (e: React.MouseEvent): void => {
-    e.stopPropagation();
-    void navigator.clipboard?.writeText(
-      tool.name === "execute"
-        ? String(parseArgs(tool.argsPreview)?.command ?? tool.argsPreview)
-        : tool.argsPreview,
-    );
-  };
-  return (
-    <div className={`step-row ${tool.isError ? "error" : ""} ${open ? "open" : ""}`}>
-      <button
-        type="button"
-        className="step-head"
-        onClick={() => hasDetail && setOpen((v) => !v)}
-        disabled={!hasDetail}
-      >
-        <span className={`step-dot ${dotClass}`} />
-        <span className="step-label">
-          <span className="step-verb">{stepVerb(tool.name)}</span>
-          {summarize(tool) && <span className="step-target" title={summarize(tool)}>{summarize(tool)}</span>}
-          {tool.durationMs !== undefined && !running && (
-            <span className="step-dur">{fmtSec(tool.durationMs)}</span>
-          )}
-        </span>
-        {hasDetail && (
-          <span
-            className="step-copy"
-            role="button"
-            title={t("common.copy")}
-            onClick={copy}
-          >
-            ⧉
-          </span>
-        )}
-        <span className="step-caret">{hasDetail ? (open ? "▾" : "▸") : ""}</span>
-      </button>
-      {open && hasDetail && (
-        <div className="step-detail">
-          {tool.argsPreview && (
-            <pre className="tc-args">{formatArgs(tool.name, tool.argsPreview)}</pre>
-          )}
-          {tool.outputPreview && (
-            <pre className={`tc-output ${tool.isError ? "error" : ""}`}>
-              {tool.outputPreview}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * A run of consecutive thinking phases, rendered as a collapsible group that
- * mirrors StepsGroup: a "深度思考 N 次" header (blue dot, same size/weight as
- * the steps header), and an expandable body listing each thinking phase as its
- * own row. The phases stay in timeline order.
- */
-function ReasoningsGroup({
-  texts,
-  streaming,
-  isLast,
-}: {
-  texts: string[];
-  streaming: boolean;
-  isLast: boolean;
-}): React.ReactElement {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const count = texts.length;
-  // The latest thinking phase is in progress while the turn is still streaming
-  // and this is the tail group (a subsequent tool/step group would flush it).
-  const running = streaming && isLast;
-  const title = running
-    ? t("chat.thinkingRunning", { count })
-    : t("chat.thinkingFinished", { count });
-  return (
-    <div className="steps-group reasoning-group">
-      <button
-        type="button"
-        className="steps-head"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="steps-caret">{open ? "▾" : "▸"}</span>
-        <span className={`steps-dot ${running ? "running thinking" : "done thinking"}`} />
-        <span className="steps-title">{title}</span>
-      </button>
-      {open && (
-        <div className="steps-body">
-          {texts.map((text, i) => {
-            const isLive = running && i === texts.length - 1;
-            return <ReasoningItem key={i} text={text} streaming={isLive} />;
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * A single thinking phase inside an expanded ReasoningsGroup. Mirrors StepRow:
- * blue dot, a "深度思考" verb, the char count (or "正在思考…" while live), and
- * an expandable body with the reasoning text.
- */
-function ReasoningItem({
-  text,
-  streaming,
-}: {
-  text: string;
-  streaming: boolean;
-}): React.ReactElement {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const hasContent = text.trim().length > 0;
-  return (
-    <div className={`step-row ${open ? "open" : ""}`}>
-      <button
-        type="button"
-        className="step-head"
-        onClick={() => hasContent && setOpen((v) => !v)}
-        disabled={!hasContent}
-      >
-        <span className="step-dot thinking" />
-        <span className="step-label">
-          <span className="step-verb">{t("chat.thinking")}</span>
-          {streaming ? (
-            <span className="reasoning-status">{t("chat.thinkingNow")}</span>
-          ) : (
-            hasContent && (
-              <span className="step-target">
-                {text.length} {t("chat.chars")}
-              </span>
-            )
-          )}
-        </span>
-        <span className="step-caret">{hasContent ? (open ? "▾" : "▸") : ""}</span>
-      </button>
-      {open && hasContent && (
-        <div className="step-detail">
-          <div className="reasoning-body">{text}</div>
-        </div>
-      )}
     </div>
   );
 }
