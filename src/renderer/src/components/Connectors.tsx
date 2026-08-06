@@ -102,7 +102,6 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
         <button className="btn" onClick={addMcp}>
           {t("connectors.addMcp")}
         </button>
-        <span className="auto-save-hint">{t("connectors.autoSaveHint")}</span>
       </div>
     </div>
   );

@@ -279,7 +279,6 @@ const zhCN = {
   connectors: {
     title: "MCP",
     mcpHint: "MCP 服务器为 agent 提供外部工具。stdio 服务在本地运行；SSE/HTTP 服务通过网络连接。",
-    autoSaveHint: "修改后自动保存并生效",
     label: "标签",
     command: "命令",
     args: "参数（空格分隔）",
