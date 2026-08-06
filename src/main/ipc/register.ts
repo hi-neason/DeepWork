@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { agentManager } from "../agent/manager";
 import { getDb } from "../storage/db";
 import { applyOpenAtLogin, setKeepAwake } from "../system";
-import { DEEPWORK_ROOT } from "../config/paths";
+import { DEEPWORK_ROOT, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
 import { approvals } from "../security/approvals";
 import { verifyModelConfig } from "../agent/model";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
@@ -211,7 +211,12 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   // ---- chat ----
   ipcMain.handle("chat:history", async (_e, sessionId: string) => {
     const s = getSession(sessionId);
-    agentManager.setSessionRoot(sessionId, s?.rootDir);
+    // Derive the cwd/sandbox root and output drawer at runtime (works for old
+    // sessions whose stored root_dir predates the .deepwork layout).
+    const root = s ? sessionRootDir(s.id, s.workspaceDir) : undefined;
+    const picked = hasPickedWorkspace(s?.workspaceDir);
+    const outputDir = s && picked ? sessionArtifactsDir(s.id, s.workspaceDir!) : root;
+    agentManager.setSessionRoot(sessionId, root, outputDir, picked);
     agentManager.setSessionModel(sessionId, s?.model);
     return agentManager.getHistory(sessionId);
   });
@@ -232,11 +237,14 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       };
       try {
         if (modelId) setSessionModel(sessionId, modelId);
-        // The agent operates in the session's own folder (<base>/<id>).
-        // For a brand-new session createSession already created it; for an
-        // existing session resolve its stored root_dir.
+        // The agent operates in the session's cwd/sandbox root. For a picked
+        // folder that is the folder itself; otherwise the isolated session dir.
+        // Derive at runtime so old sessions pick up the new layout.
         const s = getSession(sessionId);
-        const root = s?.rootDir;
+        const root = s ? sessionRootDir(s.id, s.workspaceDir) : undefined;
+        const picked = hasPickedWorkspace(s?.workspaceDir);
+        const outputDir = s && picked ? sessionArtifactsDir(s.id, s.workspaceDir!) : root;
+        agentManager.setSessionRoot(sessionId, root, outputDir, picked);
         for await (const e of agentManager.runTurn(
           sessionId,
           text,

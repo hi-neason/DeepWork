@@ -190,6 +190,8 @@ const zhCN = {
     truncated: "回复可能因长度被截断",
     contentFiltered: "回复被内容过滤拦截",
     folderMenuTitle: "选择文件夹",
+    folderLocked: "该任务的工作区已锁定，不能中途更改",
+    defaultWorkspace: "默认工作区",
     browse: "📂 浏览…",
     recent: "最近",
     noFolder: "✕ 不使用文件夹",

@@ -1731,6 +1731,13 @@ body,
 }
 .ws-picker:hover { background: var(--bg-elev2); color: var(--text); }
 .ws-picker.active { color: var(--accent); }
+.ws-picker.locked {
+  cursor: default;
+  opacity: 0.85;
+}
+.ws-picker.locked:hover { background: transparent; color: var(--text-dim); }
+.ws-picker.locked.active { color: var(--accent); }
+.ws-picker:disabled { cursor: default; }
 .ws-picker-label {
   overflow: hidden;
   text-overflow: ellipsis;

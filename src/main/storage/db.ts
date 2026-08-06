@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import path from "node:path";
-import { APP_DATA_DIR } from "../config/paths";
+import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR } from "../config/paths";
 import { logger } from "../log/logger";
 
 let db: Database.Database | null = null;
@@ -107,6 +107,38 @@ function migrate(d: Database.Database): void {
   addColumn("sessions", "workspace_dir", "TEXT");
   addColumn("sessions", "root_dir", "TEXT");
   addColumn("sessions", "model", "TEXT");
+
+  // Migration: older builds set root_dir to <picked>/sessions/<id> even when a
+  // project folder was picked. The new layout uses the picked folder itself as
+  // the cwd/sandbox root, so rewrite those stale root_dir values. Default
+  // sessions (workspace_dir empty or equal to DEFAULT_WORKSPACE_DIR) keep the
+  // isolated <default>/sessions/<id> layout and are left untouched.
+  try {
+    const rows = d
+      .prepare(
+        `SELECT id, workspace_dir, root_dir FROM sessions
+         WHERE workspace_dir IS NOT NULL AND workspace_dir != ''
+           AND workspace_dir != ? AND root_dir IS NOT NULL`,
+      )
+      .all(DEFAULT_WORKSPACE_DIR) as Array<{
+      id: string;
+      workspace_dir: string;
+      root_dir: string;
+    }>;
+    const update = d.prepare(
+      "UPDATE sessions SET root_dir = ? WHERE id = ?",
+    );
+    for (const r of rows) {
+      const stale = path.join(r.workspace_dir, "sessions", r.id);
+      if (path.resolve(r.root_dir) === path.resolve(stale)) {
+        update.run(path.resolve(r.workspace_dir), r.id);
+      }
+    }
+  } catch (err) {
+    logger.error("db", "root_dir migration failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // Persisted groups (order + rename). A session's group is denormalized onto
   // the session row so listing is a single query; this table just remembers

@@ -18,14 +18,40 @@ export const SKILLS_DIR = path.join(DEEPWORK_ROOT, "skills");
 export const DEFAULT_WORKSPACE_DIR = path.join(DEEPWORK_ROOT, "workspace");
 
 /**
- * Per-session working directory under the chosen workspace base. Each session
- * gets its own folder named after its stable id (titles can change), grouped
- * under a shared `sessions/` directory.
- *   <base>/sessions/<sessionId>/
+ * The session's working directory = the agent's cwd AND the fs-tool sandbox
+ * root. When the user picked a folder, that folder itself is the root so the
+ * agent can read the project's source; without a pick we fall back to an
+ * isolated per-session folder under the default workspace.
+ *
+ *   picked:  <base>/                         (the chosen project folder)
+ *   default: ~/DeepWork/workspace/sessions/<sessionId>/
  */
 export function sessionRootDir(sessionId: string, base?: string): string {
-  const parent = base && base.trim() ? base : DEFAULT_WORKSPACE_DIR;
-  return path.join(parent, "sessions", sessionId);
+  const picked = base && base.trim();
+  if (picked) return path.resolve(picked);
+  return path.join(DEFAULT_WORKSPACE_DIR, "sessions", sessionId);
+}
+
+/**
+ * The per-session output/artifacts drawer. When a folder is picked, produced
+ * files go into `<base>/.deepwork/sessions/<sessionId>/` so each session is
+ * isolated inside the chosen project while the source tree stays readable.
+ * Without a pick the artifacts dir equals the isolated root dir.
+ */
+export function sessionArtifactsDir(sessionId: string, base?: string): string {
+  const picked = base && base.trim();
+  if (picked) return path.join(path.resolve(picked), ".deepwork", "sessions", sessionId);
+  return path.join(DEFAULT_WORKSPACE_DIR, "sessions", sessionId);
+}
+
+/**
+ * Whether a workspace base was explicitly chosen (vs. the default fallback).
+ * createSession persists DEFAULT_WORKSPACE_DIR even when nothing was picked, so
+ * we compare against the resolved default to detect a real project folder.
+ */
+export function hasPickedWorkspace(base?: string | null): boolean {
+  if (!base || !base.trim()) return false;
+  return path.resolve(base) !== path.resolve(DEFAULT_WORKSPACE_DIR);
 }
 
 /** Legacy Electron userData location used before the ~/DeepWork unification. */

@@ -192,6 +192,8 @@ const enUS = {
     truncated: "Reply may be truncated (length limit)",
     contentFiltered: "Reply blocked by content filter",
     folderMenuTitle: "Choose folder",
+    folderLocked: "This task's workspace is locked and cannot be changed",
+    defaultWorkspace: "Default workspace",
     browse: "📂 Browse…",
     recent: "Recent",
     noFolder: "✕ No folder",

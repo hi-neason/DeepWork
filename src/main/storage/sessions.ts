@@ -3,7 +3,11 @@ import type { Session } from "../../shared/types";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
-import { DEFAULT_WORKSPACE_DIR, sessionRootDir } from "../config/paths";
+import {
+  DEFAULT_WORKSPACE_DIR,
+  sessionRootDir,
+  sessionArtifactsDir,
+} from "../config/paths";
 import { logger } from "../log/logger";
 
 export const DEFAULT_GROUP = "默认";
@@ -68,13 +72,15 @@ export function createSession(
   const id = randomUUID();
   const base = workspaceDir && workspaceDir.trim() ? workspaceDir : DEFAULT_WORKSPACE_DIR;
   const rootDir = sessionRootDir(id, base);
+  const artifactsDir = sessionArtifactsDir(id, base);
   const group = groupForWorkspace(base);
-  // Each session gets its own folder under the workspace base.
+  // Each session gets its own output drawer. For a picked folder it lives under
+  // <base>/.deepwork/sessions/<id>/; otherwise it is the isolated root itself.
   try {
-    fs.mkdirSync(rootDir, { recursive: true });
+    fs.mkdirSync(artifactsDir, { recursive: true });
   } catch (err) {
     logger.error("session", "failed to create session directory", {
-      rootDir,
+      artifactsDir,
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -138,9 +144,10 @@ export function setSessionGroup(id: string, group: string): void {
 export function setSessionWorkspace(id: string, workspaceDir: string): void {
   const base = workspaceDir && workspaceDir.trim() ? workspaceDir : DEFAULT_WORKSPACE_DIR;
   const rootDir = sessionRootDir(id, base);
+  const artifactsDir = sessionArtifactsDir(id, base);
   const group = groupForWorkspace(base);
   try {
-    fs.mkdirSync(rootDir, { recursive: true });
+    fs.mkdirSync(artifactsDir, { recursive: true });
   } catch (err) {
     console.error("Failed to create session directory:", err);
   }

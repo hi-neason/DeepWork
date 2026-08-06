@@ -132,11 +132,15 @@ export function Chat({
   }, [activeModel, enabledModels]);
 
   const activeWorkspace = workspaceDir ?? pendingWorkspace;
+  // Once a session exists its workspace folder is locked and cannot be changed.
+  const folderLocked = !!sessionId;
   const folderLabel = useMemo(() => {
-    if (!activeWorkspace) return t("chat.chooseFolderOptional");
-    const parts = activeWorkspace.split(/[/\\]/).filter(Boolean);
-    return parts[parts.length - 1] || activeWorkspace;
-  }, [activeWorkspace]);
+    if (activeWorkspace) {
+      const parts = activeWorkspace.split(/[/\\]/).filter(Boolean);
+      return parts[parts.length - 1] || activeWorkspace;
+    }
+    return folderLocked ? t("chat.defaultWorkspace") : t("chat.chooseFolderOptional");
+  }, [activeWorkspace, folderLocked, t]);
 
   // Load enabled skills for slash command on mount.
   useEffect(() => {
@@ -643,56 +647,74 @@ export function Chat({
           />
           <div className="composer-bar">
             <div className="ws-picker-wrap">
-              <button
-                className={`ws-picker ${activeWorkspace ? "active" : ""}`}
-                onClick={() => setShowFolderMenu((v) => !v)}
-                title={activeWorkspace ?? t("chat.chooseFolderOptional")}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                <span className="ws-picker-label">{folderLabel}</span>
-                {activeWorkspace && (
-                  <span
-                    className="ws-clear"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      clearFolder();
-                    }}
+              {folderLocked ? (
+                <button
+                  className={`ws-picker locked ${activeWorkspace ? "active" : ""}`}
+                  title={
+                    activeWorkspace
+                      ? `${activeWorkspace}\n${t("chat.folderLocked")}`
+                      : t("chat.folderLocked")
+                  }
+                  disabled
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  <span className="ws-picker-label">{folderLabel}</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                </button>
+              ) : (
+                <>
+                  <button
+                    className={`ws-picker ${activeWorkspace ? "active" : ""}`}
+                    onClick={() => setShowFolderMenu((v) => !v)}
+                    title={activeWorkspace ?? t("chat.chooseFolderOptional")}
                   >
-                    ✕
-                  </span>
-                )}
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              {showFolderMenu && (
-                <div className="ws-menu" onMouseLeave={() => setShowFolderMenu(false)}>
-                  <div className="ws-menu-label">{t("chat.folderMenuTitle")}</div>
-                  <div className="ws-menu-item" onClick={pickFolder}>
-                    {t("chat.browse")}
-                  </div>
-                  {recent.length > 0 && <div className="ws-menu-sep" />}
-                  {recent.length > 0 && <div className="ws-menu-label">{t("chat.recent")}</div>}
-                  {recent.map((r) => (
-                    <div
-                      key={r.path}
-                      className={`ws-menu-item ${activeWorkspace === r.path ? "checked" : ""}`}
-                      title={r.path}
-                      onClick={() => chooseRecent(r.path)}
-                    >
-                      <div>
-                        <div className="ws-recent-name">{r.name}</div>
-                        <div className="ws-recent-path">{r.path}</div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                    <span className="ws-picker-label">{folderLabel}</span>
+                    {activeWorkspace && (
+                      <span
+                        className="ws-clear"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearFolder();
+                        }}
+                      >
+                        ✕
+                      </span>
+                    )}
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  {showFolderMenu && (
+                    <div className="ws-menu" onMouseLeave={() => setShowFolderMenu(false)}>
+                      <div className="ws-menu-label">{t("chat.folderMenuTitle")}</div>
+                      <div className="ws-menu-item" onClick={pickFolder}>
+                        {t("chat.browse")}
                       </div>
+                      {recent.length > 0 && <div className="ws-menu-sep" />}
+                      {recent.length > 0 && <div className="ws-menu-label">{t("chat.recent")}</div>}
+                      {recent.map((r) => (
+                        <div
+                          key={r.path}
+                          className={`ws-menu-item ${activeWorkspace === r.path ? "checked" : ""}`}
+                          title={r.path}
+                          onClick={() => chooseRecent(r.path)}
+                        >
+                          <div>
+                            <div className="ws-recent-name">{r.name}</div>
+                            <div className="ws-recent-path">{r.path}</div>
+                          </div>
+                        </div>
+                      ))}
+                      {activeWorkspace && (
+                        <>
+                          <div className="ws-menu-sep" />
+                          <div className="ws-menu-item danger" onClick={clearFolder}>
+                            {t("chat.noFolder")}
+                          </div>
+                        </>
+                      )}
                     </div>
-                  ))}
-                  {activeWorkspace && (
-                    <>
-                      <div className="ws-menu-sep" />
-                      <div className="ws-menu-item danger" onClick={clearFolder}>
-                        {t("chat.noFolder")}
-                      </div>
-                    </>
                   )}
-                </div>
+                </>
               )}
             </div>
             <button

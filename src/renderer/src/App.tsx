@@ -449,9 +449,10 @@ export function App(): React.ReactElement {
       // for this session by the time chat.send starts emitting.
       sessionIdRef.current = s.id;
       sid = s.id;
-    } else if (workspaceDir || modelId) {
-      if (workspaceDir) await window.deepwork.sessions.setWorkspace(sid, workspaceDir);
-      if (modelId) await window.deepwork.sessions.setModel(sid, modelId);
+    } else if (modelId) {
+      // A session's workspace folder is fixed once created; only the model can
+      // still be switched mid-session.
+      await window.deepwork.sessions.setModel(sid, modelId);
       await refreshSessions();
     }
     dispatch({ type: "user", text });
@@ -564,6 +565,7 @@ export function App(): React.ReactElement {
               artifacts={artifacts}
               updateStatus={updateStatus}
               sessionModel={selectedSession?.model}
+              workspaceDir={selectedSession?.workspaceDir}
               enabledModels={enabledModels}
               showReasoning={settings?.showReasoning ?? true}
               funMode={settings?.funMode ?? false}

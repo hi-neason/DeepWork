@@ -48,7 +48,7 @@ import { WEB_TOOLS } from "../tools/web";
 import { createTodosTool } from "../tools/todos";
 import { createMemoryTools } from "../tools/memory";
 import { skillsSourcePath } from "../skills/store";
-import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR } from "../config/paths";
+import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
 
 type StateSchemaT = InstanceType<typeof StateSchema>;
 
@@ -432,6 +432,19 @@ export class AgentManager {
     instructions: string,
   ): AsyncGenerator<DeepWorkEvent> {
     this.unattended.add(sessionId);
+    // Make sure the session's workspace context is registered even without an
+    // interactive chat:history call.
+    if (!this.sessionWorkspace.has(sessionId)) {
+      const s = getSession(sessionId);
+      if (s) {
+        const picked = hasPickedWorkspace(s.workspaceDir);
+        const root = sessionRootDir(s.id, s.workspaceDir);
+        const outputDir = picked
+          ? sessionArtifactsDir(s.id, s.workspaceDir!)
+          : root;
+        this.setSessionRoot(sessionId, root, outputDir, picked);
+      }
+    }
     try {
       yield* this.runTurn(sessionId, instructions);
     } finally {
@@ -440,13 +453,20 @@ export class AgentManager {
   }
 
   /**
-   * Register a session's working directory (its per-session root folder,
-   * <base>/<sessionId>). Loaded when the session is selected.
+   * Register a session's working directory (cwd + fs-sandbox root). Loaded
+   * when the session is selected. For picked folders, outputDir points at the
+   * per-session artifacts drawer and isProject=true so the system prompt
+   * names both the project root and where deliverables must land.
    */
-  setSessionRoot(sessionId: string, rootDir?: string): void {
+  setSessionRoot(
+    sessionId: string,
+    rootDir?: string,
+    outputDir?: string,
+    isProject?: boolean,
+  ): void {
     if (rootDir) {
       this.sessionWorkspace.set(sessionId, rootDir);
-      setThreadRoot(sessionId, rootDir);
+      setThreadRoot(sessionId, rootDir, outputDir, isProject);
     } else {
       this.sessionWorkspace.delete(sessionId);
       setThreadRoot(sessionId, "");
@@ -490,7 +510,13 @@ export class AgentManager {
     }
     if (workspaceDir) {
       this.sessionWorkspace.set(sessionId, workspaceDir);
-      setThreadRoot(sessionId, workspaceDir);
+      // Register full workspace context (cwd + output drawer) for the prompt.
+      const s = getSession(sessionId);
+      const picked = hasPickedWorkspace(s?.workspaceDir);
+      const outputDir = picked
+        ? sessionArtifactsDir(sessionId, s!.workspaceDir!)
+        : workspaceDir;
+      setThreadRoot(sessionId, workspaceDir, outputDir, picked);
     }
     if (modelId) this.sessionModel.set(sessionId, modelId);
     const ws = this.sessionWorkspace.get(sessionId);
@@ -981,20 +1007,17 @@ export class AgentManager {
     }
   }
 
-  /**
-   * Best-effort scan of the workspace for files modified since this session's
-   * run started (capped). Skips scanning the home directory directly to avoid
-   * enumerating tens of thousands of files.
-   */
-  /** List all files in the session's root folder (the artifacts panel). */
+  /** List all files in the session's output folder (the artifacts panel). */
   listArtifacts(sessionId: string): ArtifactFile[] {
-    // Prefer the in-memory session root; fall back to the persisted
-    // root_dir (set when the session was created) so the panel works even
-    // if chat:history hasn't populated the map yet, then to the default.
-    let root = this.sessionWorkspace.get(sessionId);
-    if (!root) {
-      const s = getSession(sessionId);
-      root = s?.rootDir || s?.workspaceDir;
+    const s = getSession(sessionId);
+    let root: string | undefined;
+    if (s && hasPickedWorkspace(s.workspaceDir)) {
+      // Picked a project: artifacts live in the per-session output drawer, not
+      // in the whole project tree (which would include source/node_modules).
+      root = sessionArtifactsDir(sessionId, s.workspaceDir!);
+    } else {
+      // Default isolated session: the cwd/root IS the artifacts folder.
+      root = this.sessionWorkspace.get(sessionId) || s?.rootDir;
     }
     if (!root) {
       const settings = loadSettings();
