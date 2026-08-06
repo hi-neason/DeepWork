@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import path from "node:path";
+import fs from "node:fs";
 import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR } from "../config/paths";
 import { logger } from "../log/logger";
 
@@ -108,30 +109,63 @@ function migrate(d: Database.Database): void {
   addColumn("sessions", "root_dir", "TEXT");
   addColumn("sessions", "model", "TEXT");
 
-  // Migration: older builds set root_dir to <picked>/sessions/<id> even when a
-  // project folder was picked. The new layout uses the picked folder itself as
-  // the cwd/sandbox root, so rewrite those stale root_dir values. Default
-  // sessions (workspace_dir empty or equal to DEFAULT_WORKSPACE_DIR) keep the
-  // isolated <default>/sessions/<id> layout and are left untouched.
+  // Migration: older builds created each session's working folder directly at
+  // <picked>/sessions/<id> and set root_dir to that path. The new layout uses
+  // the picked folder itself as cwd/sandbox root and isolates per-session
+  // output under <picked>/.deepwork/sessions/<id>. For picked-folder sessions
+  // we (1) rewrite root_dir to the picked folder, and (2) move the on-disk
+  // folder from <picked>/sessions/<id> to <picked>/.deepwork/sessions/<id>.
+  // Default sessions (empty / DEFAULT_WORKSPACE_DIR) keep their isolated layout
+  // and are left untouched. Detection is by physical folder existence so this is
+  // safe to re-run even after a previous migration rewrote root_dir.
   try {
     const rows = d
       .prepare(
         `SELECT id, workspace_dir, root_dir FROM sessions
          WHERE workspace_dir IS NOT NULL AND workspace_dir != ''
-           AND workspace_dir != ? AND root_dir IS NOT NULL`,
+           AND workspace_dir != ?`,
       )
       .all(DEFAULT_WORKSPACE_DIR) as Array<{
       id: string;
       workspace_dir: string;
-      root_dir: string;
+      root_dir: string | null;
     }>;
     const update = d.prepare(
       "UPDATE sessions SET root_dir = ? WHERE id = ?",
     );
     for (const r of rows) {
-      const stale = path.join(r.workspace_dir, "sessions", r.id);
-      if (path.resolve(r.root_dir) === path.resolve(stale)) {
-        update.run(path.resolve(r.workspace_dir), r.id);
+      const base = path.resolve(r.workspace_dir);
+      const oldDir = path.join(base, "sessions", r.id);
+      const newDir = path.join(base, ".deepwork", "sessions", r.id);
+      // (1) Move the physical folder if it still lives at the old location.
+      if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+        try {
+          fs.mkdirSync(path.dirname(newDir), { recursive: true });
+          fs.renameSync(oldDir, newDir);
+        } catch (err) {
+          logger.error("db", "session dir migration failed", {
+            oldDir,
+            newDir,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      // (2) Always ensure root_dir points at the picked folder itself.
+      const expected = path.resolve(base);
+      if (!r.root_dir || path.resolve(r.root_dir) !== expected) {
+        update.run(expected, r.id);
+      }
+    }
+    // Best-effort cleanup: remove the now-empty <picked>/sessions folder so the
+    // project tree isn't left with a stray DeepWork artifact directory.
+    for (const r of rows) {
+      const oldSessionsRoot = path.join(path.resolve(r.workspace_dir), "sessions");
+      try {
+        if (fs.existsSync(oldSessionsRoot) && fs.readdirSync(oldSessionsRoot).length === 0) {
+          fs.rmdirSync(oldSessionsRoot);
+        }
+      } catch {
+        // ignore non-empty or permission errors
       }
     }
   } catch (err) {
