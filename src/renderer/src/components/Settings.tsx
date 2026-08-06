@@ -27,7 +27,7 @@ const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string }> = [
   { id: "skills", labelKey: "settings.tabs.skills", icon: "✨" },
   { id: "connectors", labelKey: "settings.tabs.connectors", icon: "🧩" },
   { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰" },
-  { id: "shortcuts", labelKey: "settings.tabs.shortcuts", icon: "?" },
+  { id: "about", labelKey: "settings.tabs.about", icon: "ⓘ" },
 ];
 
 // Debounce window for auto-saving settings changes to disk.
@@ -135,7 +135,7 @@ export function Settings({
             <Connectors settings={settings} onChange={update} />
           )}
           {tab === "automations" && <AutomationsView />}
-          {tab === "shortcuts" && <AboutTab updateStatus={updateStatus ?? { state: "idle" }} />}
+          {tab === "about" && <AboutTab updateStatus={updateStatus ?? { state: "idle" }} />}
         </div>
       </div>
     </div>

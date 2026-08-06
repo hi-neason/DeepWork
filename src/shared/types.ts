@@ -154,7 +154,6 @@ export type SettingsTab =
   | "skills"
   | "connectors"
   | "automations"
-  | "shortcuts"
   | "about";
 
 /** A file inside a skill's directory (scripts, references, assets). */

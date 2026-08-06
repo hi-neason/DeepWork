@@ -6,12 +6,6 @@ interface Props {
   updateStatus: UpdateStatus;
 }
 
-const SHORTCUTS: Array<{ keys: string; descKey: string }> = [
-  { keys: "Enter", descKey: "settings.about.shortcutSend" },
-  { keys: "Shift + Enter", descKey: "settings.about.shortcutNewline" },
-  { keys: "⌘ / Ctrl + N", descKey: "settings.about.shortcutNewTask" },
-];
-
 export function AboutTab({ updateStatus }: Props): React.ReactElement {
   const { t } = useTranslation();
   const [dataPath, setDataPath] = useState("");
@@ -70,19 +64,6 @@ export function AboutTab({ updateStatus }: Props): React.ReactElement {
             </button>
           )}
         </div>
-      </div>
-
-      <h3 style={{ marginTop: 20 }}>{t("settings.about.shortcuts")}</h3>
-      <div className="setting-card">
-        {SHORTCUTS.map((s, i) => (
-          <div key={s.keys}>
-            <div className="setting-row">
-              <div className="setting-label">{t(s.descKey)}</div>
-              <kbd className="kbd">{s.keys}</kbd>
-            </div>
-            {i < SHORTCUTS.length - 1 && <div className="setting-sep" />}
-          </div>
-        ))}
       </div>
     </div>
   );

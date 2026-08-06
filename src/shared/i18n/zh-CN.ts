@@ -67,7 +67,7 @@ const zhCN = {
       skills: "技能",
       connectors: "连接器",
       automations: "自动化",
-      shortcuts: "快捷键 / 关于",
+      about: "关于",
     },
     memory: {
       title: "记忆",

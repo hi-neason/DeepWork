@@ -69,7 +69,7 @@ const enUS = {
       skills: "Skills",
       connectors: "Connectors",
       automations: "Automations",
-      shortcuts: "Shortcuts / About",
+      about: "About",
     },
     memory: {
       title: "Memory",
