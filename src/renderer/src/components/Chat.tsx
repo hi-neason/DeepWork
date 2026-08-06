@@ -42,7 +42,6 @@ interface Props {
   onSetModel: (modelId: string) => void;
   onRefreshModels: () => void | Promise<void>;
   onAddModel: () => void;
-  onNewSession: () => void;
   onInstallUpdate: () => void;
   rightPanelOpen: boolean;
   onToggleRightPanel: () => void;
@@ -73,7 +72,6 @@ export function Chat({
   onSetModel,
   onRefreshModels,
   onAddModel,
-  onNewSession,
   onInstallUpdate,
   rightPanelOpen,
   onToggleRightPanel,
@@ -490,9 +488,6 @@ export function Chat({
           <div className="empty">
             <h2>DeepWork</h2>
             <p>{t("chat.emptyDesc")}</p>
-            <button className="new-chat" style={{ marginTop: 12 }} onClick={onNewSession}>
-              {t("chat.startChat")}
-            </button>
             {funMode && <CommitRunner />}
           </div>
         ) : (

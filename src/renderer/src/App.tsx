@@ -576,7 +576,6 @@ export function App(): React.ReactElement {
                 setSettingsTab("models");
                 setView("settings");
               }}
-              onNewSession={newSession}
               onInstallUpdate={() => window.deepwork.updates.install()}
               rightPanelOpen={showRight}
               onToggleRightPanel={toggleRightPanel}

@@ -173,18 +173,6 @@ body,
   flex: 1;
 }
 
-.new-chat {
-  background: var(--accent);
-  color: white;
-  border: none;
-  padding: 9px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-}
-.new-chat:hover { background: var(--accent-hover); }
-
 .session-item {
   padding: 7px 10px 7px 26px;
   border-radius: 8px;

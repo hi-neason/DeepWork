@@ -171,7 +171,6 @@ const zhCN = {
     updateDownloading: "正在下载更新… {{percent}}%",
     restartToUpdate: "重启并更新",
     emptyDesc: "你本地的桌面 AI 助手。",
-    startChat: "开始对话",
     dinoTitle: "摸鱼中？来一局",
     dinoHint: "点击或按空格跳跃 · 躲 bug，攒 commit",
     dinoReady: "点击开始",

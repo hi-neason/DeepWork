@@ -173,7 +173,6 @@ const enUS = {
     updateDownloading: "Downloading update… {{percent}}%",
     restartToUpdate: "Restart to update",
     emptyDesc: "Your local desktop AI agent.",
-    startChat: "Start a chat",
     dinoTitle: "Need a break?",
     dinoHint: "Click or Space to jump · dodge bugs, collect commits",
     dinoReady: "Click to start",
