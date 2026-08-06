@@ -6,35 +6,6 @@ interface Props {
   settings: SettingsType;
 }
 
-// `description`/`body` are written into SKILL.md verbatim and are prompt
-// content authored by the user/templates — they are NOT translated.
-const SKILL_TEMPLATES: { name: string; description: string; body: string }[] = [
-  {
-    name: "my-skill",
-    description: "Describe when this skill should be used.",
-    body: "# Instructions\n\nWhat the agent should do when this skill is loaded.\n",
-  },
-  {
-    name: "code-review",
-    description: "Review code changes for bugs, style and security before committing.",
-    body:
-      "# Code review\n\n" +
-      "When asked to review code:\n" +
-      "1. Read the diff or changed files.\n" +
-      "2. Flag correctness bugs first, then security, then style.\n" +
-      "3. Give concrete suggestions with file:line references.\n" +
-      "4. Summarize risk level (low/medium/high).\n",
-  },
-  {
-    name: "commit-writer",
-    description: "Write concise Conventional Commits messages from staged changes.",
-    body:
-      "# Commit writer\n\n" +
-      "Run `git diff --staged`, summarize the change in one line, then write a\n" +
-      "Conventional Commits message (type(scope): subject). Keep subject ≤ 72 chars.\n",
-  },
-];
-
 const SAVE_DEBOUNCE_MS = 600;
 
 export function SkillsView({ settings: _settings }: Props): React.ReactElement {
@@ -65,22 +36,6 @@ export function SkillsView({ settings: _settings }: Props): React.ReactElement {
   const startCreate = (): void => {
     setCreating(true);
     setEditing(null);
-  };
-
-  const createFromTemplate = async (tpl: (typeof SKILL_TEMPLATES)[number]): Promise<void> => {
-    try {
-      const s = await window.deepwork.skills.create({
-        name: tpl.name,
-        description: tpl.description,
-        body: tpl.body,
-      });
-      await refresh();
-      await applyRebuild();
-      setCreating(false);
-      setEditing(s);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
-    }
   };
 
   // ---------- update (auto-save) ----------
@@ -267,19 +222,6 @@ export function SkillsView({ settings: _settings }: Props): React.ReactElement {
                   ✕
                 </button>
               </div>
-            ))}
-          </div>
-
-          <h3>{t("skills.templates")}</h3>
-          <div className="skill-templates">
-            {SKILL_TEMPLATES.map((tpl) => (
-              <button
-                key={tpl.name}
-                className="skill-template"
-                onClick={() => void createFromTemplate(tpl)}
-              >
-                + {t(`skills.tpl_${tpl.name.replace(/-/g, "_")}`)}
-              </button>
             ))}
           </div>
         </>
