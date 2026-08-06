@@ -93,7 +93,16 @@ export function Settings({
   return (
     <div className="settings-shell">
       <aside className="settings-nav">
-        <div className="settings-title">{t("settings.title")}</div>
+        <div className="settings-title-row">
+          <span className="settings-title">{t("settings.title")}</span>
+          <button
+            className="settings-close"
+            onClick={onClose}
+            title={t("settings.close")}
+          >
+            ✕
+          </button>
+        </div>
         {TABS.map((tdef) => (
           <button
             key={tdef.id}
@@ -104,9 +113,6 @@ export function Settings({
             {t(tdef.labelKey)}
           </button>
         ))}
-        <button className="settings-nav-item close" onClick={onClose}>
-          ✕ {t("settings.close")}
-        </button>
       </aside>
 
       <div className="settings-content">

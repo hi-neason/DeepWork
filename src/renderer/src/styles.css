@@ -1796,8 +1796,28 @@ body,
   gap: 2px;
   overflow-y: auto;
 }
+.settings-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 12px;
+}
 .settings-title {
-  font-size: 15px; font-weight: 600; padding: 6px 10px 12px;
+  font-size: 15px; font-weight: 600;
+}
+.settings-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.settings-close:hover {
+  background: var(--bg-elev2);
+  color: var(--text);
 }
 .settings-nav-item {
   background: none; border: none; text-align: left;
@@ -1807,7 +1827,6 @@ body,
 }
 .settings-nav-item:hover { background: var(--bg-elev2); color: var(--text); }
 .settings-nav-item.active { background: var(--bg-elev2); color: var(--text); }
-.settings-nav-item.close { margin-top: auto; color: var(--text-dim); }
 .settings-content {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
 }
