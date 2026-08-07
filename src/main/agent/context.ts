@@ -1,6 +1,7 @@
 import { createMiddleware } from "langchain";
 import { loadSettings } from "../storage/settings";
-import { listMemories } from "../storage/memories";
+import { listMemories, searchMemories } from "../storage/memories";
+import type { MemoryItem } from "../../shared/types";
 import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
 
 const PLAN_MODE_REMINDER = `## Plan mode (read-only)
@@ -22,12 +23,31 @@ export function createContextMiddleware() {
       const parts: string[] = [];
 
       const scopeKey = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
-      const memories = listMemories(scopeKey);
+      // Semantic retrieval instead of dumping the whole table: rank by the
+      // current user query, then inject only the top-K relevant memories.
+      const lastUser = [...(request.messages ?? [])]
+        .reverse()
+        .find((m) => m.role === "user");
+      const query =
+        typeof lastUser?.content === "string" ? lastUser.content : "";
+      let memories: MemoryItem[];
+      if (query) {
+        memories = await searchMemories(scopeKey, query, {
+          topK: settings.memory.topK,
+          threshold: settings.memory.threshold,
+        });
+      } else {
+        memories = listMemories(scopeKey);
+      }
       if (memories.length > 0) {
+        const lines = memories.map((m) => {
+          const tag = m.type ? ` (${m.type})` : "";
+          return `- ${m.content}${tag}`;
+        });
         parts.push(
           "## Long-term memory\n" +
             "These facts were saved in earlier sessions and may be relevant:\n" +
-            memories.map((m) => `- ${m.content}`).join("\n"),
+            lines.join("\n"),
         );
       }
       if (settings.permissionMode === "plan") {

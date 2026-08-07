@@ -34,6 +34,16 @@ const DEFAULT_SETTINGS: Settings = {
   showReasoning: true,
   funMode: false,
   logEnabled: false,
+  memory: {
+    autoExtract: false,
+    embedding: {
+      provider: "ollama",
+      model: "nomic-embed-text",
+      baseUrl: "http://localhost:11434",
+    },
+    topK: 10,
+    threshold: 0.45,
+  },
   memories: [],
 };
 

@@ -69,11 +69,38 @@ export interface ArtifactFile {
   ext: string;
 }
 
+export type MemoryType = "preference" | "fact" | "event";
+
 export interface MemoryItem {
   id: string;
   content: string;
   scope: "global" | "workspace" | "session";
   createdAt: number;
+  /** Classification for retrieval/display: stable preference, durable fact, or past event. */
+  type?: MemoryType;
+  /** 0..1 salience used for ranking and (optional) decay. */
+  importance?: number;
+  /** "active" normally; "invalid" when superseded by a newer memory. */
+  status?: "active" | "invalid";
+  /** Provenance waypoint, e.g. "session:<id>:turn:<n>". */
+  source?: string;
+}
+
+export interface EmbeddingConfig {
+  /** Provider used to compute embeddings. "none" disables semantic search. */
+  provider: "ollama" | "openai" | "none";
+  model: string;
+  baseUrl?: string;
+}
+
+export interface MemoryConfig {
+  /** Run the AUDN extraction pipeline after each turn. Off by default. */
+  autoExtract: boolean;
+  embedding: EmbeddingConfig;
+  /** Max memories injected into the prompt each turn. */
+  topK: number;
+  /** Minimum cosine similarity (0..1) for semantic retrieval. */
+  threshold: number;
 }
 
 export type AutomationStatus = "scheduled" | "running" | "success" | "error";
@@ -142,6 +169,8 @@ export interface Settings {
   funMode: boolean;
   /** Write structured debug logs to <workspace>/sessions/<sessionId>/deepwork.log. */
   logEnabled: boolean;
+  /** Memory subsystem configuration (auto-extraction, embedding backend, retrieval). */
+  memory: MemoryConfig;
   /** Global memory entries injected into the system prompt (denormalized for renderer). */
   memories: MemoryItem[];
 }

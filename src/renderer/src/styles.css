@@ -2297,6 +2297,56 @@ body,
 @keyframes spin { to { transform: rotate(360deg); } }
 .rp-task-label { line-height: 1.4; }
 .rp-empty { color: var(--text-dim); font-size: 13px; padding: 10px 8px; margin: 0; }
+.rp-memories { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 0; }
+.rp-mem-add { display: flex; gap: 6px; }
+.rp-mem-input {
+  flex: 1; min-width: 0; font-family: inherit; font-size: 13px;
+  color: var(--text); background: var(--bg-input, var(--bg-elev));
+  border: 1px solid var(--border, var(--bg-elev2)); border-radius: 8px; padding: 6px 8px;
+}
+.rp-mem-input:focus { outline: none; border-color: var(--accent, #4f8cff); }
+.rp-mem-add-btn {
+  flex-shrink: 0; font-family: inherit; font-size: 12px; cursor: pointer;
+  color: var(--text); background: var(--bg-elev); border: 1px solid var(--border, var(--bg-elev2));
+  border-radius: 8px; padding: 0 10px;
+}
+.rp-mem-add-btn:hover { background: var(--bg-elev2); }
+.rp-mem-filter { display: flex; gap: 6px; flex-wrap: wrap; }
+.rp-mem-chip {
+  font-family: inherit; font-size: 11px; cursor: pointer;
+  color: var(--text-dim); background: var(--bg-elev); border: 1px solid var(--border, var(--bg-elev2));
+  border-radius: 20px; padding: 2px 10px;
+}
+.rp-mem-chip.active { color: var(--text); border-color: var(--accent, #4f8cff); background: var(--bg-elev2); }
+.rp-mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rp-mem-item {
+  background: var(--bg-elev); border: 1px solid var(--border, var(--bg-elev2)); border-radius: 8px;
+  padding: 8px 10px; font-size: 13px; color: var(--text);
+}
+.rp-mem-content { line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.rp-mem-type {
+  display: inline-block; margin-top: 6px; font-size: 10px; color: var(--text-dim);
+  background: var(--bg-elev2); border: 1px solid var(--border, var(--bg-elev2)); border-radius: 20px; padding: 1px 8px;
+}
+.rp-mem-actions { display: flex; gap: 10px; margin-top: 6px; }
+.rp-mem-actions button {
+  font-family: inherit; font-size: 11px; cursor: pointer; background: none; border: none;
+  color: var(--accent, #4f8cff); padding: 0;
+}
+.rp-mem-actions button:hover { text-decoration: underline; }
+.rp-mem-del { color: var(--danger, #e5484d) !important; }
+.rp-mem-edit { display: flex; flex-direction: column; gap: 6px; }
+.rp-mem-textarea {
+  font-family: inherit; font-size: 13px; color: var(--text); background: var(--bg-input, var(--bg-elev));
+  border: 1px solid var(--border, var(--bg-elev2)); border-radius: 8px; padding: 6px 8px; resize: vertical; min-height: 48px;
+}
+.rp-mem-textarea:focus { outline: none; border-color: var(--accent, #4f8cff); }
+.rp-mem-edit-actions { display: flex; gap: 10px; }
+.rp-mem-edit-actions button {
+  font-family: inherit; font-size: 11px; cursor: pointer; background: none; border: none;
+  color: var(--accent, #4f8cff); padding: 0;
+}
+.rp-mem-edit-actions button:hover { text-decoration: underline; }
 .rp-artifact {
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 8px; border-radius: 8px;

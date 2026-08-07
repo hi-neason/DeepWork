@@ -43,6 +43,7 @@ import {
 } from "../tools/control";
 import { annotateRisk } from "../tools/registry";
 import { loadSettings } from "../storage/settings";
+import { addMemory, searchMemories } from "../storage/memories";
 import { touchSession } from "../storage/sessions";
 import { WEB_TOOLS } from "../tools/web";
 import { createTodosTool } from "../tools/todos";
@@ -551,6 +552,8 @@ export class AgentManager {
       ...(result.firstTokenMs !== undefined ? { firstTokenMs: result.firstTokenMs } : {}),
       ...(result.finishReason ? { finishReason: result.finishReason } : {}),
     };
+    // Background memory extraction (non-blocking) when enabled.
+    this.maybeExtractMemory(sessionId, userText, ws);
     // Unlock the input immediately after the turn finishes.
     yield { type: "turn_completed" };
     logger.info(
@@ -575,6 +578,67 @@ export class AgentManager {
     if (artifacts.length) yield { type: "artifacts_updated", artifacts };
     // The title is generated in parallel and pushed independently of the turn
     // event stream — nothing to do here.
+  }
+
+  /**
+   * Fire-and-forget memory extraction after a turn (only when autoExtract is on).
+   * Never blocks the reply; failures are logged and swallowed.
+   */
+  private maybeExtractMemory(sessionId: string, userText: string, ws?: string): void {
+    const settings = loadSettings();
+    if (!settings.memory.autoExtract) return;
+    const scopeKey = ws || settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
+    void this.runMemoryExtraction(sessionId, userText, scopeKey);
+  }
+
+  /**
+   * AUDN-style extraction: distill durable facts from the user's message, then
+   * skip any candidate that already has a near-identical active memory (the
+   * Noop branch). Add/Update/Delete resolution is delegated to the model in a
+   * later stage; MVP keeps it to deduplicated Add.
+   */
+  private async runMemoryExtraction(
+    sessionId: string,
+    userText: string,
+    scopeKey: string,
+  ): Promise<void> {
+    try {
+      const settings = loadSettings();
+      const model = createChatModel(settings.model);
+      const sys = `You distill durable, cross-session facts from a single user message.
+Output ONLY a JSON array (no prose) of objects: {"type":"preference|fact|event","content":"one concise sentence","importance":0..1}.
+Include only facts worth remembering long-term (user preferences, stable context, notable past events). If nothing, return [].
+Respond in the same language as the user.`;
+      const resp = await model.invoke([
+        { role: "system", content: sys },
+        { role: "user", content: userText },
+      ]);
+      const raw = (resp as { content?: unknown }).content;
+      const text = typeof raw === "string" ? raw : "";
+      const match = text.match(/\[[\s\S]*\]/);
+      if (!match) return;
+      const candidates = JSON.parse(match[0]) as Array<{
+        type?: "preference" | "fact" | "event";
+        content?: string;
+        importance?: number;
+      }>;
+      for (const c of candidates) {
+        if (!c.content || !c.content.trim()) continue;
+        // Dedup: skip if a near-identical active memory already exists.
+        const sim = await searchMemories(scopeKey, c.content, { topK: 3, threshold: 0.9 });
+        if (sim.length > 0) continue;
+        addMemory(c.content.trim(), scopeKey, {
+          type: c.type,
+          importance: typeof c.importance === "number" ? c.importance : 0.5,
+          source: `session:${sessionId}`,
+        });
+      }
+    } catch (err) {
+      logger.warn("memory", "extraction failed", {
+        session: sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**

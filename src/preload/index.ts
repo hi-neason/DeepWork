@@ -7,6 +7,7 @@ import type {
   DeepWorkEvent,
   HistoryItem,
   MemoryItem,
+  MemoryType,
   ModelConfig,
   ModelInfo,
   McpServerConfig,
@@ -145,8 +146,14 @@ const api = {
   },
   memories: {
     list: (): Promise<MemoryItem[]> => ipcRenderer.invoke("memories:list"),
-    add: (content: string): Promise<MemoryItem> =>
-      ipcRenderer.invoke("memories:add", content),
+    listByScope: (scopeKey: string, type?: MemoryType): Promise<MemoryItem[]> =>
+      ipcRenderer.invoke("memories:listByScope", scopeKey, type),
+    search: (scopeKey: string, query: string, topK?: number): Promise<MemoryItem[]> =>
+      ipcRenderer.invoke("memories:search", scopeKey, query, topK),
+    add: (content: string, type?: MemoryType, scopeKey?: string): Promise<MemoryItem> =>
+      ipcRenderer.invoke("memories:add", content, type, scopeKey),
+    edit: (id: string, content: string): Promise<void> =>
+      ipcRenderer.invoke("memories:edit", id, content),
     remove: (id: string): Promise<void> => ipcRenderer.invoke("memories:remove", id),
   },
   artifacts: {

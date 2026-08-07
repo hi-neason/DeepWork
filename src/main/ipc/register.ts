@@ -41,7 +41,7 @@ import {
   getApiKey,
   setApiKey,
 } from "../storage/settings";
-import { listAllMemories, addMemory, removeMemory } from "../storage/memories";
+import { listAllMemories, listMemoriesByScope, addMemory, removeMemory, searchMemories, editMemory } from "../storage/memories";
 import {
   listAutomations,
   createAutomation,
@@ -294,7 +294,16 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- memories ----
   ipcMain.handle("memories:list", () => listAllMemories());
-  ipcMain.handle("memories:add", (_e, content: string) => addMemory(content, ""));
+  ipcMain.handle("memories:listByScope", (_e, scopeKey: string, type?: string) =>
+    listMemoriesByScope(scopeKey, type as any),
+  );
+  ipcMain.handle("memories:search", (_e, scopeKey: string, query: string, topK?: number) =>
+    searchMemories(scopeKey, query, { topK }),
+  );
+  ipcMain.handle("memories:add", (_e, content: string, type?: string, scopeKey?: string) =>
+    addMemory(content, scopeKey ?? "", { type: type as any }),
+  );
+  ipcMain.handle("memories:edit", (_e, id: string, content: string) => editMemory(id, content));
   ipcMain.handle("memories:remove", (_e, id: string) => removeMemory(id));
 
   // ---- artifacts ----

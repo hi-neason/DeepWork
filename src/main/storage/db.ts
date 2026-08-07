@@ -103,6 +103,14 @@ function migrate(d: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_runs_automation ON automation_runs(automation_id);
   `);
 
+  // Memory subsystem columns (added for the semantic-memory MVP).
+  addColumn("memories", "embedding", "BLOB");
+  addColumn("memories", "type", "TEXT");
+  addColumn("memories", "importance", "REAL");
+  addColumn("memories", "status", "TEXT");
+  addColumn("memories", "invalid_at", "INTEGER");
+  addColumn("memories", "source", "TEXT");
+
   // Backfill columns on databases created by older builds.
   addColumn("sessions", "group_name", "TEXT NOT NULL DEFAULT '默认'");
   addColumn("sessions", "workspace_dir", "TEXT");
