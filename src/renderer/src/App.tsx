@@ -262,13 +262,21 @@ export function App(): React.ReactElement {
     if (settings?.language) void i18n.changeLanguage(settings.language);
   }, [settings?.language]);
 
+  // Keep a ref to the latest settings so the OS-theme watcher (registered once
+  // on mount) always re-applies the *current* appearance instead of the stale
+  // copy captured when the effect first ran (when `settings` was still null).
+  const settingsRef = useRef<AppSettings | null>(null);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
   useEffect(() => {
     void (async () => {
       await Promise.all([refreshSessions(), refreshSettings()]);
     })();
     const off = window.deepwork.updates.onStatus(setUpdateStatus);
     const offTheme = watchSystemTheme(() => {
-      if (settings) applyAppearance(settings);
+      if (settingsRef.current) applyAppearance(settingsRef.current);
     });
     void window.deepwork.updates.check();
     return () => {
@@ -599,7 +607,7 @@ export function App(): React.ReactElement {
           {terminalOpen ? (
             <TerminalErrorBoundary onClose={toggleTerminal}>
               <TerminalPanel
-                cwd={selectedSession?.rootDir}
+                cwd={selectedSession?.workspaceDir ?? settings?.model?.workspaceDir ?? ""}
                 onClose={toggleTerminal}
               />
             </TerminalErrorBoundary>

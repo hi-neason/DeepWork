@@ -256,21 +256,26 @@ export function Chat({
   const canRegenerate =
     !chat.streaming && chat.timeline.some((t) => t.kind === "msg" && t.role === "assistant");
 
+  // Group the timeline into render segments once per chat change instead of
+  // rebuilding it on every render (the render IIFE, history menu, and search
+  // all reuse this single memoized result).
+  const segments = useMemo(() => buildSegments(chat), [chat]);
+
   const historyItems = useMemo(() => {
     const items: { idx: number; content: string }[] = [];
-    buildSegments(chat).forEach((seg, idx) => {
+    segments.forEach((seg, idx) => {
       if (seg.kind === "msg" && seg.role === "user") {
         items.push({ idx, content: seg.content });
       }
     });
     return items;
-  }, [chat]);
+  }, [segments]);
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
     const items: { idx: number; content: string; role: "user" | "assistant" }[] = [];
-    buildSegments(chat).forEach((seg, idx) => {
+    segments.forEach((seg, idx) => {
       if (seg.kind === "msg") {
         if (seg.content.toLowerCase().includes(q)) {
           items.push({ idx, content: seg.content, role: seg.role });
@@ -285,7 +290,7 @@ export function Chat({
       }
     });
     return items;
-  }, [chat, searchQuery]);
+  }, [segments, searchQuery]);
 
   const scrollToSegment = (idx: number, closePanels = true): void => {
     const el = segmentRefs.current[idx];
@@ -497,7 +502,6 @@ export function Chat({
         ) : (
           <>
             {(() => {
-              const segments = buildSegments(chat);
               return segments.map((seg, i) => {
                 if (seg.kind === "msg") {
                   const isAssistant = seg.role === "assistant";
@@ -931,6 +935,9 @@ interface ActivityEntry {
   text?: string;
   // true while this specific entry is streaming (only the last thinking entry)
   live?: boolean;
+  // stable key for React reconciliation (timeline index for reasoning, tool id
+  // for commands) so rows keep their expand/collapse state across rebuilds.
+  key?: string;
 }
 
 type Segment =
@@ -982,10 +989,10 @@ function isActionMarker(content: string): boolean {
   const t = content.trim().toLowerCase();
   if (t.length === 0) return true;
   if (/[。！？.?!]/.test(t)) return false;
-  if (ACTION_MARKERS.has(t)) return true;
-  // Pure lowercase English word <= 12 chars is likely a tool intent.
-  if (/^[a-z]+$/.test(t) && t.length <= 12) return true;
-  return false;
+  // Only suppress exact known action verbs that leak from the tool-calling
+  // loop. We deliberately do NOT fall back to "any short lowercase word",
+  // which falsely hid normal short replies like "ok", "yes", "note", "fix".
+  return ACTION_MARKERS.has(t);
 }
 
 function buildSegments(chat: ChatState): Segment[] {
@@ -1038,11 +1045,11 @@ function buildSegments(chat: ChatState): Segment[] {
         stats: item.stats,
       });
     } else if (item.kind === "reasoning") {
-      pushActivity("thinking", { text: item.text });
+      pushActivity("thinking", { text: item.text, key: `r${i}` });
     } else {
       const t = chat.tools[item.id];
       if (!t || HIDDEN_TOOLS.has(t.name)) continue;
-      pushActivity("command", { tool: t });
+      pushActivity("command", { tool: t, key: `t${item.id}` });
     }
   }
   flush();
@@ -1052,14 +1059,16 @@ function buildSegments(chat: ChatState): Segment[] {
   }
   // Mark the last thinking entry as live while the turn is still streaming and
   // this is the tail group (so it shows "正在思考…" instead of a char count).
+  // Walk backward to find the tail thinking group rather than only checking the
+  // final segment (which may be a trailing assistant message).
   if (chat.streaming) {
     for (let i = segments.length - 1; i >= 0; i--) {
       const seg = segments[i];
       if (seg.kind === "activity" && seg.variant === "thinking" && seg.isLast) {
         const last = seg.entries[seg.entries.length - 1];
         if (last) last.live = true;
+        break;
       }
-      break;
     }
   }
   return segments;
@@ -1135,7 +1144,7 @@ function ActivityGroup({
         <div className="steps-body">
           {entries.map((entry, i) => (
             <ActivityRow
-              key={i}
+              key={entry.key ?? i}
               variant={variant}
               entry={entry}
             />
