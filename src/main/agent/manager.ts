@@ -450,9 +450,12 @@ export class AgentManager {
       if (s) {
         const picked = hasPickedWorkspace(s.workspaceDir);
         const root = sessionRootDir(s.id, s.workspaceDir);
-        const outputDir = picked
-          ? sessionArtifactsDir(s.id, s.workspaceDir!)
-          : root;
+        // Deliverables always land in the per-session output drawer so each
+        // chat's artifacts stay isolated — inside the project for picked
+        // folders, and under ~/DeepWork/workspace/.deepwork for the default
+        // workspace. (Using the shared default workspace as outputDir would
+        // make every session show the same artifacts.)
+        const outputDir = sessionArtifactsDir(s.id, s.workspaceDir!);
         this.setSessionRoot(sessionId, root, outputDir, picked);
       }
     }
@@ -1090,8 +1093,10 @@ Respond in the same language as the user.`;
       // in the whole project tree (which would include source/node_modules).
       root = sessionArtifactsDir(sessionId, s.workspaceDir!);
     } else {
-      // Default isolated session: the cwd/root IS the artifacts folder.
-      root = this.sessionWorkspace.get(sessionId) || s?.rootDir;
+      // Default isolated session: deliverables live in the per-session output
+      // drawer (DEFAULT_WORKSPACE_DIR/.deepwork/sessions/<id>), NOT the shared
+      // default workspace, so each chat's artifacts stay isolated.
+      root = sessionArtifactsDir(sessionId, s?.workspaceDir);
     }
     if (!root) {
       const settings = loadSettings();
