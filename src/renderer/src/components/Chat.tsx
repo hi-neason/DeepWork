@@ -1,4 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+
+/** Brand label shown above assistant messages (replaces plain "AI" text). */
+function DeepWorkLabel() {
+  return (
+    <span className="role-deepwork">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L18 3.06l-2.94-2.94a1.21 1.21 0 0 0-1.72 0l-1.28 1.28a1.2 1.2 0 0 0 0 1.72L14.06 6l-9.7 9.7a1 1 0 0 0-.29.71V19a1 1 0 0 0 1 1h2.59a1 1 0 0 0 .71-.29L18 11.36l2.92 2.92a1.2 1.2 0 0 0 1.72 0Z"/>
+        <path d="M14 6l-4 4"/>
+        <path d="m5 20 4-4"/>
+      </svg>
+      DeepWork
+    </span>
+  );
+}
 import type { ChatState } from "../App";
 import type {
   ArtifactFile,
@@ -412,7 +426,7 @@ export function Chat({
                               }}
                             >
                               <span className={`search-result-role ${item.role}`}>
-                                {item.role === "user" ? t("chat.roleUser") : t("chat.roleAI")}
+                                {item.role === "user" ? t("chat.roleUser") : <DeepWorkLabel />}
                               </span>
                               <span className="search-result-text">{item.content}</span>
                             </div>
@@ -507,7 +521,7 @@ export function Chat({
                   const isAssistant = seg.role === "assistant";
                   return (
                     <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
-                      <div className="role">{seg.role === "user" ? t("chat.roleUser") : t("chat.roleAI")}</div>
+                      <div className="role">{seg.role === "user" ? t("chat.roleUser") : <DeepWorkLabel />}</div>
                       <div className="bubble">
                         {isAssistant ? <Markdown content={seg.content} /> : seg.content}
                       </div>
@@ -826,7 +840,7 @@ function ThinkingIndicator({ chat }: { chat: ChatState }): React.ReactElement | 
   if (hasAssistantText || hasVisibleTool) return null;
   return (
     <div className="msg assistant">
-      <div className="role">{t("chat.roleAI")}</div>
+      <div className="role"><DeepWorkLabel /></div>
       <div className="bubble thinking">
         <span className="thinking-dots">
           <span />

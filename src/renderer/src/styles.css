@@ -339,6 +339,16 @@ body,
 .msg.user .role {
   display: none;
 }
+.role-deepwork {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.role-deepwork svg {
+  flex-shrink: 0;
+}
 .bubble {
   background: var(--bg-elev);
   border: 1px solid var(--border);
