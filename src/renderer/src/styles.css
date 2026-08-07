@@ -1546,7 +1546,23 @@ body,
 .mcp-edit {
   border-top: 1px solid var(--border);
   padding: 12px;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.mcp-edit-head {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.mcp-edit-title {
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.mcp-edit-hint {
+  font-size: 12px; color: var(--text-dim); margin: 0;
+}
+.mcp-json-text {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 10px 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px; line-height: 1.5; resize: vertical;
 }
 .mcp-footer { display: flex; gap: 8px; margin-top: 12px; }
 .mcp-import {
