@@ -249,7 +249,17 @@ export class AgentManager {
     const dbPath = path.join(APP_DATA_DIR, "checkpoints.db");
     this.checkpointer = SqliteSaver.fromConnString(dbPath);
 
-    const mcpTools = await this.mcp.buildTools(settings.mcpServers);
+    // MCP build must never block agent startup or chat-history loading.
+    // A bad server config degrades to "no MCP tools" rather than a thrown error.
+    let mcpTools: StructuredToolInterface[] = [];
+    try {
+      mcpTools = await this.mcp.buildTools(settings.mcpServers);
+    } catch (err) {
+      logger.error("agent", "mcp_build_failed", {
+        error: err instanceof Error ? err.message : err,
+      });
+      mcpTools = [];
+    }
 
     // Default workspace lives under ~/DeepWork/workspace, but a session may
     // override it with any folder chosen in the new-task picker.
