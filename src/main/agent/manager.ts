@@ -1103,7 +1103,18 @@ Respond in the same language as the user.`;
 
   private scanArtifacts(root: string): ArtifactFile[] {
     const out: ArtifactFile[] = [];
-    const skip = new Set(["node_modules", ".git", ".venv", "dist", "build", "out", "__pycache__"]);
+    const skipDirs = new Set(["node_modules", ".git", ".venv", "dist", "build", "out", "__pycache__"]);
+    // Internal / transient files that are not user-facing artifacts.
+    const skipFiles = new Set([
+      "deepwork.log",
+      // Model call trace dumps (raw request/response text).
+    ]);
+    const skipExt = new Set(["log"]);
+    const isInternal = (name: string): boolean => {
+      if (skipFiles.has(name)) return true;
+      if (name.startsWith("call_") && name.endsWith(".txt")) return true;
+      return false;
+    };
     const walk = (dir: string, depth: number): void => {
       if (depth > 3 || out.length > 300) return;
       let entries: fs.Dirent[];
@@ -1113,11 +1124,11 @@ Respond in the same language as the user.`;
         return;
       }
       for (const e of entries) {
-        if (skip.has(e.name) || e.name.startsWith(".")) continue;
+        if (skipDirs.has(e.name) || e.name.startsWith(".")) continue;
         const full = path.join(dir, e.name);
         if (e.isDirectory()) {
           walk(full, depth + 1);
-        } else if (e.isFile()) {
+        } else if (e.isFile() && !isInternal(e.name) && !skipExt.has(path.extname(e.name).replace(".", ""))) {
           let st: fs.Stats;
           try {
             st = fs.statSync(full);
