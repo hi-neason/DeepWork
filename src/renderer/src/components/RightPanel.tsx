@@ -142,13 +142,17 @@ export function RightPanel({
   // Auto-collapse the progress section when there are no steps.
   const hasTasks = todos.length > 0;
   const hasArtifacts = artifacts.length > 0;
+  const hasSession = !!sessionId;
 
   return (
     <aside className="right-panel">
       <div className="rp-topbar">
         <span className="rp-title">{t("rightPanel.title")}</span>
+        {onClose && (
+          <button className="rp-close" onClick={onClose} title={t("close")}>✕</button>
+        )}
       </div>
-      {hasTasks && (
+      {hasSession && hasTasks && (
         <section className="rp-section">
           <button
             className="rp-head"
@@ -177,6 +181,7 @@ export function RightPanel({
         </section>
       )}
 
+      {hasSession && (
       <section className="rp-section">
         <button
           className="rp-head"
@@ -243,6 +248,7 @@ export function RightPanel({
           </>
         )}
       </section>
+      )}
 
       <section className="rp-section">
         <button

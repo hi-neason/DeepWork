@@ -527,7 +527,7 @@ export function App(): React.ReactElement {
   }
 
   const showRight =
-    view === "chat" && !rightCollapsed && (!!sessionId || terminalOpen);
+    view === "chat" && !rightCollapsed;
   // Narrow the pending approval event for the inline banner (null when none/other type).
   const approvalRequest =
     approval && approval.type === "approval_requested" ? approval : null;
