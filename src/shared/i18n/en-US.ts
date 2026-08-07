@@ -62,6 +62,7 @@ const enUS = {
     title: "Settings",
     close: "Close",
     saved: "Saved",
+    wip: "WIP",
     tabs: {
       general: "General",
       models: "Models",

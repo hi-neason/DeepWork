@@ -60,6 +60,7 @@ const zhCN = {
     title: "设置",
     close: "关闭",
     saved: "已保存",
+    wip: "WIP",
     tabs: {
       general: "通用",
       models: "模型",

@@ -1911,6 +1911,18 @@ body,
 }
 .settings-nav-item:hover { background: var(--bg-elev2); color: var(--text); }
 .settings-nav-item.active { background: var(--bg-elev2); color: var(--text); }
+.wip-badge {
+  margin-left: auto;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(214, 158, 46, 0.16);
+  color: #c9962e;
+  border: 1px solid rgba(214, 158, 46, 0.35);
+  font-weight: 600;
+}
 .settings-content {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
 }

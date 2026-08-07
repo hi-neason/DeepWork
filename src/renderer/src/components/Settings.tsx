@@ -20,13 +20,13 @@ interface Props {
   onSaved?: () => void;
 }
 
-const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string }> = [
+const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string; wip?: boolean }> = [
   { id: "general", labelKey: "settings.tabs.general", icon: "⚙" },
   { id: "models", labelKey: "settings.tabs.models", icon: "◇" },
-  { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠" },
+  { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠", wip: true },
   { id: "skills", labelKey: "settings.tabs.skills", icon: "✨" },
   { id: "connectors", labelKey: "settings.tabs.connectors", icon: "🧩" },
-  { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰" },
+  { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰", wip: true },
   { id: "about", labelKey: "settings.tabs.about", icon: "ⓘ" },
 ];
 
@@ -111,6 +111,7 @@ export function Settings({
           >
             <span className="nav-icon">{tdef.icon}</span>
             {t(tdef.labelKey)}
+            {tdef.wip && <span className="wip-badge">{t("settings.wip")}</span>}
           </button>
         ))}
       </aside>
