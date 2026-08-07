@@ -34,8 +34,18 @@ class TerminalManager {
     // removed by Homebrew (e.g. _brew_services) and emit "no such file" errors
     // on the first line. A clean rebuild scans the current fpath and skips them.
     env.ZSH_COMPDUMP = path.join(os.tmpdir(), `deepwork-zcompdump-${id}`);
-    const dir =
-      cwd && fs.existsSync(cwd) ? cwd : process.env.HOME || process.cwd();
+    // Ensure the requested directory exists so the terminal always opens where
+    // intended (e.g. a per-session scratch folder) instead of silently falling
+    // back to the user's home when the path has not been created yet.
+    let dir: string = process.env.HOME || process.cwd();
+    if (cwd && cwd.trim()) {
+      try {
+        fs.mkdirSync(cwd, { recursive: true });
+      } catch {
+        // Fall through to the home fallback below if creation fails.
+      }
+      if (fs.existsSync(cwd)) dir = cwd;
+    }
     const term = ptySpawn(shell, [], {
       name: "xterm-256color",
       cols: 80,

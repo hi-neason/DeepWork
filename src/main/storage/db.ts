@@ -51,6 +51,7 @@ function migrate(d: Database.Database): void {
       group_name TEXT NOT NULL DEFAULT '默认',
       workspace_dir TEXT,
       root_dir TEXT,
+      terminal_cwd TEXT,
       model TEXT
     );
 
@@ -115,6 +116,7 @@ function migrate(d: Database.Database): void {
   addColumn("sessions", "group_name", "TEXT NOT NULL DEFAULT '默认'");
   addColumn("sessions", "workspace_dir", "TEXT");
   addColumn("sessions", "root_dir", "TEXT");
+  addColumn("sessions", "terminal_cwd", "TEXT");
   addColumn("sessions", "model", "TEXT");
 
   // Migration: older builds created each session's working folder directly at

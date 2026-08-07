@@ -206,6 +206,10 @@ export interface Session {
   workspaceDir?: string;
   /** Per-session working directory: <workspaceDir>/<sessionId>. */
   rootDir?: string;
+  /** Working directory for the embedded terminal: the chosen project folder
+   * when one is picked, otherwise the isolated per-session folder
+   * ~/DeepWork/workspace/sessions/<sessionId>. */
+  terminalCwd?: string;
   /** Per-session model override (provider:model or just model id). */
   model?: string;
 }

@@ -7,6 +7,7 @@ import {
   DEFAULT_WORKSPACE_DIR,
   sessionRootDir,
   sessionArtifactsDir,
+  hasPickedWorkspace,
 } from "../config/paths";
 import { logger } from "../log/logger";
 
@@ -39,8 +40,20 @@ function rowToSession(r: SessionRow): Session {
     group: r.group_name || groupForWorkspace(r.workspace_dir),
     workspaceDir: r.workspace_dir ?? undefined,
     rootDir: r.root_dir ?? undefined,
+    terminalCwd: terminalCwdFor(r.id, r.workspace_dir),
     model: r.model ?? undefined,
   };
+}
+
+/**
+ * Resolve the terminal's working directory. When a real project folder was
+ * picked we open the terminal there; otherwise we fall back to the isolated
+ * per-session folder ~/DeepWork/workspace/sessions/<sessionId> so each chat has
+ * its own scratch space instead of the shared DeepWork internal directory.
+ */
+function terminalCwdFor(id: string, workspaceDir?: string | null): string {
+  if (hasPickedWorkspace(workspaceDir)) return workspaceDir as string;
+  return sessionRootDir(id);
 }
 
 export function listSessions(): Session[] {
@@ -92,6 +105,7 @@ export function createSession(
     group,
     workspaceDir: base,
     rootDir,
+    terminalCwd: terminalCwdFor(id, base),
     model: model || undefined,
   };
   getDb()
@@ -146,6 +160,7 @@ export function setSessionWorkspace(id: string, workspaceDir: string): void {
   const rootDir = sessionRootDir(id, base);
   const artifactsDir = sessionArtifactsDir(id, base);
   const group = groupForWorkspace(base);
+  const terminalCwd = terminalCwdFor(id, base);
   try {
     fs.mkdirSync(artifactsDir, { recursive: true });
   } catch (err) {
@@ -153,9 +168,9 @@ export function setSessionWorkspace(id: string, workspaceDir: string): void {
   }
   getDb()
     .prepare(
-      "UPDATE sessions SET workspace_dir = ?, root_dir = ?, group_name = ?, updated_at = ? WHERE id = ?",
+      "UPDATE sessions SET workspace_dir = ?, root_dir = ?, terminal_cwd = ?, group_name = ?, updated_at = ? WHERE id = ?",
     )
-    .run(base, rootDir, group, Date.now(), id);
+    .run(base, rootDir, terminalCwd, group, Date.now(), id);
   ensureGroup(group);
 }
 

@@ -607,7 +607,7 @@ export function App(): React.ReactElement {
           {terminalOpen ? (
             <TerminalErrorBoundary onClose={toggleTerminal}>
               <TerminalPanel
-                cwd={selectedSession?.workspaceDir ?? settings?.model?.workspaceDir ?? ""}
+                cwd={selectedSession?.terminalCwd ?? settings?.model?.workspaceDir ?? ""}
                 onClose={toggleTerminal}
               />
             </TerminalErrorBoundary>
