@@ -93,9 +93,13 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
   };
 
   const addMcp = (): void => {
+    const used = new Set(servers.map((s) => s.label));
+    let label = "my-server";
+    let n = 2;
+    while (used.has(label)) label = `my-server-${n++}`;
     const srv: McpServerConfig = {
       id: `mcp-${Date.now()}`,
-      label: "my-server",
+      label,
       transport: "stdio",
       command: "",
       args: [],
@@ -117,9 +121,18 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
     if (editText === lastAppliedRef.current) return;
     try {
       const parsed = parseServerJson(editText);
+      const trimmedName = parsed.name.trim();
+      if (!trimmedName) {
+        setEditError(t("connectors.nameEmpty"));
+        return;
+      }
+      if (servers.some((s) => s.id !== editingId && s.label === trimmedName)) {
+        setEditError(t("connectors.nameDuplicate", { name: trimmedName }));
+        return;
+      }
       const transport: McpServerConfig["transport"] = parsed.url ? "sse" : "stdio";
       const patch: Partial<McpServerConfig> = {
-        label: parsed.name,
+        label: trimmedName,
         transport,
         enabled: parsed.enabled,
         command: transport === "stdio" ? (parsed.command ?? "") : undefined,
@@ -173,6 +186,16 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
           enabled: true,
         };
       });
+      // Reject the whole batch if any name collides with an existing or
+      // within-batch server — keeps labels unique across the list.
+      const used = new Set(servers.map((s) => s.label));
+      for (const s of imported) {
+        if (used.has(s.label)) {
+          setImportMsg({ kind: "err", text: t("connectors.importDuplicate", { name: s.label }) });
+          return;
+        }
+        used.add(s.label);
+      }
       onChange({ mcpServers: [...servers, ...imported] });
       setImportMsg({ kind: "ok", text: t("connectors.importSuccess", { count: imported.length }) });
       setImportText("");
