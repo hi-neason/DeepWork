@@ -46,6 +46,8 @@ export function MemoryTab(): React.ReactElement {
           <code className="um-path-value">{memoryPath}</code>
         </div>
 
+        <h3 className="um-heading">{t("settings.memory.heading")}</h3>
+
         <p className="setting-hint um-edit-hint">{t("settings.memory.editHint")}</p>
 
         <textarea

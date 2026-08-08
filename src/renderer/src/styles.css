@@ -1574,6 +1574,9 @@ body,
   text-overflow: ellipsis; white-space: nowrap;
 }
 .um-edit-hint { margin: 0 0 12px; font-size: 12.5px; line-height: 1.6; }
+.um-heading {
+  margin: 18px 0 8px; font-size: 15px; font-weight: 600; color: var(--text);
+}
 .um-editor {
   width: 100%; min-height: 100px;
   background: var(--bg); border: 1px solid var(--border);

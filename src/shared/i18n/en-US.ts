@@ -83,6 +83,7 @@ const enUS = {
       title: "Memory",
       desc: "Let DeepWork remember your preferences and habits. The more you chat, the better it understands you. Memory content follows the WorkBuddy privacy policy — visible only to you.",
       fileLabel: "File location",
+      heading: "Personal Memory",
       editHint: "Edit this Markdown file directly. Organize it into four blocks: Personal Background / Work Style / Recent Focus / Recent Updates (auto-extracted content is appended to \"Recent Updates\").",
       saved: "Saved",
     },

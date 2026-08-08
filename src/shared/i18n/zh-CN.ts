@@ -81,6 +81,7 @@ const zhCN = {
       title: "记忆",
       desc: "记忆让 DeepWork 记住你的偏好和习惯，对话越多，它越懂你。记忆内容遵循 WorkBuddy 隐私政策，仅你本人可见。",
       fileLabel: "文件位置",
+      heading: "个人记忆",
       editHint: "直接编辑这个 Markdown 文件。建议按四个区块组织：个人背景 / 工作思路 / 近期关注 / 近期动态（自动抽取的内容会追加到「近期动态」）。",
       saved: "已保存",
     },
