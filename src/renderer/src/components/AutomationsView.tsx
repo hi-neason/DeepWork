@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   Automation,
@@ -213,7 +213,18 @@ export function AutomationsView(): React.ReactElement {
   const save = async (): Promise<void> => {
     const title = form.title.trim();
     const instructions = form.instructions.trim();
-    if (!title || !instructions) return;
+    if (!title || !instructions) {
+      window.alert(t("automations.formIncomplete"));
+      return;
+    }
+    if (form.scheduleType === "cron" && !form.cron.trim()) {
+      window.alert(t("automations.cronRequired"));
+      return;
+    }
+    if (form.scheduleType === "weekly" && form.days.length === 0) {
+      window.alert(t("automations.weekdaysRequired"));
+      return;
+    }
     setBusy(true);
     const payload: Omit<Automation, "id" | "createdAt" | "updatedAt" | "enabled" | "lastRunAt" | "lastStatus"> = {
       title,
@@ -235,6 +246,11 @@ export function AutomationsView(): React.ReactElement {
       }
       closeForm();
       await refresh();
+    } catch (err) {
+      console.error("automation save failed", err);
+      window.alert(
+        `${t("automations.saveError")}\n${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -281,13 +297,6 @@ export function AutomationsView(): React.ReactElement {
       return { ...f, mcpServerIds: ids };
     });
   };
-
-  const formValid = useMemo(() => {
-    if (!form.title.trim() || !form.instructions.trim()) return false;
-    if (form.scheduleType === "cron" && !form.cron.trim()) return false;
-    if (form.scheduleType === "weekly" && form.days.length === 0) return false;
-    return true;
-  }, [form]);
 
   const scheduleTabs: { key: ScheduleType; label: string }[] = [
     { key: "daily", label: t("automations.tab.daily") },
@@ -361,11 +370,11 @@ export function AutomationsView(): React.ReactElement {
               <span>{editingId ? t("automations.editTitle") : t("automations.createTitle")}</span>
             </div>
             <div className="auto-form-actions">
-              <button className="btn" onClick={closeForm} disabled={busy}>
+              <button type="button" className="btn" onClick={closeForm} disabled={busy}>
                 {t("common.cancel")}
               </button>
-              <button className="btn primary" onClick={save} disabled={busy || !formValid}>
-                {t("common.save")}
+              <button type="button" className="btn primary" onClick={save} disabled={busy}>
+                {busy ? t("automations.saving") : t("common.save")}
               </button>
             </div>
           </div>
