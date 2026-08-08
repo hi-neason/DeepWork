@@ -12,6 +12,7 @@ import type {
   ModelConfig,
   ModelInfo,
   McpServerConfig,
+  McpServerStatus,
   PermissionMode,
   ProviderKind,
   Session,
@@ -72,6 +73,10 @@ const api = {
     export: (name: string, targetDir: string): Promise<string> =>
       ipcRenderer.invoke("skills:export", name, targetDir),
     rebuild: (): Promise<void> => ipcRenderer.invoke("skills:rebuild"),
+  },
+  mcp: {
+    /** Per-server connection outcomes from the last agent build. */
+    status: (): Promise<McpServerStatus[]> => ipcRenderer.invoke("mcp:status"),
   },
   settings: {
     get: (): Promise<Settings> => ipcRenderer.invoke("settings:get"),

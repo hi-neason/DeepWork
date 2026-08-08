@@ -101,7 +101,7 @@ function UserMemoryEditor(): React.ReactElement {
             {t("common.save")}
           </button>
           <button className="btn" onClick={reset} disabled={saving || !dirty}>
-            {t("rightPanel.cancel")}
+            {t("common.cancel")}
           </button>
           {savedAt && !dirty && (
             <span className="um-saved">

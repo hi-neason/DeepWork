@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { McpServerConfig, Settings as SettingsType } from "../../../shared/types";
+import type { McpServerConfig, McpServerStatus, Settings as SettingsType } from "../../../shared/types";
 
 interface Props {
   settings: SettingsType;
@@ -70,6 +70,27 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
   const [importMsg, setImportMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // Per-server connection outcomes from the last agent build. Loaded on mount
+  // and refreshed whenever the server list changes (the agent rebuilds on
+  // settings save), so connection failures are visible instead of silent
+  // (M-存储⑤).
+  const [statuses, setStatuses] = useState<Record<string, McpServerStatus>>({});
+  const reloadStatus = (): void => {
+    void window.deepwork.mcp
+      .status()
+      .then((list) => {
+        const map: Record<string, McpServerStatus> = {};
+        for (const s of list) map[s.id] = s;
+        setStatuses(map);
+      })
+      .catch(() => setStatuses({}));
+  };
+  useEffect(() => {
+    reloadStatus();
+    // The shape of the server list is the thing that changes the build outcome.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servers.length, servers.map((s) => `${s.id}:${s.enabled}`).join("|")]);
 
   const updateMcp = (id: string, patch: Partial<McpServerConfig>): void => {
     onChange({
@@ -217,8 +238,10 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
 
         {servers.map((m) => {
           const expanded = editingId === m.id;
+          const st = statuses[m.id];
+          const failed = m.enabled && st && !st.ok;
           return (
-            <div key={m.id} className={`mcp-item ${expanded ? "expanded" : ""}`}>
+            <div key={m.id} className={`mcp-item ${expanded ? "expanded" : ""} ${failed ? "has-error" : ""}`}>
               <div className="mcp-row">
                 <button
                   type="button"
@@ -234,6 +257,11 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
                 <div className="mcp-main" onClick={() => (expanded ? closeEdit() : startEdit(m.id))}>
                   <div className="mcp-name">{m.label || t("connectors.untitled")}</div>
                   <div className="mcp-sub">{subtitle(m) || t("connectors.notConfigured")}</div>
+                  {failed && (
+                    <div className="mcp-error" title={st?.error}>
+                      {t("connectors.connectionFailed")}: {st?.error}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mcp-actions">

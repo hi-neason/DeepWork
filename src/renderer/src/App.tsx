@@ -53,17 +53,16 @@ type Action =
   | { type: "event"; event: DeepWorkEvent }
   | { type: "history"; timeline: HistoryItem[] }
   | { type: "reset_to_user" }
-  | { type: "reset" };
+  | { type: "reset" }
+  | { type: "set_error"; message: string };
 
 function reducer(state: ChatState, action: Action): ChatState {
   if (action.type === "reset") return { ...initialChat };
   if (action.type === "reset_to_user") {
     const timeline = [...state.timeline];
-    while (
-      timeline.length > 0 &&
-      !(timeline[timeline.length - 1].kind === "msg" &&
-        (timeline[timeline.length - 1] as any).role === "user")
-    ) {
+    while (timeline.length > 0) {
+      const last = timeline[timeline.length - 1];
+      if (last.kind === "msg" && last.role === "user") break;
       timeline.pop();
     }
     return { ...state, timeline, tools: {}, streaming: true, error: undefined };
@@ -104,6 +103,9 @@ function reducer(state: ChatState, action: Action): ChatState {
       streaming: true,
       error: undefined,
     };
+  }
+  if (action.type === "set_error") {
+    return { ...state, streaming: false, error: action.message };
   }
   const e = action.event;
   switch (e.type) {
@@ -446,33 +448,40 @@ export function App(): React.ReactElement {
     mode?: PermissionMode,
   ): Promise<void> => {
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
-    let sid = sessionId;
-    if (!sid) {
-      const s = await window.deepwork.sessions.create(
-        undefined,
-        workspaceDir,
-        modelId,
-      );
-      await refreshSessions();
-      setSessionId(s.id);
-      // Update the ref synchronously so the onAnyEvent listener already filters
-      // for this session by the time chat.send starts emitting.
-      sessionIdRef.current = s.id;
-      sid = s.id;
-    } else if (modelId) {
-      // A session's workspace folder is fixed once created; only the model can
-      // still be switched mid-session.
-      await window.deepwork.sessions.setModel(sid, modelId);
-      await refreshSessions();
+    try {
+      let sid = sessionId;
+      if (!sid) {
+        const s = await window.deepwork.sessions.create(
+          undefined,
+          workspaceDir,
+          modelId,
+        );
+        await refreshSessions();
+        setSessionId(s.id);
+        // Update the ref synchronously so the onAnyEvent listener already filters
+        // for this session by the time chat.send starts emitting.
+        sessionIdRef.current = s.id;
+        sid = s.id;
+      } else if (modelId) {
+        // A session's workspace folder is fixed once created; only the model can
+        // still be switched mid-session.
+        await window.deepwork.sessions.setModel(sid, modelId);
+        await refreshSessions();
+      }
+      dispatch({ type: "user", text });
+      const atts = attachments && attachments.length > 0
+        ? await Promise.all(attachments.map(fileToAttachment))
+        : undefined;
+      await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId, mode);
+      // Guarantee the right panel reflects produced files even if a streamed
+      // event was missed during the new-session handoff.
+      setArtifacts(await window.deepwork.artifacts.list(sid));
+    } catch (err) {
+      dispatch({
+        type: "set_error",
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
-    dispatch({ type: "user", text });
-    const atts = attachments && attachments.length > 0
-      ? await Promise.all(attachments.map(fileToAttachment))
-      : undefined;
-    await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId, mode);
-    // Guarantee the right panel reflects produced files even if a streamed
-    // event was missed during the new-session handoff.
-    setArtifacts(await window.deepwork.artifacts.list(sid));
   };
 
   const setSessionModel = async (modelId: string): Promise<void> => {
@@ -488,8 +497,15 @@ export function App(): React.ReactElement {
 
   const regenerate = async (): Promise<void> => {
     if (!sessionId) return;
-    dispatch({ type: "reset_to_user" });
-    await window.deepwork.chat.regenerate(sessionId);
+    try {
+      dispatch({ type: "reset_to_user" });
+      await window.deepwork.chat.regenerate(sessionId);
+    } catch (err) {
+      dispatch({
+        type: "set_error",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   const respondApproval = async (decision: "allow" | "deny" | "always_allow"): Promise<void> => {

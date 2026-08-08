@@ -24,7 +24,7 @@ import type {
   TurnStats,
   UpdateStatus,
 } from "../../../shared/types";
-import { useTranslation } from "react-i18next";
+import { useTranslation, Trans } from "react-i18next";
 import { CommitRunner } from "./CommitRunner";
 import i18n from "../i18n";
 import { Markdown } from "./Markdown";
@@ -545,7 +545,7 @@ export function Chat({
                 if (seg.kind === "msg") {
                   const isAssistant = seg.role === "assistant";
                   return (
-                    <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
+                    <div key={seg.id} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
                       <div className="role">{seg.role === "user" ? t("chat.roleUser") : <DeepWorkLabel />}</div>
                       <div className="bubble">
                         {isAssistant ? <Markdown content={seg.content} /> : seg.content}
@@ -567,7 +567,7 @@ export function Chat({
                 if (seg.kind === "activity") {
                   if (seg.variant === "thinking" && !showReasoning) return null;
                   return (
-                    <div key={i} ref={(el) => { segmentRefs.current[i] = el; }} className="activity-segment">
+                    <div key={seg.id} ref={(el) => { segmentRefs.current[i] = el; }} className="activity-segment">
                       <ActivityGroup
                         variant={seg.variant}
                         entries={seg.entries}
@@ -946,11 +946,22 @@ function ApprovalBanner({
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
         </span>
         <span className="approval-banner-title">
-          {t("chat.needApproval", { name: <b>{prettyToolName(approval.name)}</b> })}
+          <Trans
+            i18nKey="chat.needApproval"
+            components={{ b: <b /> }}
+            values={{ name: prettyToolName(approval.name) }}
+          />
           {isGui && <span className="approval-banner-gui">{t("chat.controlsScreen")}</span>}
         </span>
         <span className="approval-banner-scope">{approval.risk}</span>
       </div>
+      {approval.warning && (
+        <div className="approval-banner-warning">
+          {approval.warning === "screenshot_exfil"
+            ? t("chat.screenshotExfilWarning")
+            : approval.warning}
+        </div>
+      )}
       {hasArgs && (
         <>
           <button
@@ -1008,8 +1019,15 @@ interface ActivityEntry {
 }
 
 type Segment =
-  | { kind: "msg"; role: "user" | "assistant"; content: string; stats?: TurnStats }
   | {
+      id: string;
+      kind: "msg";
+      role: "user" | "assistant";
+      content: string;
+      stats?: TurnStats;
+    }
+  | {
+      id: string;
       kind: "activity";
       variant: "command" | "thinking";
       entries: ActivityEntry[];
@@ -1062,7 +1080,7 @@ function isActionMarker(content: string): boolean {
   return ACTION_MARKERS.has(t);
 }
 
-function buildSegments(chat: ChatState): Segment[] {
+export function buildSegments(chat: ChatState): Segment[] {
   const tailIndices: number[] = [];
   const segments: Segment[] = [];
   let bufferVariant: "command" | "thinking" | null = null;
@@ -1070,7 +1088,17 @@ function buildSegments(chat: ChatState): Segment[] {
   const flush = (): void => {
     if (buffer.length && bufferVariant) {
       tailIndices.push(segments.length);
-      segments.push({ kind: "activity", variant: bufferVariant, entries: buffer, isLast: false });
+      // Stable id from the first entry's key (r${timelineIndex} for thinking,
+      // t${toolCallId} for commands). Appending new entries to a streaming group
+      // keeps the first entry unchanged, so the group retains its id — and its
+      // collapsed/expanded state — across every token-driven rebuild.
+      segments.push({
+        id: `a-${buffer[0]?.key ?? segments.length}`,
+        kind: "activity",
+        variant: bufferVariant,
+        entries: buffer,
+        isLast: false,
+      });
       buffer = [];
       bufferVariant = null;
     }
@@ -1106,6 +1134,7 @@ function buildSegments(chat: ChatState): Segment[] {
       if (suppressed) continue;
       flush();
       segments.push({
+        id: `m-${i}`,
         kind: "msg",
         role: item.role,
         content: item.content,

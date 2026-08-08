@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ArtifactFile, TodoItem } from "../../../shared/types";
+import { formatBytes } from "../lib/format";
 
 interface Props {
   sessionId: string | null;
@@ -35,12 +36,6 @@ const ICONS: Record<string, string> = {
   sh: "⌨️",
   zip: "🗜",
 };
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function timeLabel(ms: number): string {
   const d = new Date(ms);
@@ -94,7 +89,7 @@ export function RightPanel({
       <div className="rp-topbar">
         <span className="rp-title">{t("rightPanel.title")}</span>
         {onClose && (
-          <button className="rp-close" onClick={onClose} title={t("close")}>✕</button>
+          <button className="rp-close" onClick={onClose} title={t("common.close")}>✕</button>
         )}
       </div>
       {hasSession && hasTasks && (
@@ -173,7 +168,7 @@ export function RightPanel({
                           {a.name}
                         </div>
                         <div className="rp-artifact-sub">
-                          {formatSize(a.size)} · {timeLabel(a.modifiedAt)}
+                          {formatBytes(a.size)} · {timeLabel(a.modifiedAt)}
                         </div>
                       </div>
                     </div>

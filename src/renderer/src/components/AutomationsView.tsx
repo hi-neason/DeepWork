@@ -7,48 +7,16 @@ import type {
   PermissionMode,
   ScheduleType,
 } from "../../../shared/types";
+import { basename, formatDate, formatTime, shortModelLabel } from "../lib/format";
 
-const WEEK_DAYS = [
-  { key: 0, label: "日" },
-  { key: 1, label: "一" },
-  { key: 2, label: "二" },
-  { key: 3, label: "三" },
-  { key: 4, label: "四" },
-  { key: 5, label: "五" },
-  { key: 6, label: "六" },
+const WEEK_DAY_KEYS = [0, 1, 2, 3, 4, 5, 6];
+
+const PRESET_CRONS: { labelKey: string; scheduleType: ScheduleType; cron: string }[] = [
+  { labelKey: "automations.preset.daily9", scheduleType: "cron", cron: "0 9 * * *" },
+  { labelKey: "automations.preset.weekday9", scheduleType: "cron", cron: "0 9 * * 1-5" },
+  { labelKey: "automations.preset.monday9", scheduleType: "cron", cron: "0 9 * * 1" },
+  { labelKey: "automations.preset.hourly", scheduleType: "cron", cron: "0 * * * *" },
 ];
-
-const PRESET_CRONS = [
-  { label: "每天 9:00", scheduleType: "cron" as ScheduleType, cron: "0 9 * * *" },
-  { label: "每个工作日 9:00", scheduleType: "cron" as ScheduleType, cron: "0 9 * * 1-5" },
-  { label: "每周一 9:00", scheduleType: "cron" as ScheduleType, cron: "0 9 * * 1" },
-  { label: "每小时", scheduleType: "cron" as ScheduleType, cron: "0 * * * *" },
-];
-
-function formatTime(d = new Date()): string {
-  const hh = d.getHours().toString().padStart(2, "0");
-  const mm = d.getMinutes().toString().padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
-function formatDate(d = new Date()): string {
-  const y = d.getFullYear();
-  const m = (d.getMonth() + 1).toString().padStart(2, "0");
-  const dd = d.getDate().toString().padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function basename(p?: string): string {
-  if (!p) return "";
-  const s = p.replace(/[/\\]+$/, "");
-  const idx = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
-  return s.slice(idx + 1) || s;
-}
-
-/** Strip the "provider:" prefix from a model id for compact display. */
-function shortModelLabel(id: string): string {
-  return id.includes(":") ? id.split(":").slice(1).join(":") : id;
-}
 
 function describeAutomation(a: Automation, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const cfg = a.scheduleConfig || {};
@@ -150,13 +118,18 @@ function formFromAutomation(a: Automation): FormState {
 }
 
 function buildScheduleConfig(f: FormState): AutomationScheduleConfig {
+  // Anchor recurring schedules to the timezone in which they were authored,
+  // so "every day at 09:00" stays at 09:00 even if the machine travels
+  // (M-存储①). One-shots store an absolute UTC instant and need no anchor.
+  const timezone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
   switch (f.scheduleType) {
     case "daily":
-      return { time: f.time };
+      return { time: f.time, timezone };
     case "weekly":
-      return { time: f.time, days: [...f.days].sort((a, b) => a - b) };
+      return { time: f.time, days: [...f.days].sort((a, b) => a - b), timezone };
     case "cron":
-      return { cron: f.cron.trim() };
+      return { cron: f.cron.trim(), timezone };
     case "once": {
       const dt = new Date(`${f.onceDate}T${f.onceTime}`);
       return { datetime: dt.toISOString() };
@@ -217,6 +190,19 @@ export function AutomationsView(): React.ReactElement {
       // ignore
     }
   };
+
+  // Close the editor/drawer on Escape (L-7). Ignore while a save is in flight
+  // so an in-progress submission isn't abandoned.
+  useEffect(() => {
+    if (!showForm) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape" && !busy) closeForm();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // closeForm is stable enough; depend on showForm/busy only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showForm, busy]);
 
   const openCreate = (): void => {
     setEditingId(null);
@@ -459,7 +445,7 @@ export function AutomationsView(): React.ReactElement {
                   <div className="auto-composer-chips">
                     {form.skills.map((name) => (
                       <span key={name} className="auto-composer-chip">
-                        <span className="auto-chip-kind">技能</span>
+                        <span className="auto-chip-kind">{t("automations.chipSkill")}</span>
                         <span className="auto-chip-name">{name}</span>
                         <button
                           type="button"
@@ -475,7 +461,7 @@ export function AutomationsView(): React.ReactElement {
                       const s = mcpServers.find((x) => x.id === id);
                       return (
                         <span key={id} className="auto-composer-chip">
-                          <span className="auto-chip-kind">MCP</span>
+                          <span className="auto-chip-kind">{t("automations.chipMcp")}</span>
                           <span className="auto-chip-name">{s?.label || id}</span>
                           <button
                             type="button"
@@ -734,14 +720,14 @@ export function AutomationsView(): React.ReactElement {
                   {form.scheduleType === "weekly" && (
                     <>
                       <div className="auto-weekdays">
-                        {WEEK_DAYS.map((d) => (
+                        {WEEK_DAY_KEYS.map((d) => (
                           <button
-                            key={d.key}
-                            className={`auto-weekday ${form.days.includes(d.key) ? "active" : ""}`}
-                            onClick={() => toggleDay(d.key)}
-                            title={t("automations.weekDay", { n: d.key })}
+                            key={d}
+                            className={`auto-weekday ${form.days.includes(d) ? "active" : ""}`}
+                            onClick={() => toggleDay(d)}
+                            title={t("automations.weekDay", { n: d })}
                           >
-                            {d.label}
+                            {t(`automations.weekdayNarrow.${d}`)}
                           </button>
                         ))}
                       </div>
@@ -771,7 +757,7 @@ export function AutomationsView(): React.ReactElement {
                             className="btn small"
                             onClick={() => setForm((f) => ({ ...f, scheduleType: "cron", cron: p.cron }))}
                           >
-                            {p.label}
+                            {t(p.labelKey)}
                           </button>
                         ))}
                       </div>
@@ -803,7 +789,7 @@ export function AutomationsView(): React.ReactElement {
                     type="date"
                     value={form.validFrom}
                     onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-                    placeholder={t("automations.validFrom")}
+                    aria-label={t("automations.validFrom")}
                   />
                   <span>→</span>
                   <input
@@ -811,7 +797,7 @@ export function AutomationsView(): React.ReactElement {
                     value={form.validUntil}
                     min={form.validFrom || undefined}
                     onChange={(e) => setForm((f) => ({ ...f, validUntil: e.target.value }))}
-                    placeholder={t("automations.validUntil")}
+                    aria-label={t("automations.validUntil")}
                   />
                 </div>
                 <p className="auto-field-hint">{t("automations.validityHint")}</p>

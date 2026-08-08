@@ -29,6 +29,7 @@ interface AutoRow {
   skills: string | null;
   mcp_server_ids: string | null;
   model: string | null;
+  last_fired_slot: number | null;
 }
 
 function parseScheduleConfig(json: string | null): AutomationScheduleConfig | undefined {
@@ -159,7 +160,7 @@ export function getAutomation(id: string): Automation | null {
 }
 
 export function createAutomation(
-  a: Omit<Automation, "id" | "createdAt" | "updatedAt" | "enabled">,
+  a: Omit<Automation, "id" | "createdAt" | "updatedAt">,
 ): Automation {
   const now = Date.now();
   const id = randomUUID();
@@ -171,7 +172,9 @@ export function createAutomation(
     instructions: a.instructions,
     schedule: a.schedule ?? (scheduleType === "cron" ? scheduleConfig.cron ?? "" : scheduleType),
     run_at: a.runAt ?? (scheduleType === "once" ? scheduleConfig.datetime ?? null : null),
-    enabled: 1,
+    // Honor the caller's enabled flag so a paused automation can be created
+    // paused (the renderer sends enabled:false when the toggle is off).
+    enabled: a.enabled ? 1 : 0,
     created_at: now,
     updated_at: now,
     last_run_at: null,
@@ -185,14 +188,15 @@ export function createAutomation(
     skills: a.skills ? JSON.stringify(a.skills) : null,
     mcp_server_ids: a.mcpServerIds ? JSON.stringify(a.mcpServerIds) : null,
     model: a.model ?? null,
+    last_fired_slot: null,
   };
   getDb()
     .prepare(
       `INSERT INTO automations (
         id, title, instructions, schedule, run_at, enabled, created_at, updated_at,
         workspace_dir, schedule_type, schedule_config, valid_from, valid_until,
-        permission_mode, skills, mcp_server_ids, model
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        permission_mode, skills, mcp_server_ids, model, last_fired_slot
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       row.id,
@@ -212,6 +216,7 @@ export function createAutomation(
       row.skills,
       row.mcp_server_ids,
       row.model,
+      row.last_fired_slot,
     );
   return rowToAutomation(row);
 }
@@ -268,6 +273,24 @@ export function markAutomationRun(
       `UPDATE automations SET last_run_at = ?, last_status = ?, updated_at = ? WHERE id = ?`,
     )
     .run(runAt, status, Date.now(), id);
+}
+
+/**
+ * Persist the scheduled slot (epoch ms) that already fired for an automation,
+ * so a scheduler restart inside the grace window cannot double-fire the same
+ * recurring slot (M-存储②).
+ */
+export function setLastFiredSlot(id: string, slot: number): void {
+  getDb()
+    .prepare(`UPDATE automations SET last_fired_slot = ? WHERE id = ?`)
+    .run(slot, id);
+}
+
+export function getLastFiredSlot(id: string): number | null {
+  const row = getDb()
+    .prepare(`SELECT last_fired_slot AS v FROM automations WHERE id = ?`)
+    .get(id) as { v: number | null } | undefined;
+  return row?.v ?? null;
 }
 
 // ---- runs ----

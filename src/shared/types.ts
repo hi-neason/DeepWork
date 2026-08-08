@@ -46,6 +46,15 @@ export interface McpServerConfig {
   enabled: boolean;
 }
 
+/** Per-server outcome of the last MCP build, surfaced to the Connectors UI. */
+export interface McpServerStatus {
+  id: string;
+  label: string;
+  ok: boolean;
+  error?: string;
+  toolCount?: number;
+}
+
 /** A file attached to a user message. Stored as a data URL in transit. */
 export interface Attachment {
   id: string;
@@ -122,6 +131,9 @@ export interface AutomationScheduleConfig {
   days?: number[];
   cron?: string;
   datetime?: string;
+  /** IANA timezone the wall-clock schedule is anchored to (e.g. "Asia/Shanghai").
+   *  When unset the scheduler uses the system local timezone. */
+  timezone?: string;
 }
 
 export interface AutomationRun {
@@ -311,6 +323,8 @@ export type DeepWorkEvent =
       name: string;
       risk: RiskLevel;
       argsPreview: string;
+      /** Short data-handling warning shown on the approval card (e.g. screenshot sends screen contents to the model). */
+      warning?: string;
     }
   | { type: "session_renamed"; title: string }
   | {

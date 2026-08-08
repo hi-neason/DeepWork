@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Skill, Settings as SettingsType } from "../../../shared/types";
+import { formatBytes } from "../lib/format";
 
 interface Props {
   settings: SettingsType;
@@ -34,6 +35,8 @@ export function SkillsView({ settings: _settings }: Props): React.ReactElement {
 
   // ---------- create ----------
   const startCreate = (): void => {
+    // Leaving the editor for the create panel: persist pending edits first.
+    if (dirtyRef.current) void flushSave();
     setCreating(true);
     setEditing(null);
   };
@@ -41,34 +44,59 @@ export function SkillsView({ settings: _settings }: Props): React.ReactElement {
   // ---------- update (auto-save) ----------
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirtyRef = useRef(false);
+  // Always holds the latest editing state so the debounced timer reads the
+  // current value rather than the stale closure from the render that scheduled
+  // it (which otherwise drops the last keystroke).
+  const editingRef = useRef<Skill | null>(null);
+  editingRef.current = editing;
+
+  const flushSave = useCallback(async (): Promise<void> => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const current = editingRef.current;
+    if (!current || !dirtyRef.current) return;
+    // Snapshot the skill name; if the editor closes mid-flight, editingRef
+    // becomes null and we must NOT call setEditing afterward (which would
+    // re-open the panel on the now-unmounted context).
+    try {
+      const s = await window.deepwork.skills.update(current.name, {
+        description: current.description,
+        body: current.body,
+        enabled: current.enabled,
+      });
+      dirtyRef.current = false;
+      if (editingRef.current && s) setEditing(s);
+      await refresh();
+      await applyRebuild();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1200);
+    } catch (err) {
+      console.error("Skill auto-save failed:", err);
+    }
+  }, [refresh, applyRebuild]);
 
   const patchEditing = (patch: Partial<Skill>): void => {
     if (!editing) return;
-    setEditing({ ...editing, ...patch });
+    const next = { ...editing, ...patch };
+    setEditing(next);
+    editingRef.current = next;
     dirtyRef.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      void (async () => {
-        if (!editing || !dirtyRef.current) return;
-        const current = editing;
-        try {
-          const s = await window.deepwork.skills.update(current.name, {
-            description: current.description,
-            body: current.body,
-            enabled: current.enabled,
-          });
-          if (s) setEditing(s);
-          await refresh();
-          await applyRebuild();
-          setSaved(true);
-          dirtyRef.current = false;
-          setTimeout(() => setSaved(false), 1200);
-        } catch (err) {
-          console.error("Skill auto-save failed:", err);
-        }
-      })();
+      void flushSave();
     }, SAVE_DEBOUNCE_MS);
   };
+
+  // Flush any pending debounced save on unmount so edits are not lost when the
+  // settings view is closed while a save timer is still pending.
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current) void flushSave();
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [flushSave]);
 
   // ---------- toggle ----------
   const toggle = async (name: string, enabled: boolean): Promise<void> => {
@@ -141,7 +169,18 @@ export function SkillsView({ settings: _settings }: Props): React.ReactElement {
           onRename={rename}
           onDelete={() => remove(editing.name)}
           onExport={() => exportToFolder(editing.name)}
-          onClose={() => { setEditing(null); dirtyRef.current = false; }}
+          onClose={() => {
+            // Flush pending edits before leaving the editor so the last
+            // keystroke (within the debounce window) is persisted.
+            if (dirtyRef.current) void flushSave();
+            if (saveTimer.current) {
+              clearTimeout(saveTimer.current);
+              saveTimer.current = null;
+            }
+            editingRef.current = null;
+            setEditing(null);
+            dirtyRef.current = false;
+          }}
         />
       ) : creating ? (
         <CreateSkillPanel
@@ -372,7 +411,7 @@ function SkillEditor({
             {skill.files.map((f) => (
               <li key={f.path} className={`skill-file kind-${f.kind}`}>
                 <span className="skill-file-path">{f.path}</span>
-                <span className="skill-file-size">{formatSize(f.size)}</span>
+                <span className="skill-file-size">{formatBytes(f.size)}</span>
               </li>
             ))}
           </ul>
@@ -402,10 +441,4 @@ function SkillEditor({
 
 function countByKind(files: Skill["files"], kind: Skill["files"][number]["kind"]): number {
   return files.filter((f) => f.kind === kind).length;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { TIMELINE_MEMORY_DIR } from "../config/paths";
+import { atomicWriteFileSync } from "./atomic";
 
 const TZ = "Asia/Shanghai";
 
@@ -12,6 +13,26 @@ export function todayStr(d: Date = new Date()): string {
 /** Absolute path of a given day's timeline file. */
 export function timelineFilePath(dateStr: string): string {
   return path.join(TIMELINE_MEMORY_DIR, `${dateStr}.md`);
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Reject malformed dates (path-traversal payloads like "../../x") at the boundary. */
+function assertSafeDate(dateStr: string): void {
+  if (typeof dateStr !== "string" || !DATE_RE.test(dateStr)) {
+    throw new Error(`Invalid timeline date: ${JSON.stringify(dateStr)}`);
+  }
+}
+
+/** Resolve a date to its absolute file path, guaranteeing it stays inside TIMELINE_MEMORY_DIR. */
+function safeTimelinePath(dateStr: string): string {
+  assertSafeDate(dateStr);
+  const resolved = path.resolve(timelineFilePath(dateStr));
+  const base = path.resolve(TIMELINE_MEMORY_DIR);
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) {
+    throw new Error(`Timeline path escapes memory dir: ${dateStr}`);
+  }
+  return resolved;
 }
 
 export interface TimelineAppend {
@@ -83,7 +104,8 @@ function countNumbered(lines: string[], start: number, end: number): number {
  */
 export function appendTimelineEntry(entry: TimelineAppend): void {
   const date = entry.date ?? todayStr();
-  const file = timelineFilePath(date);
+  // Validate here too — the date may come from a caller-supplied entry (C-S1).
+  const file = safeTimelinePath(date);
   fs.mkdirSync(TIMELINE_MEMORY_DIR, { recursive: true });
 
   let lines: string[];
@@ -123,15 +145,13 @@ export function appendTimelineEntry(entry: TimelineAppend): void {
   }
 
   const updated = lines.join("\n").replace(/\n+$/, "\n");
-  const tmp = file + ".tmp";
-  fs.writeFileSync(tmp, updated, "utf-8");
-  fs.renameSync(tmp, file);
+  atomicWriteFileSync(file, updated);
 }
 
 /** Read a day's timeline file content (empty string if missing). */
 export function readTimelineDate(dateStr: string): string {
   try {
-    return fs.readFileSync(timelineFilePath(dateStr), "utf-8");
+    return fs.readFileSync(safeTimelinePath(dateStr), "utf-8");
   } catch {
     return "";
   }
@@ -154,5 +174,5 @@ export function listTimelineDates(): string[] {
 
 /** Absolute path of a day's timeline file (for display in the UI). */
 export function timelinePath(dateStr: string): string {
-  return timelineFilePath(dateStr);
+  return safeTimelinePath(dateStr);
 }

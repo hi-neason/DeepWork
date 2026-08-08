@@ -45,13 +45,21 @@ function toItem(r: MemoryRow): MemoryItem {
 // ---- embedding helpers -----------------------------------------------------
 
 function toBlob(vec: number[]): Buffer {
-  return Buffer.from(new Float32Array(vec));
+  // Allocate an aligned ArrayBuffer then wrap it; Buffer.from(Float32Array)
+  // copies the bytes, so the on-disk blob is always 4-aligned on read.
+  const f32 = new Float32Array(vec);
+  return Buffer.from(f32.buffer, f32.byteOffset, f32.byteLength);
 }
 
 function fromBlob(buf: Buffer | null): number[] | null {
   if (!buf) return null;
-  const a = new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.length / 4));
-  return Array.from(a);
+  // Copy into a fresh, 4-byte-aligned ArrayBuffer. Constructing a Float32Array
+  // directly over a Buffer slice (buf.buffer, buf.byteOffset) can throw a
+  // RangeError when the offset isn't 4-aligned (M-存储③).
+  const count = Math.floor(buf.length / 4);
+  const aligned = new ArrayBuffer(count * 4);
+  buf.copy(Buffer.from(aligned), 0, 0, count * 4);
+  return Array.from(new Float32Array(aligned));
 }
 
 function cosine(a: number[], b: number[]): number {

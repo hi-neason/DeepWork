@@ -19,14 +19,50 @@ export function getDb(): Database.Database {
     throw err;
   }
   db.pragma("journal_mode = WAL");
-  migrate(db);
+  // Wait up to 5s if another process/connection holds a write lock, instead of
+  // throwing SQLITE_BUSY immediately. Enforce foreign keys (currently no
+  // cross-table FKs, but future-proof). L-3.
+  db.pragma("busy_timeout = 5000");
+  db.pragma("foreign_keys = ON");
+  try {
+    migrate(db);
+  } catch (err) {
+    // Migration is fail-fast: a half-migrated schema is unsafe to run on. Close
+    // the handle and reset so the failure isn't masked by a cached broken db.
+    try {
+      db.close();
+    } catch {
+      /* ignore */
+    }
+    db = null;
+    throw err;
+  }
   return db;
+}
+
+/** Flush + close the database cleanly (call on app quit). L-3. */
+export function closeDb(): void {
+  if (!db) return;
+  try {
+    db.pragma("wal_checkpoint(TRUNCATE)");
+    db.close();
+  } catch (err) {
+    logger.error("db", "close failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  } finally {
+    db = null;
+  }
 }
 
 function migrate(d: Database.Database): void {
   // Run additive column migrations first, re-reading columns each time, so an
   // older database is brought up to date even if a previous migration run was
-  // interrupted.
+  // interrupted. A failed column migration is a real problem (disk full,
+  // corruption) — logging and continuing would leave the app running on a
+  // broken schema and surface as confusing downstream errors, so we collect
+  // failures and fail fast after attempting the whole set (M-存储④).
+  const migrationFailures: string[] = [];
   const addColumn = (table: string, name: string, decl: string): void => {
     try {
       const cols = d.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
@@ -34,11 +70,13 @@ function migrate(d: Database.Database): void {
         d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${decl}`);
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       logger.error("db", "migration failed", {
         table,
         column: name,
-        error: err instanceof Error ? err.message : String(err),
+        error: msg,
       });
+      migrationFailures.push(`${table}.${name}: ${msg}`);
     }
   };
 
@@ -139,6 +177,17 @@ function migrate(d: Database.Database): void {
   addColumn("automations", "skills", "TEXT");
   addColumn("automations", "mcp_server_ids", "TEXT");
   addColumn("automations", "model", "TEXT");
+  // Last scheduled slot (epoch ms) that already fired. Persisted so a restart
+  // inside the grace window doesn't double-fire the same slot (M-存储②).
+  addColumn("automations", "last_fired_slot", "INTEGER");
+
+  if (migrationFailures.length > 0) {
+    // Running on a half-migrated schema is unsafe — every later query is at
+    // risk of "no such column" errors that are much harder to diagnose.
+    throw new Error(
+      `Database schema migration failed for column(s): ${migrationFailures.join("; ")}`,
+    );
+  }
 
   // Migration: older builds created each session's working folder directly at
   // <picked>/sessions/<id> and set root_dir to that path. The new layout uses
@@ -195,8 +244,13 @@ function migrate(d: Database.Database): void {
         if (fs.existsSync(oldSessionsRoot) && fs.readdirSync(oldSessionsRoot).length === 0) {
           fs.rmdirSync(oldSessionsRoot);
         }
-      } catch {
-        // ignore non-empty or permission errors
+      } catch (err) {
+        // Best-effort cleanup: a non-empty or permission-protected folder is
+        // not a problem. Log at debug so it is not completely silent (M-存储④).
+        logger.warn("db", "could not remove empty legacy sessions folder", {
+          oldSessionsRoot,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   } catch (err) {

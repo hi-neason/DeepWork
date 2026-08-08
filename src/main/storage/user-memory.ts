@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { APP_DATA_DIR, USER_MEMORY_DIR } from "../config/paths";
+import { atomicWriteFileSync } from "./atomic";
 
 /** The four fixed sections of the user's global memory MD file. */
 export const MEMORY_SECTIONS = [
@@ -107,13 +108,11 @@ export function readUserMemory(): Map<MemorySectionId, string> {
   }
 }
 
-/** Write sections back to memory.md atomically (write to tmp + rename). */
+/** Write sections back to memory.md atomically (unique tmp + fsync + rename). */
 export function saveUserMemory(sections: Map<MemorySectionId, string>): void {
   ensureMemoryFile();
   const serialized = serializeMemorySections(sections);
-  const tmp = MEMORY_FILE + ".tmp";
-  fs.writeFileSync(tmp, serialized, "utf-8");
-  fs.renameSync(tmp, MEMORY_FILE);
+  atomicWriteFileSync(MEMORY_FILE, serialized);
 }
 
 /** Append a timestamped entry to the "recent" (近期动态) section. */
@@ -140,7 +139,5 @@ export function readRawMemory(): string {
 /** Overwrite memory.md with the given raw markdown content (atomic write). */
 export function saveRawMemory(markdown: string): void {
   ensureMemoryFile();
-  const tmp = MEMORY_FILE + ".tmp";
-  fs.writeFileSync(tmp, markdown, "utf-8");
-  fs.renameSync(tmp, MEMORY_FILE);
+  atomicWriteFileSync(MEMORY_FILE, markdown);
 }

@@ -1,8 +1,13 @@
 import { z } from "zod";
 import { defineTool } from "./registry";
-import { assertPublicUrl, htmlToText } from "./webGuard";
+import { assertPublicUrlResolved, htmlToText } from "./webGuard";
 
 const MAX_FETCH_CHARS = 12_000;
+/** Hard cap on the response body size (bytes) before text extraction. */
+const MAX_FETCH_BYTES = 5 * 1024 * 1024;
+/** Per-hop request timeout (connect + headers + body). */
+const FETCH_TIMEOUT_MS = 15_000;
+const MAX_REDIRECTS = 5;
 
 /**
  * Web search via DuckDuckGo's HTML endpoint (no API key required). We parse
@@ -73,36 +78,63 @@ export const webSearchTool = defineTool(
 export const webFetchTool = defineTool(
   "read",
   async ({ url: rawUrl, max_chars }) => {
-    let current = assertPublicUrl(rawUrl).toString();
+    // Resolve + range-check before the first hop, and again for every redirect
+    // target below — a public entry URL must not be able to bounce us into the
+    // private network (C-T1 / C-T2).
+    let current = (await assertPublicUrlResolved(rawUrl)).toString();
     const max = Math.min(Math.max(max_chars ?? MAX_FETCH_CHARS, 500), 40_000);
-    for (let hop = 0; hop < 5; hop++) {
-      const res = await fetch(current, {
-        redirect: "manual",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
-        },
-      });
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      // Per-hop timeout so a slow/hung server can't stall the agent turn.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch(current, {
+          redirect: "manual",
+          signal: controller.signal,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+            Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
+          },
+        });
+      } catch (err) {
+        return `Fetch failed: ${err instanceof Error ? err.message : String(err)}`;
+      } finally {
+        clearTimeout(timer);
+      }
       if (res.status >= 300 && res.status < 400) {
+        if (hop === MAX_REDIRECTS) return "Too many redirects.";
         const loc = res.headers.get("location");
         if (!loc) return `Redirect (${res.status}) with no location`;
-        current = assertPublicUrl(new URL(loc, current).toString()).toString();
+        current = (
+          await assertPublicUrlResolved(new URL(loc, current).toString())
+        ).toString();
         continue;
       }
       if (!res.ok) return `Fetch failed: HTTP ${res.status}`;
       const contentType = res.headers.get("content-type") ?? "";
       const finalUrl = current;
-      if (contentType.includes("text/html") || contentType.includes("application/xhtml")) {
-        const html = await res.text();
-        const text = htmlToText(html);
-        return `Contents of ${finalUrl}:\n\n${text.slice(0, max)}${
-          text.length > max ? "\n\n[truncated…]" : ""
-        }`;
+      // Bound the body size so a huge/oversized response can't OOM the process.
+      const clHeader = res.headers.get("content-length");
+      if (clHeader && Number(clHeader) > MAX_FETCH_BYTES) {
+        return `Fetched ${finalUrl} but body too large (${clHeader} bytes).`;
       }
-      if (contentType.startsWith("text/") || contentType.includes("json") || contentType.includes("xml")) {
-        const text = await res.text();
-        return `Contents of ${finalUrl} (${contentType}):\n\n${text.slice(0, max)}${
+      if (
+        contentType.includes("text/html") ||
+        contentType.includes("application/xhtml") ||
+        contentType.startsWith("text/") ||
+        contentType.includes("json") ||
+        contentType.includes("xml")
+      ) {
+        const html = await readBoundedText(res, MAX_FETCH_BYTES);
+        if (html === null) {
+          return `Fetched ${finalUrl} but body exceeded ${MAX_FETCH_BYTES} bytes.`;
+        }
+        const isHtml =
+          contentType.includes("html") || contentType.includes("xhtml");
+        const text = isHtml ? htmlToText(html) : html;
+        return `Contents of ${finalUrl}:\n\n${text.slice(0, max)}${
           text.length > max ? "\n\n[truncated…]" : ""
         }`;
       }
@@ -120,6 +152,45 @@ export const webFetchTool = defineTool(
     }),
   },
 );
+
+/** Read a response body as text, aborting if it exceeds `maxBytes`. */
+async function readBoundedText(
+  res: Response,
+  maxBytes: number,
+): Promise<string | null> {
+  if (!res.body) return res.text();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          /* ignore */
+        }
+        return null;
+      }
+      chunks.push(value);
+    }
+  }
+  return new TextDecoder().decode(concatChunks(chunks));
+}
+
+function concatChunks(chunks: Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength;
+  }
+  return out;
+}
 
 function stripTags(s: string): string {
   return s

@@ -78,45 +78,51 @@ import type {
   Attachment,
   Automation,
   DeepWorkEvent,
+  MemoryType,
   ModelInfo,
   PermissionMode,
   ProviderKind,
   VerifyResult,
 } from "../../shared/types";
 
+const MEMORY_TYPES: readonly MemoryType[] = ["preference", "fact", "event"];
+
+/** Coerce an untrusted IPC string into a valid MemoryType, or undefined. */
+function asMemoryType(t: string | undefined): MemoryType | undefined {
+  return t && (MEMORY_TYPES as readonly string[]).includes(t)
+    ? (t as MemoryType)
+    : undefined;
+}
+
 export function registerIpc(getWin: () => BrowserWindow | null): void {
-  // Global IPC instrumentation: wrap every handler so each renderer request is
-  // logged with its duration, and failures surface as ERROR lines. This is the
-  // single highest-value debug surface for diagnosing "why did X not work".
-  {
-    const ipcAny = ipcMain as unknown as {
-      handle: (
-        channel: string,
-        listener: (event: unknown, ...args: unknown[]) => unknown,
-      ) => void;
-    };
-    const origHandle = ipcAny.handle.bind(ipcMain);
-    ipcAny.handle = (channel, listener) => {
-      origHandle(channel, async (event: unknown, ...args: unknown[]) => {
-        const t0 = Date.now();
-        try {
-          const result = await (listener as (e: unknown, ...a: unknown[]) => unknown)(
-            event,
-            ...args,
-          );
-          logger.debug("ipc", "handled", { channel, ms: Date.now() - t0 });
-          return result;
-        } catch (err) {
-          logger.error("ipc", "handle failed", {
-            channel,
-            error: err instanceof Error ? err.message : String(err),
-            ms: Date.now() - t0,
-          });
-          throw err;
-        }
-      });
-    };
-  }
+  // Local wrapper around ipcMain.handle that logs each request with its
+  // duration and surfaces failures as ERROR lines. This is the single
+  // highest-value debug surface for diagnosing "why did X not work". We use an
+  // explicit helper instead of monkey-patching ipcMain.handle globally: the
+  // patch mutated a shared singleton for the whole process and would double-wrap
+  // if registerIpc ever ran twice (L-2).
+  const rawHandle = ipcMain.handle.bind(ipcMain);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handle = (channel: string, listener: (event: any, ...args: any[]) => unknown): void => {
+    rawHandle(channel, async (event: unknown, ...args: unknown[]) => {
+      const t0 = Date.now();
+      try {
+        const result = await (listener as (e: unknown, ...a: unknown[]) => unknown)(
+          event,
+          ...args,
+        );
+        logger.debug("ipc", "handled", { channel, ms: Date.now() - t0 });
+        return result;
+      } catch (err) {
+        logger.error("ipc", "handle failed", {
+          channel,
+          error: err instanceof Error ? err.message : String(err),
+          ms: Date.now() - t0,
+        });
+        throw err;
+      }
+    });
+  };
 
   // Forward shell output from the terminal manager to the renderer.
   terminalManager.setSender((channel, ...args) =>
@@ -129,30 +135,35 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
 
   // ---- sessions ----
-  ipcMain.handle("sessions:list", () => listSessions());
-  ipcMain.handle(
+  handle("sessions:list", () => listSessions());
+  handle(
     "sessions:create",
     (_e, title?: string, workspaceDir?: string, model?: string) =>
       createSession(title, workspaceDir, model),
   );
-  ipcMain.handle("sessions:rename", (_e, id: string, title: string) =>
+  handle("sessions:rename", (_e, id: string, title: string) =>
     renameSession(id, title),
   );
-  ipcMain.handle("sessions:delete", (_e, id: string) => deleteSession(id));
-  ipcMain.handle("sessions:setGroup", (_e, id: string, group: string) =>
+  handle("sessions:delete", (_e, id: string) => {
+    // Abort any in-flight turn and drop per-session runtime state before the
+    // row is removed, so a deleted session can't leave a turn/emitter behind.
+    agentManager.forgetSession(id);
+    return deleteSession(id);
+  });
+  handle("sessions:setGroup", (_e, id: string, group: string) =>
     setSessionGroup(id, group),
   );
-  ipcMain.handle("sessions:groups", () => listGroups());
-  ipcMain.handle(
+  handle("sessions:groups", () => listGroups());
+  handle(
     "sessions:setWorkspace",
     (_e, id: string, workspaceDir: string) => setSessionWorkspace(id, workspaceDir),
   );
-  ipcMain.handle("sessions:setModel", (_e, id: string, model: string) => {
+  handle("sessions:setModel", (_e, id: string, model: string) => {
     setSessionModel(id, model);
     agentManager.setSessionModel(id, model);
   });
   /** Recently used workspace folders (for the new-task folder picker). */
-  ipcMain.handle("sessions:recentFolders", () => {
+  handle("sessions:recentFolders", () => {
     const rows = getDb()
       .prepare(
         `SELECT workspace_dir, MAX(updated_at) AS latest
@@ -162,79 +173,84 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       .all() as Array<{ workspace_dir: string }>;
     return rows.map((r) => ({ path: r.workspace_dir, name: groupForWorkspace(r.workspace_dir) }));
   });
-  ipcMain.handle("sessions:renameGroup", (_e, oldName: string, newName: string) =>
+  handle("sessions:renameGroup", (_e, oldName: string, newName: string) =>
     renameGroup(oldName, newName),
   );
-  ipcMain.handle("sessions:deleteGroup", (_e, name: string) => deleteGroup(name));
-  ipcMain.handle("sessions:createGroup", (_e, name: string) => createGroup(name));
+  handle("sessions:deleteGroup", (_e, name: string) => deleteGroup(name));
+  handle("sessions:createGroup", (_e, name: string) => createGroup(name));
 
   // ---- skills ----
-  ipcMain.handle("skills:list", () => listSkills());
-  ipcMain.handle(
+  handle("skills:list", () => listSkills());
+  handle(
     "skills:create",
     (_e, input: { name: string; description?: string; body?: string }) =>
       createSkill(input),
   );
-  ipcMain.handle(
+  handle(
     "skills:update",
     (_e, name: string, patch: Record<string, unknown>) =>
       updateSkill(name, patch as Parameters<typeof updateSkill>[1]),
   );
-  ipcMain.handle("skills:delete", (_e, name: string) => deleteSkill(name));
-  ipcMain.handle(
+  handle("skills:delete", (_e, name: string) => deleteSkill(name));
+  handle(
     "skills:rename",
     (_e, oldName: string, newName: string) => renameSkill(oldName, newName),
   );
-  ipcMain.handle(
+  handle(
     "skills:import",
     async (_e, sourceDir: string, newName?: string) => importSkill(sourceDir, newName),
   );
-  ipcMain.handle(
+  handle(
     "skills:export",
     async (_e, name: string, targetDir: string) => exportSkill(name, targetDir),
   );
-  ipcMain.handle("skills:rebuild", () => agentManager.rebuildSkills());
+  handle("skills:rebuild", () => agentManager.rebuildSkills());
+
+  // ---- mcp ----
+  // Per-server connection status from the last agent build, so the Connectors
+  // UI can surface connection failures instead of failing silently (M-存储⑤).
+  handle("mcp:status", () => agentManager.getMcpStatus());
 
   // ---- settings / keys ----
-  ipcMain.handle("settings:get", () => loadSettings());
-  ipcMain.handle("settings:save", (_e, s) => saveSettings(s));
-  ipcMain.handle("settings:getKey", (_e, provider: ProviderKind) => getApiKey(provider));
-  ipcMain.handle("settings:setKey", (_e, provider: ProviderKind, key: string) =>
+  handle("settings:get", () => loadSettings());
+  handle("settings:save", (_e, s) => saveSettings(s));
+  handle("settings:getKey", (_e, provider: ProviderKind) => getApiKey(provider));
+  handle("settings:setKey", (_e, provider: ProviderKind, key: string) =>
     setApiKey(provider, key),
   );
-  ipcMain.handle("settings:pickDirectory", async () => {
+  handle("settings:pickDirectory", async () => {
     const win = getWin();
     const res = await dialog.showOpenDialog(win!, {
       properties: ["openDirectory", "createDirectory"],
     });
     return res.canceled ? null : res.filePaths[0];
   });
-  ipcMain.handle("settings:rebuildAgent", () => agentManager.rebuild());
-  ipcMain.handle("settings:setOnboarded", (_e, onboarded: boolean) => {
+  handle("settings:rebuildAgent", () => agentManager.rebuild());
+  handle("settings:setOnboarded", (_e, onboarded: boolean) => {
     const s = loadSettings();
     s.onboarded = onboarded;
     saveSettings(s);
   });
-  ipcMain.handle("settings:applySystem", () => {
+  handle("settings:applySystem", () => {
     const s = loadSettings();
     applyOpenAtLogin(s.openAtLogin);
     setKeepAwake(s.keepAwake);
   });
-  ipcMain.handle("app:revealData", () => {
+  handle("app:revealData", () => {
     shell.openPath(DEEPWORK_ROOT);
   });
-  ipcMain.handle("app:dataPath", () => DEEPWORK_ROOT);
-  ipcMain.handle("app:version", () => app.getVersion());
+  handle("app:dataPath", () => DEEPWORK_ROOT);
+  handle("app:version", () => app.getVersion());
 
   // ---- model catalog / verification ----
-  ipcMain.handle("models:catalog", (): ModelInfo[] => MODEL_CATALOG);
-  ipcMain.handle("models:providers", () => PROVIDER_PRESETS);
-  ipcMain.handle("models:verify", (_e, cfg): Promise<VerifyResult> =>
+  handle("models:catalog", (): ModelInfo[] => MODEL_CATALOG);
+  handle("models:providers", () => PROVIDER_PRESETS);
+  handle("models:verify", (_e, cfg): Promise<VerifyResult> =>
     verifyModelConfig(cfg),
   );
 
   // ---- chat ----
-  ipcMain.handle("chat:history", async (_e, sessionId: string) => {
+  handle("chat:history", async (_e, sessionId: string) => {
     const s = getSession(sessionId);
     // Derive the cwd/sandbox root and output drawer at runtime (works for old
     // sessions whose stored root_dir predates the .deepwork layout).
@@ -246,7 +262,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     return agentManager.getHistory(sessionId);
   });
 
-  ipcMain.handle(
+  handle(
     "chat:send",
     async (
       event,
@@ -290,11 +306,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     },
   );
 
-  ipcMain.handle("chat:cancel", (_e, sessionId: string) => {
+  handle("chat:cancel", (_e, sessionId: string) => {
     agentManager.cancel(sessionId);
   });
 
-  ipcMain.handle("chat:regenerate", async (event, sessionId: string) => {
+  handle("chat:regenerate", async (event, sessionId: string) => {
     const sender = event.sender;
     const push = (e: DeepWorkEvent) => {
       if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
@@ -312,7 +328,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   });
 
   // ---- approvals ----
-  ipcMain.handle(
+  handle(
     "approval:respond",
     (_e, id: string, decision: ApprovalDecision) => {
       approvals.respond(id, decision);
@@ -320,25 +336,25 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
 
   // ---- memories ----
-  ipcMain.handle("memories:list", () => listAllMemories());
-  ipcMain.handle("memories:listByScope", (_e, scopeKey: string, type?: string) =>
-    listMemoriesByScope(scopeKey, type as any),
+  handle("memories:list", () => listAllMemories());
+  handle("memories:listByScope", (_e, scopeKey: string, type?: string) =>
+    listMemoriesByScope(scopeKey, asMemoryType(type)),
   );
-  ipcMain.handle("memories:search", (_e, scopeKey: string, query: string, topK?: number) =>
+  handle("memories:search", (_e, scopeKey: string, query: string, topK?: number) =>
     searchMemories(scopeKey, query, { topK }),
   );
-  ipcMain.handle("memories:add", (_e, content: string, type?: string, scopeKey?: string) =>
-    addMemory(content, scopeKey ?? "", { type: type as any }),
+  handle("memories:add", (_e, content: string, type?: string, scopeKey?: string) =>
+    addMemory(content, scopeKey ?? "", { type: asMemoryType(type) }),
   );
-  ipcMain.handle("memories:edit", (_e, id: string, content: string) => editMemory(id, content));
-  ipcMain.handle("memories:remove", (_e, id: string) => removeMemory(id));
+  handle("memories:edit", (_e, id: string, content: string) => editMemory(id, content));
+  handle("memories:remove", (_e, id: string) => removeMemory(id));
 
   // ---- user memory (MD file) ----
-  ipcMain.handle("userMemory:read", () => {
+  handle("userMemory:read", () => {
     const sections = readUserMemory();
     return Object.fromEntries(sections);
   });
-  ipcMain.handle("userMemory:save", (_e, sections: Record<string, string>) => {
+  handle("userMemory:save", (_e, sections: Record<string, string>) => {
     const map = new Map<MemorySectionId, string>();
     for (const [k, v] of Object.entries(sections)) {
       if (MEMORY_SECTIONS.includes(k as MemorySectionId)) {
@@ -347,31 +363,31 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     }
     saveUserMemory(map);
   });
-  ipcMain.handle("userMemory:append", (_e, content: string, source?: string) =>
+  handle("userMemory:append", (_e, content: string, source?: string) =>
     appendToRecent(content, source),
   );
-  ipcMain.handle("userMemory:raw", () => readRawMemory());
-  ipcMain.handle("userMemory:saveRaw", (_e, markdown: string) => saveRawMemory(markdown));
-  ipcMain.handle("userMemory:path", () => MEMORY_FILE);
+  handle("userMemory:raw", () => readRawMemory());
+  handle("userMemory:saveRaw", (_e, markdown: string) => saveRawMemory(markdown));
+  handle("userMemory:path", () => MEMORY_FILE);
 
   // ---- timeline memory (per-day markdown) ----
-  ipcMain.handle("timeline:list", () => listTimelineDates());
-  ipcMain.handle("timeline:read", (_e, date: string) => readTimelineDate(date));
-  ipcMain.handle("timeline:path", (_e, date: string) => timelinePath(date));
+  handle("timeline:list", () => listTimelineDates());
+  handle("timeline:read", (_e, date: string) => readTimelineDate(date));
+  handle("timeline:path", (_e, date: string) => timelinePath(date));
 
   // ---- project memory (per-project markdown) ----
-  ipcMain.handle("projectMemory:list", () => listProjects());
-  ipcMain.handle("projectMemory:read", (_e, project: string) => readProjectMemory(project));
-  ipcMain.handle("projectMemory:path", (_e, project: string) => projectMemoryPath(project));
+  handle("projectMemory:list", () => listProjects());
+  handle("projectMemory:read", (_e, project: string) => readProjectMemory(project));
+  handle("projectMemory:path", (_e, project: string) => projectMemoryPath(project));
 
   // ---- artifacts ----
-  ipcMain.handle("artifacts:list", (_e, sessionId: string) =>
+  handle("artifacts:list", (_e, sessionId: string) =>
     agentManager.listArtifacts(sessionId),
   );
-  ipcMain.handle("artifacts:reveal", (_e, absolutePath: string) => {
+  handle("artifacts:reveal", (_e, absolutePath: string) => {
     if (isSafePath(absolutePath)) shell.showItemInFolder(absolutePath);
   });
-  ipcMain.handle("artifacts:open", (_e, absolutePath: string) => {
+  handle("artifacts:open", (_e, absolutePath: string) => {
     if (isSafePath(absolutePath)) shell.openPath(absolutePath);
   });
 
@@ -388,26 +404,26 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     getWin()?.webContents.send("chat:event", sessionId, event);
   });
 
-  ipcMain.handle("automations:list", () => listAutomations());
-  ipcMain.handle("automations:listWithRuns", () => listAutomationsWithRuns());
-  ipcMain.handle(
+  handle("automations:list", () => listAutomations());
+  handle("automations:listWithRuns", () => listAutomationsWithRuns());
+  handle(
     "automations:create",
-    (_e, a: Omit<Automation, "id" | "createdAt" | "updatedAt" | "enabled">) => createAutomation(a),
+    (_e, a: Omit<Automation, "id" | "createdAt" | "updatedAt">) => createAutomation(a),
   );
-  ipcMain.handle("automations:update", (_e, id: string, patch: Partial<Automation>) =>
+  handle("automations:update", (_e, id: string, patch: Partial<Automation>) =>
     updateAutomation(id, patch),
   );
-  ipcMain.handle("automations:delete", (_e, id: string) => deleteAutomation(id));
-  ipcMain.handle("automations:runs", (_e, id: string) => listRuns(id));
-  ipcMain.handle("automations:deleteRun", (_e, runId: string) => deleteRun(runId));
-  ipcMain.handle("automations:deleteRuns", (_e, automationId: string) => deleteRuns(automationId));
-  ipcMain.handle("automations:runNow", async (_e, id: string) => {
+  handle("automations:delete", (_e, id: string) => deleteAutomation(id));
+  handle("automations:runs", (_e, id: string) => listRuns(id));
+  handle("automations:deleteRun", (_e, runId: string) => deleteRun(runId));
+  handle("automations:deleteRuns", (_e, automationId: string) => deleteRuns(automationId));
+  handle("automations:runNow", async (_e, id: string) => {
     const a = listAutomations().find((x) => x.id === id);
     if (a) await scheduler.runNow(a);
   });
 
   // ---- updates (electron-updater is optional; no-op if unavailable) ----
-  ipcMain.handle("updates:check", async () => {
+  handle("updates:check", async () => {
     getWin()?.webContents.send("update:status", { state: "checking" });
     try {
       const { autoUpdater } = await import("electron-updater");
@@ -435,7 +451,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       getWin()?.webContents.send("update:status", { state: "not-available" });
     }
   });
-  ipcMain.handle("updates:install", async () => {
+  handle("updates:install", async () => {
     try {
       const { autoUpdater } = await import("electron-updater");
       autoUpdater.quitAndInstall();
@@ -445,16 +461,16 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   });
 
   // ---- terminal (interactive PTY accessible from the renderer) ----
-  ipcMain.handle("terminal:spawn", (_e, id: string, cwd: string) =>
+  handle("terminal:spawn", (_e, id: string, cwd: string) =>
     terminalManager.spawn(id, cwd),
   );
-  ipcMain.handle("terminal:input", (_e, id: string, data: string) =>
+  handle("terminal:input", (_e, id: string, data: string) =>
     terminalManager.input(id, data),
   );
-  ipcMain.handle("terminal:resize", (_e, id: string, cols: number, rows: number) =>
+  handle("terminal:resize", (_e, id: string, cols: number, rows: number) =>
     terminalManager.resize(id, cols, rows),
   );
-  ipcMain.handle("terminal:kill", (_e, id: string) => terminalManager.kill(id));
+  handle("terminal:kill", (_e, id: string) => terminalManager.kill(id));
 }
 
 /** Guard reveal/open to real files under the user's home directory. */
@@ -463,8 +479,12 @@ function isSafePath(p: string): boolean {
   try {
     const resolved = path.resolve(p);
     if (!fs.existsSync(resolved)) return false;
-    const home = app.getPath("home");
-    return resolved.startsWith(home);
+    const home = path.resolve(app.getPath("home"));
+    // Use path.relative rather than startsWith: `/Users/neason-evil` would
+    // otherwise satisfy `startsWith("/Users/neason")` (L-1). A relative path
+    // that doesn't start with ".." is inside home.
+    const rel = path.relative(home, resolved);
+    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
   } catch {
     return false;
   }

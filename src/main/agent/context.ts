@@ -13,6 +13,41 @@ read-only tools. All write/execute/GUI actions are blocked. When you understand 
 task, respond with a clear, step-by-step PLAN (commands to run, files to change,
 services to touch, and risks), then wait for the user to approve before executing.`;
 
+// Project instruction files (AGENTS.md / CLAUDE.md) change rarely but are read on
+// every model call. Cache their contents keyed by (path, mtimeMs, size) so we
+// only re-read when the file actually changes on disk (M-Agent③). A failed stat
+// is cached as a miss so a missing file doesn't cost a throw per call.
+interface MdCacheEntry {
+  mtimeMs: number;
+  size: number;
+  content: string | null;
+}
+const mdCache = new Map<string, MdCacheEntry>();
+
+function readProjectMd(filePath: string): string | null {
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(filePath);
+  } catch {
+    mdCache.set(filePath, { mtimeMs: -1, size: -1, content: null });
+    return null;
+  }
+  const cached = mdCache.get(filePath);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    return cached.content;
+  }
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const trimmed = content.trim();
+    const value = trimmed || null;
+    mdCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, content: value });
+    return value;
+  } catch {
+    mdCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, content: null });
+    return null;
+  }
+}
+
 /**
  * Injects per-turn, non-persisted context into every model call:
  *   1. Global user profile (from memory.md — always injected in full)
@@ -21,6 +56,45 @@ services to touch, and risks), then wait for the user to approve before executin
  *
  * We use wrapModelCall so these are not saved into checkpointer history.
  */
+// Pure helper: pull the latest user turn's text to seed semantic memory search.
+// LangChain `BaseMessage` instances carry the role via `getType()` (or the
+// serialized `type`/`role` field), NOT a `role` property on plain objects — so
+// we accept both shapes. Content may be a string or a blocks[] array.
+function messageIsHuman(m: any): boolean {
+  if (!m || typeof m !== "object") return false;
+  if (typeof m.getType === "function") {
+    const t = m.getType();
+    if (t === "human" || t === "humanmessage") return true;
+  }
+  if (typeof m._getType === "function") {
+    if (m._getType() === "human") return true;
+  }
+  const role = m.role ?? m.type;
+  return role === "user" || role === "human";
+}
+
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((b) =>
+        b && b.type === "text" && typeof b.text === "string" ? b.text : "",
+      )
+      .join("");
+  }
+  return "";
+}
+
+export function extractLastUserQuery(messages: any[] | undefined): string {
+  if (!Array.isArray(messages) || messages.length === 0) return "";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messageIsHuman(messages[i])) {
+      return messageText(messages[i].content);
+    }
+  }
+  return "";
+}
+
 export function createContextMiddleware(deps: {
   getMode: (threadId?: string) => PermissionMode;
 }) {
@@ -49,11 +123,7 @@ export function createContextMiddleware(deps: {
 
       // --- Workspace-scoped memories (SQLite, semantic) ---
       const scopeKey = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
-      const lastUser = [...(request.messages ?? [])]
-        .reverse()
-        .find((m) => m.role === "user");
-      const query =
-        typeof lastUser?.content === "string" ? lastUser.content : "";
+      const query = extractLastUserQuery(request.messages);
 
       if (query) {
         const workspaceMemories = await searchMemories(scopeKey, query, {
@@ -82,16 +152,9 @@ export function createContextMiddleware(deps: {
       const workspaceDir = settings.model.workspaceDir;
       if (workspaceDir) {
         if (settings.includeAgentsMd) {
-          const agentsPath = path.join(workspaceDir, "AGENTS.md");
-          try {
-            const agentsContent = fs.readFileSync(agentsPath, "utf-8");
-            if (agentsContent.trim()) {
-              parts.push(
-                "## Project Instructions (AGENTS.md)\n" + agentsContent.trim(),
-              );
-            }
-          } catch {
-            // file not found — skip silently
+          const agentsContent = readProjectMd(path.join(workspaceDir, "AGENTS.md"));
+          if (agentsContent) {
+            parts.push("## Project Instructions (AGENTS.md)\n" + agentsContent);
           }
         }
 
@@ -99,15 +162,8 @@ export function createContextMiddleware(deps: {
           const claudeFiles = ["CLAUDE.md", "CLAUDE.local.md"];
           const claudeParts: string[] = [];
           for (const f of claudeFiles) {
-            const fp = path.join(workspaceDir, f);
-            try {
-              const content = fs.readFileSync(fp, "utf-8");
-              if (content.trim()) {
-                claudeParts.push(content.trim());
-              }
-            } catch {
-              // file not found — skip
-            }
+            const content = readProjectMd(path.join(workspaceDir, f));
+            if (content) claudeParts.push(content);
           }
           if (claudeParts.length > 0) {
             parts.push(

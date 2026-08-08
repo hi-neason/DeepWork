@@ -79,13 +79,26 @@ function sanitizeBlock(block: any): any {
   return block;
 }
 
-function sanitizeMessage(msg: any): any {
+export function sanitizeMessage(msg: any): any {
   if (!msg || typeof msg !== "object") return msg;
   const content = (msg as LcMessage).content;
   if (Array.isArray(content)) {
     const cleaned = content
       .map(sanitizeBlock)
       .filter((b) => b !== null);
+    // No change → return the original instance untouched.
+    if (cleaned.length === content.length &&
+        cleaned.every((b, i) => b === content[i])) {
+      return msg;
+    }
+    // Preserve the original message's prototype (BaseMessage) so downstream
+    // callers can still call getType()/lc_serializable. Spreading a class
+    // instance into a plain object silently breaks LangChain checkpoints.
+    if (typeof msg.constructor === "function" && msg.constructor !== Object) {
+      const next = new msg.constructor({ ...msg });
+      next.content = cleaned;
+      return next;
+    }
     return { ...msg, content: cleaned };
   }
   return msg;
@@ -130,6 +143,17 @@ function buildInstruction(ws: ThreadWorkspace): string {
   return lines.join("\n");
 }
 
+// Pure helper: resolves the LangGraph thread id carried on the model request.
+// LangChain exposes configurable on `request.runtime.configurable`; older shapes
+// may also carry it on `request.config.configurable`, so we check both (runtime
+// wins). This thread id keys the per-session working directory (see setThreadRoot),
+// which the middleware injects into the system prompt below.
+export function resolveThreadIdForSanitize(request: any): string | undefined {
+  const fromRuntime = request?.runtime?.configurable?.thread_id;
+  if (fromRuntime) return fromRuntime;
+  return request?.config?.configurable?.thread_id;
+}
+
 /**
  * Middleware that, just before the model is called:
  *  1. injects a per-session working-directory instruction so the model knows
@@ -145,8 +169,7 @@ export function createSanitizeMiddleware() {
         if (Array.isArray(request?.messages)) {
           request.messages = request.messages.map(sanitizeMessage);
         }
-        const threadId: string | undefined =
-          request?.config?.configurable?.thread_id;
+        const threadId = resolveThreadIdForSanitize(request);
         const ws = threadId ? threadRoots.get(threadId) : undefined;
         if (ws?.cwd) {
           const instruction = buildInstruction(ws);

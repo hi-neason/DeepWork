@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerIpc } from "./ipc/register";
 import { terminalManager } from "./terminal/manager";
-import { getDb } from "./storage/db";
+import { getDb, closeDb } from "./storage/db";
 import { migrateLegacyAutomations } from "./storage/automations";
 import { agentManager } from "./agent/manager";
 import { loadClaudeCodeEnv } from "./config/ccEnv";
@@ -188,6 +188,8 @@ app.whenReady().then(async () => {
 app.on("before-quit", () => {
   isQuitting = true;
   terminalManager.killAll();
+  // Flush WAL and release the DB handle cleanly (L-3).
+  closeDb();
 });
 
 app.on("window-all-closed", () => {
