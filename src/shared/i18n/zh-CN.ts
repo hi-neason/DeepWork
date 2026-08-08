@@ -425,6 +425,8 @@ const zhCN = {
       success: "成功",
       error: "失败",
     },
+    searchPlaceholder: "搜索技能…",
+    noMatch: "没有匹配项",
   },
   onboarding: {
     welcome: "欢迎",

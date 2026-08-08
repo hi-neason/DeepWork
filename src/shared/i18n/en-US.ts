@@ -433,6 +433,8 @@ const enUS = {
       success: "success",
       error: "error",
     },
+    searchPlaceholder: "Search skills…",
+    noMatch: "No matches",
   },
   onboarding: {
     welcome: "Welcome",

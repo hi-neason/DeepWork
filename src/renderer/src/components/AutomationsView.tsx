@@ -173,6 +173,12 @@ export function AutomationsView(): React.ReactElement {
   const [mcpServers, setMcpServers] = useState<{ id: string; label: string }[]>([]);
   const [skills, setSkills] = useState<{ name: string; description: string }[]>([]);
   const [models, setModels] = useState<{ id: string; label: string }[]>([]);
+  const [showWsMenu, setShowWsMenu] = useState(false);
+  const [showModelMenu, setShowModelMenu] = useState(false);
+  const [showSkillPicker, setShowSkillPicker] = useState(false);
+  const [showMcpPicker, setShowMcpPicker] = useState(false);
+  const [skillQuery, setSkillQuery] = useState("");
+  const [mcpQuery, setMcpQuery] = useState("");
 
   const refresh = async (): Promise<void> => {
     setItems(await window.deepwork.automations.list());
@@ -319,6 +325,13 @@ export function AutomationsView(): React.ReactElement {
     });
   };
 
+  const filteredSkills = skills.filter((s) =>
+    s.name.toLowerCase().includes(skillQuery.trim().toLowerCase()),
+  );
+  const filteredMcps = mcpServers.filter((s) =>
+    (s.label || s.id).toLowerCase().includes(mcpQuery.trim().toLowerCase()),
+  );
+
   const scheduleTabs: { key: ScheduleType; label: string }[] = [
     { key: "daily", label: t("automations.tab.daily") },
     { key: "weekly", label: t("automations.tab.weekly") },
@@ -399,9 +412,6 @@ export function AutomationsView(): React.ReactElement {
               <button type="button" className="btn" onClick={closeForm} disabled={busy}>
                 {t("common.cancel")}
               </button>
-              <button type="button" className="btn primary" onClick={save} disabled={busy}>
-                {busy ? t("automations.saving") : t("common.save")}
-              </button>
             </div>
           </div>
 
@@ -411,222 +421,379 @@ export function AutomationsView(): React.ReactElement {
               <span>{t("automations.banner")}</span>
             </div>
 
-            <div className="auto-field">
-              <label>{t("automations.nameLabel")}</label>
+            <div className="auto-title-row">
               <input
                 type="text"
+                className="auto-title-input"
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                 placeholder={t("automations.namePlaceholder")}
               />
             </div>
 
-            <div className="auto-field">
-              <label>{t("automations.workspaceLabel")}</label>
-              <div className="auto-workspace-picker">
-                {form.workspaceDir ? (
-                  <span className="auto-workspace-path" title={form.workspaceDir}>
-                    {form.workspaceDir}
-                  </span>
-                ) : (
-                  <span className="auto-workspace-empty">{t("automations.workspaceEmpty")}</span>
-                )}
-                <button className="btn small" onClick={pickWorkspace}>
-                  {form.workspaceDir ? t("automations.changeWorkspace") : t("automations.pickWorkspace")}
-                </button>
-              </div>
-            </div>
-
-            <div className="auto-field">
-              <label>{t("automations.modelLabel")}</label>
-              <select
-                value={form.model}
-                onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-              >
-                <option value="">{t("automations.modelDefault")}</option>
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              <p className="auto-field-hint">{t("automations.modelHint")}</p>
-            </div>
-
-            <div className="auto-field">
-              <label>{t("automations.instructionsLabel")}</label>
-              <textarea
-                value={form.instructions}
-                onChange={(e) => setForm((f) => ({ ...f, instructions: e.target.value }))}
-                rows={6}
-                placeholder={t("automations.instructionsPlaceholder")}
-              />
-            </div>
-
-            <div className="auto-field">
-              <label>{t("automations.permissionLabel")}</label>
-              <div className="auto-mode-bar">
-                {(["auto", "manual", "plan"] as PermissionMode[]).map((m) => (
-                  <button
-                    key={m}
-                    className={`auto-mode-btn ${form.permissionMode === m ? "active" : ""}`}
-                    onClick={() => setForm((f) => ({ ...f, permissionMode: m }))}
-                  >
-                    {t(`automations.mode.${m}`)}
-                  </button>
-                ))}
-              </div>
-              <p className="auto-field-hint">{t("automations.permissionHint")}</p>
-            </div>
-
-            {skills.length > 0 && (
-              <div className="auto-field">
-                <label>{t("automations.skillsLabel")}</label>
-                <div className="auto-chips">
-                  {skills.map((s) => (
-                    <label key={s.name} className="auto-chip">
-                      <input
-                        type="checkbox"
-                        checked={form.skills.includes(s.name)}
-                        onChange={() => toggleSkill(s.name)}
-                      />
-                      <span>{s.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {mcpServers.length > 0 && (
-              <div className="auto-field">
-                <label>{t("automations.mcpLabel")}</label>
-                <div className="auto-chips">
-                  {mcpServers.map((s) => (
-                    <label key={s.id} className="auto-chip">
-                      <input
-                        type="checkbox"
-                        checked={form.mcpServerIds.includes(s.id)}
-                        onChange={() => toggleMcp(s.id)}
-                      />
-                      <span>{s.label || s.id}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="auto-field">
-              <label>{t("automations.scheduleLabel")}</label>
-              <div className="tabs auto-tabs">
-                {scheduleTabs.map((tab) => (
-                  <button
-                    key={tab.key}
-                    className={`tab ${form.scheduleType === tab.key ? "active" : ""}`}
-                    onClick={() => setForm((f) => ({ ...f, scheduleType: tab.key }))}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="auto-schedule-panel">
-                {form.scheduleType === "daily" && (
-                  <div className="auto-row">
-                    <span>{t("automations.dailyAt")}</span>
-                    <input
-                      type="time"
-                      value={form.time}
-                      onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-                    />
+            <div className="composer auto-composer">
+              <div className="composer-box">
+                {(form.skills.length > 0 || form.mcpServerIds.length > 0) && (
+                  <div className="auto-composer-chips">
+                    {form.skills.map((name) => (
+                      <span key={name} className="auto-composer-chip">
+                        <span className="auto-chip-kind">技能</span>
+                        <span className="auto-chip-name">{name}</span>
+                        <button
+                          type="button"
+                          className="auto-chip-x"
+                          onClick={() => toggleSkill(name)}
+                          title={t("common.remove")}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    {form.mcpServerIds.map((id) => {
+                      const s = mcpServers.find((x) => x.id === id);
+                      return (
+                        <span key={id} className="auto-composer-chip">
+                          <span className="auto-chip-kind">MCP</span>
+                          <span className="auto-chip-name">{s?.label || id}</span>
+                          <button
+                            type="button"
+                            className="auto-chip-x"
+                            onClick={() => toggleMcp(id)}
+                            title={t("common.remove")}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
 
-                {form.scheduleType === "weekly" && (
-                  <>
-                    <div className="auto-weekdays">
-                      {WEEK_DAYS.map((d) => (
-                        <button
-                          key={d.key}
-                          className={`auto-weekday ${form.days.includes(d.key) ? "active" : ""}`}
-                          onClick={() => toggleDay(d.key)}
-                          title={t("automations.weekDay", { n: d.key })}
+                <textarea
+                  className="auto-instructions-input"
+                  value={form.instructions}
+                  onChange={(e) => setForm((f) => ({ ...f, instructions: e.target.value }))}
+                  rows={4}
+                  placeholder={t("automations.instructionsPlaceholder")}
+                  autoFocus
+                />
+
+                <div className="composer-bar">
+                  <div className="ws-picker-wrap">
+                    <button
+                      type="button"
+                      className={`ws-picker ${form.workspaceDir ? "active" : ""}`}
+                      onClick={() => setShowWsMenu((v) => !v)}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                      <span className="ws-picker-label">
+                        {form.workspaceDir ? basename(form.workspaceDir) : t("automations.workspaceEmpty")}
+                      </span>
+                      {form.workspaceDir && (
+                        <span
+                          className="ws-clear"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setForm((f) => ({ ...f, workspaceDir: "" }));
+                          }}
                         >
-                          {d.label}
-                        </button>
-                      ))}
-                    </div>
+                          ✕
+                        </span>
+                      )}
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    {showWsMenu && (
+                      <div className="ws-menu" onMouseLeave={() => setShowWsMenu(false)}>
+                        <div
+                          className="ws-menu-item"
+                          onClick={() => {
+                            void pickWorkspace();
+                            setShowWsMenu(false);
+                          }}
+                        >
+                          {form.workspaceDir ? t("automations.changeWorkspace") : t("automations.pickWorkspace")}
+                        </div>
+                        {form.workspaceDir && (
+                          <>
+                            <div className="ws-menu-sep" />
+                            <div
+                              className="ws-menu-item danger"
+                              onClick={() => {
+                                setForm((f) => ({ ...f, workspaceDir: "" }));
+                                setShowWsMenu(false);
+                              }}
+                            >
+                              {t("chat.noFolder")}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="model-picker-wrap">
+                    <button
+                      type="button"
+                      className="model-picker"
+                      onClick={() => setShowModelMenu((v) => !v)}
+                    >
+                      <span className="model-dot" />
+                      <span className="model-picker-label">
+                        {form.model ? shortModelLabel(form.model) : t("automations.modelDefault")}
+                      </span>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    {showModelMenu && (
+                      <div className="model-menu" onMouseLeave={() => setShowModelMenu(false)}>
+                        <div
+                          className={`model-menu-item ${!form.model ? "active" : ""}`}
+                          onClick={() => {
+                            setForm((f) => ({ ...f, model: "" }));
+                            setShowModelMenu(false);
+                          }}
+                        >
+                          <span>{t("automations.modelDefault")}</span>
+                          {!form.model && <span className="check">✓</span>}
+                        </div>
+                        {models.map((m) => (
+                          <div
+                            key={m.id}
+                            className={`model-menu-item ${form.model === m.id ? "active" : ""}`}
+                            onClick={() => {
+                              setForm((f) => ({ ...f, model: m.id }));
+                              setShowModelMenu(false);
+                            }}
+                          >
+                            <span>{m.label}</span>
+                            {form.model === m.id && <span className="check">✓</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="auto-mode-seg">
+                    {(["auto", "manual", "plan"] as PermissionMode[]).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`auto-mode-btn ${form.permissionMode === m ? "active" : ""}`}
+                        onClick={() => setForm((f) => ({ ...f, permissionMode: m }))}
+                      >
+                        {t(`automations.mode.${m}`)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="auto-picker-wrap">
+                    <button
+                      type="button"
+                      className={`auto-add-btn ${showSkillPicker ? "active" : ""}`}
+                      onClick={() => {
+                        setShowSkillPicker((v) => !v);
+                        setShowMcpPicker(false);
+                      }}
+                    >
+                      <span className="auto-add-plus">＋</span>
+                      {t("automations.skillsLabel")}
+                    </button>
+                    {showSkillPicker && (
+                      <div className="auto-picker-pop" onMouseLeave={() => setShowSkillPicker(false)}>
+                        <input
+                          className="auto-picker-search"
+                          autoFocus
+                          value={skillQuery}
+                          onChange={(e) => setSkillQuery(e.target.value)}
+                          placeholder={t("automations.searchPlaceholder")}
+                        />
+                        <div className="auto-picker-list">
+                          {filteredSkills.length === 0 ? (
+                            <div className="auto-picker-empty">{t("automations.noMatch")}</div>
+                          ) : (
+                            filteredSkills.map((s) => (
+                              <div
+                                key={s.name}
+                                className={`auto-picker-item ${form.skills.includes(s.name) ? "checked" : ""}`}
+                                onClick={() => toggleSkill(s.name)}
+                              >
+                                <div className="auto-picker-name">{s.name}</div>
+                                {s.description && <div className="auto-picker-desc">{s.description}</div>}
+                                {form.skills.includes(s.name) && <span className="auto-picker-check">✓</span>}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="auto-picker-wrap">
+                    <button
+                      type="button"
+                      className={`auto-add-btn ${showMcpPicker ? "active" : ""}`}
+                      onClick={() => {
+                        setShowMcpPicker((v) => !v);
+                        setShowSkillPicker(false);
+                      }}
+                    >
+                      <span className="auto-add-plus">＋</span>
+                      {t("automations.mcpLabel")}
+                    </button>
+                    {showMcpPicker && (
+                      <div className="auto-picker-pop" onMouseLeave={() => setShowMcpPicker(false)}>
+                        <input
+                          className="auto-picker-search"
+                          autoFocus
+                          value={mcpQuery}
+                          onChange={(e) => setMcpQuery(e.target.value)}
+                          placeholder={t("automations.searchPlaceholder")}
+                        />
+                        <div className="auto-picker-list">
+                          {filteredMcps.length === 0 ? (
+                            <div className="auto-picker-empty">{t("automations.noMatch")}</div>
+                          ) : (
+                            filteredMcps.map((s) => (
+                              <div
+                                key={s.id}
+                                className={`auto-picker-item ${form.mcpServerIds.includes(s.id) ? "checked" : ""}`}
+                                onClick={() => toggleMcp(s.id)}
+                              >
+                                <div className="auto-picker-name">{s.label || s.id}</div>
+                                {form.mcpServerIds.includes(s.id) && <span className="auto-picker-check">✓</span>}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="composer-right">
+                    <button
+                      type="button"
+                      className="btn primary auto-send"
+                      onClick={save}
+                      disabled={busy}
+                    >
+                      {busy ? t("automations.saving") : t("common.save")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="auto-schedule-section">
+              <div className="auto-field">
+                <label>{t("automations.scheduleLabel")}</label>
+                <div className="tabs auto-tabs">
+                  {scheduleTabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      className={`tab ${form.scheduleType === tab.key ? "active" : ""}`}
+                      onClick={() => setForm((f) => ({ ...f, scheduleType: tab.key }))}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="auto-schedule-panel">
+                  {form.scheduleType === "daily" && (
                     <div className="auto-row">
-                      <span>{t("automations.weeklyAt")}</span>
+                      <span>{t("automations.dailyAt")}</span>
                       <input
                         type="time"
                         value={form.time}
                         onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
                       />
                     </div>
-                  </>
-                )}
+                  )}
 
-                {form.scheduleType === "cron" && (
-                  <>
-                    <input
-                      type="text"
-                      value={form.cron}
-                      onChange={(e) => setForm((f) => ({ ...f, cron: e.target.value }))}
-                      placeholder={t("automations.cronPlaceholder")}
-                    />
-                    <div className="presets">
-                      {PRESET_CRONS.map((p) => (
-                        <button
-                          key={p.cron}
-                          className="btn small"
-                          onClick={() =>
-                            setForm((f) => ({ ...f, scheduleType: "cron", cron: p.cron }))
-                          }
-                        >
-                          {p.label}
-                        </button>
-                      ))}
+                  {form.scheduleType === "weekly" && (
+                    <>
+                      <div className="auto-weekdays">
+                        {WEEK_DAYS.map((d) => (
+                          <button
+                            key={d.key}
+                            className={`auto-weekday ${form.days.includes(d.key) ? "active" : ""}`}
+                            onClick={() => toggleDay(d.key)}
+                            title={t("automations.weekDay", { n: d.key })}
+                          >
+                            {d.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="auto-row">
+                        <span>{t("automations.weeklyAt")}</span>
+                        <input
+                          type="time"
+                          value={form.time}
+                          onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {form.scheduleType === "cron" && (
+                    <>
+                      <input
+                        type="text"
+                        value={form.cron}
+                        onChange={(e) => setForm((f) => ({ ...f, cron: e.target.value }))}
+                        placeholder={t("automations.cronPlaceholder")}
+                      />
+                      <div className="presets">
+                        {PRESET_CRONS.map((p) => (
+                          <button
+                            key={p.cron}
+                            className="btn small"
+                            onClick={() => setForm((f) => ({ ...f, scheduleType: "cron", cron: p.cron }))}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {form.scheduleType === "once" && (
+                    <div className="auto-row">
+                      <input
+                        type="date"
+                        value={form.onceDate}
+                        min={formatDate()}
+                        onChange={(e) => setForm((f) => ({ ...f, onceDate: e.target.value }))}
+                      />
+                      <input
+                        type="time"
+                        value={form.onceTime}
+                        onChange={(e) => setForm((f) => ({ ...f, onceTime: e.target.value }))}
+                      />
                     </div>
-                  </>
-                )}
-
-                {form.scheduleType === "once" && (
-                  <div className="auto-row">
-                    <input
-                      type="date"
-                      value={form.onceDate}
-                      min={formatDate()}
-                      onChange={(e) => setForm((f) => ({ ...f, onceDate: e.target.value }))}
-                    />
-                    <input
-                      type="time"
-                      value={form.onceTime}
-                      onChange={(e) => setForm((f) => ({ ...f, onceTime: e.target.value }))}
-                    />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
 
-            <div className="auto-field">
-              <label>{t("automations.validityLabel")}</label>
-              <div className="auto-row">
-                <input
-                  type="date"
-                  value={form.validFrom}
-                  onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-                  placeholder={t("automations.validFrom")}
-                />
-                <span>→</span>
-                <input
-                  type="date"
-                  value={form.validUntil}
-                  min={form.validFrom || undefined}
-                  onChange={(e) => setForm((f) => ({ ...f, validUntil: e.target.value }))}
-                  placeholder={t("automations.validUntil")}
-                />
+              <div className="auto-field">
+                <label>{t("automations.validityLabel")}</label>
+                <div className="auto-row">
+                  <input
+                    type="date"
+                    value={form.validFrom}
+                    onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
+                    placeholder={t("automations.validFrom")}
+                  />
+                  <span>→</span>
+                  <input
+                    type="date"
+                    value={form.validUntil}
+                    min={form.validFrom || undefined}
+                    onChange={(e) => setForm((f) => ({ ...f, validUntil: e.target.value }))}
+                    placeholder={t("automations.validUntil")}
+                  />
+                </div>
+                <p className="auto-field-hint">{t("automations.validityHint")}</p>
               </div>
-              <p className="auto-field-hint">{t("automations.validityHint")}</p>
             </div>
           </div>
         </div>
