@@ -668,6 +668,7 @@ Respond in the same language as the user.`;
   ): Promise<void> {
     try {
       if (!userText || !userText.trim()) return;
+      logger.info("timeline", "capture_start", { session: sessionId });
       const settings = loadSettings();
       const model = createChatModel(settings.model);
       const sys = `You are logging a daily work-session timeline. From the user's latest message and the assistant's reply, extract the key points worth keeping as a memory of this conversation: decisions made, conclusions reached, tasks attempted or completed, important facts learned, and any open questions.
@@ -691,6 +692,7 @@ Output ONLY a concise list of points (one short sentence per line, no numbering,
       if (points.length === 0) return;
       const project = ws ? path.basename(ws) : "(默认工作区)";
       appendTimelineEntry({ project, points });
+      logger.info("timeline", "capture_done", { session: sessionId, project, pointsCount: points.length });
     } catch (err) {
       logger.warn("timeline", "capture failed", {
         session: sessionId,
@@ -1142,34 +1144,49 @@ Output ONLY a concise list of points (one short sentence per line, no numbering,
   /** List all files in the session's output folder (the artifacts panel). */
   listArtifacts(sessionId: string): ArtifactFile[] {
     const s = getSession(sessionId);
-    let root: string | undefined;
     if (s && hasPickedWorkspace(s.workspaceDir)) {
-      // Picked a project: artifacts live in the per-session output drawer, not
-      // in the whole project tree (which would include source/node_modules).
-      root = sessionArtifactsDir(sessionId, s.workspaceDir!);
-    } else {
-      // Default isolated session: deliverables live in the per-session output
-      // drawer (DEFAULT_WORKSPACE_DIR/.deepwork/sessions/<id>), NOT the shared
-      // default workspace, so each chat's artifacts stay isolated.
-      root = sessionArtifactsDir(sessionId, s?.workspaceDir);
+      // Picked a project: the agent writes to the project root (its cwd), so
+      // we must scan there — not just the isolated .deepwork/sessions drawer.
+      // We scan the project root but skip source-tree noise.
+      return this.scanArtifacts(path.resolve(s.workspaceDir!), true);
     }
+    // Default isolated session: artifacts live in the per-session drawer.
+    const root = sessionArtifactsDir(sessionId, s?.workspaceDir);
     if (!root) {
       const settings = loadSettings();
-      root = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
+      const fallback = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
+      if (!fallback) return [];
+      return this.scanArtifacts(fallback, false);
     }
-    if (!root) return [];
-    return this.scanArtifacts(root);
+    return this.scanArtifacts(root, false);
   }
 
-  private scanArtifacts(root: string): ArtifactFile[] {
+  private scanArtifacts(root: string, isProjectRoot = false): ArtifactFile[] {
     const out: ArtifactFile[] = [];
-    const skipDirs = new Set(["node_modules", ".git", ".venv", "dist", "build", "out", "__pycache__"]);
+    // Directories to always skip.
+    const skipDirs = new Set([
+      "node_modules", ".git", ".venv", "dist", "build", "out",
+      "__pycache__", ".next", ".nuxt", ".angular", "target", ".deepwork",
+      // Source / config dirs that are not user-facing deliverables.
+      ...(isProjectRoot
+        ? ["src", "lib", "app", "components", "hooks", "utils", "types",
+            "pages", "views", "routes", "store", "tests", "__tests__",
+            "test", "spec", "docs", ".idea", ".vscode", ".DS_Store"]
+        : []),
+    ]);
     // Internal / transient files that are not user-facing artifacts.
     const skipFiles = new Set([
-      "deepwork.log",
+      "deepwork.log", "package.json", "tsconfig.json", "vite.config.*",
+      "tailwind.config*", "postcss.config*", "next.config*",
+      ".gitignore", ".eslintrc*", ".prettierrc*", "README*", "LICENSE*",
+      "go.mod", "go.sum", "Cargo.toml", "pom.xml", "build.gradle",
       // Model call trace dumps (raw request/response text).
     ]);
-    const skipExt = new Set(["log"]);
+    const skipExt = new Set(["log", ...(isProjectRoot
+      ? ["ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "vue",
+         "svelte", "css", "scss", "less", "json", "yaml", "yml", "toml",
+         "lock", "mod", "sum"]
+      : [])]);
     const isInternal = (name: string): boolean => {
       if (skipFiles.has(name)) return true;
       if (name.startsWith("call_") && name.endsWith(".txt")) return true;
