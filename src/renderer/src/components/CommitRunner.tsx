@@ -64,10 +64,11 @@ export function CommitRunner(): React.ReactElement {
 
     const CSS_W = 300;
     const CSS_H = 132;
+    const SCALE = 2;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(CSS_W * dpr);
-    canvas.height = Math.round(CSS_H * dpr);
-    ctx.scale(dpr, dpr);
+    canvas.width = Math.round(CSS_W * dpr * SCALE);
+    canvas.height = Math.round(CSS_H * dpr * SCALE);
+    ctx.scale(dpr * SCALE, dpr * SCALE);
 
     const groundY = CSS_H - 22;
     const playerX = 36;
