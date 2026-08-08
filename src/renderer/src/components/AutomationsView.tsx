@@ -94,6 +94,8 @@ interface FormState {
   mcpServerIds: string[];
   /** Model id chosen for this automation; "" means use the global default. */
   model: string;
+  /** Whether this automation is active (false = paused, will not be triggered). */
+  enabled: boolean;
 }
 
 function emptyForm(): FormState {
@@ -113,6 +115,7 @@ function emptyForm(): FormState {
     skills: [],
     mcpServerIds: [],
     model: "",
+    enabled: true,
   };
 }
 
@@ -142,6 +145,7 @@ function formFromAutomation(a: Automation): FormState {
     skills: a.skills || [],
     mcpServerIds: a.mcpServerIds || [],
     model: a.model || "",
+    enabled: a.enabled,
   };
 }
 
@@ -252,7 +256,7 @@ export function AutomationsView(): React.ReactElement {
       return;
     }
     setBusy(true);
-    const payload: Omit<Automation, "id" | "createdAt" | "updatedAt" | "enabled" | "lastRunAt" | "lastStatus"> = {
+    const payload: Omit<Automation, "id" | "createdAt" | "updatedAt" | "lastRunAt" | "lastStatus"> = {
       title,
       instructions,
       workspaceDir: form.workspaceDir || undefined,
@@ -264,6 +268,7 @@ export function AutomationsView(): React.ReactElement {
       skills: form.skills.length ? form.skills : undefined,
       mcpServerIds: form.mcpServerIds.length ? form.mcpServerIds : undefined,
       model: form.model || undefined,
+      enabled: form.enabled,
     };
     try {
       if (editingId) {
@@ -361,6 +366,7 @@ export function AutomationsView(): React.ReactElement {
                 <input type="checkbox" checked={a.enabled} onChange={() => toggle(a)} />
                 <span>{a.title}</span>
               </label>
+              {!a.enabled && <span className="auto-paused-badge">{t("automations.pausedBadge")}</span>}
               <div className="auto-actions">
                 <button
                   className="btn small"
@@ -419,6 +425,20 @@ export function AutomationsView(): React.ReactElement {
             <div className="auto-banner">
               <span className="auto-banner-icon">ℹ</span>
               <span>{t("automations.banner")}</span>
+            </div>
+
+            <div className="auto-enabled-row">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={form.enabled}
+                  onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
+                />
+                <span>{form.enabled ? t("automations.enabledOn") : t("automations.enabledOff")}</span>
+              </label>
+              <span className="auto-enabled-hint">
+                {form.enabled ? t("automations.enabledHintOn") : t("automations.enabledHintOff")}
+              </span>
             </div>
 
             <label className="auto-field-label">{t("automations.titleLabel")}</label>
