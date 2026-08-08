@@ -154,6 +154,8 @@ const zhCN = {
       testConnection: "测试连接",
       availableModels: "可用模型：",
       clearSavedKey: "清除已保存的密钥",
+      activeNotConfigured:
+        "当前使用模型「{{model}}」未出现在已配置列表中。请添加该模型，或在下方把某个已启用模型「设为默认」。",
     },
   },
   errors: {

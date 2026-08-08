@@ -156,6 +156,8 @@ const enUS = {
       testConnection: "Test connection",
       availableModels: "Available models: ",
       clearSavedKey: "Clear saved key",
+      activeNotConfigured:
+        "The active model \"{{model}}\" is not in your configured list. Add it, or set an enabled model below as default.",
     },
   },
   errors: {

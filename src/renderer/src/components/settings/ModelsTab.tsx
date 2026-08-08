@@ -29,8 +29,7 @@ export function ModelsTab({
   const [pendingDelete, setPendingDelete] = useState<ConfiguredModel | null>(null);
 
   const configured = settings.configuredModels ?? [];
-  // Ensure the active settings model is always represented in the list.
-  const effectiveList = withActiveModel(settings, configured);
+  const effectiveList = configured;
   const activeId = `${settings.model.provider}:${settings.model.model}`;
 
   const startCreate = (): void => {
@@ -118,6 +117,13 @@ export function ModelsTab({
         <span className="info-icon">i</span>
         {t("settings.models.infoBanner")}
       </div>
+
+      {!configured.some((m) => m.id === activeId) && (
+        <div className="warn-banner">
+          <span className="warn-icon">⚠</span>
+          {t("settings.models.activeNotConfigured", { model: shortId(activeId) })}
+        </div>
+      )}
 
       {effectiveList.length === 0 ? (
         <div className="empty-models">{t("settings.models.empty")}</div>
@@ -473,22 +479,4 @@ function ModelEditor({
 
 function shortId(id: string): string {
   return id.includes(":") ? id.split(":").slice(1).join(":") : id;
-}
-
-/** Make sure the list always includes the active settings model. */
-function withActiveModel(
-  settings: SettingsType,
-  configured: ConfiguredModel[],
-): ConfiguredModel[] {
-  const activeId = `${settings.model.provider}:${settings.model.model}`;
-  if (configured.some((m) => m.id === activeId)) return configured;
-  // Synthesize an entry for the active model so it appears in the list.
-    return [
-      ...configured,
-      {
-        id: activeId,
-        provider: settings.model.provider,
-        enabled: true,
-      },
-    ];
 }
