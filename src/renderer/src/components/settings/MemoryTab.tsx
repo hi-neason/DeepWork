@@ -41,11 +41,6 @@ export function MemoryTab(): React.ReactElement {
       <p className="section-desc">{t("settings.memory.desc")}</p>
 
       <div className="setting-card">
-        <div className="um-path-hint">
-          <span className="um-path-label">{t("settings.memory.fileLabel")}</span>
-          <code className="um-path-value">{memoryPath}</code>
-        </div>
-
         <h3 className="um-heading">{t("settings.memory.heading")}</h3>
 
         <p className="setting-hint um-edit-hint">{t("settings.memory.editHint")}</p>
@@ -58,25 +53,31 @@ export function MemoryTab(): React.ReactElement {
         />
 
         <div className="um-actions">
-          <button
-            className={`btn primary ${saving ? "disabled" : ""}`}
-            onClick={() => void save()}
-            disabled={saving || !dirty}
-          >
-            {t("common.save")}
-          </button>
-          <button className="btn" onClick={reset} disabled={saving || !dirty}>
-            {t("rightPanel.cancel")}
-          </button>
-          {savedAt && !dirty && (
-            <span className="um-saved">
-              {t("settings.memory.saved")}{" "}
-              {new Date(savedAt).toLocaleTimeString("zh-CN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-          )}
+          <div className="um-buttons">
+            <button
+              className={`btn primary ${saving ? "disabled" : ""}`}
+              onClick={() => void save()}
+              disabled={saving || !dirty}
+            >
+              {t("common.save")}
+            </button>
+            <button className="btn" onClick={reset} disabled={saving || !dirty}>
+              {t("rightPanel.cancel")}
+            </button>
+            {savedAt && !dirty && (
+              <span className="um-saved">
+                {t("settings.memory.saved")}{" "}
+                {new Date(savedAt).toLocaleTimeString("zh-CN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            )}
+          </div>
+          <div className="um-path-hint">
+            <span className="um-path-label">{t("settings.memory.fileLabel")}</span>
+            <code className="um-path-value">{memoryPath}</code>
+          </div>
         </div>
       </div>
     </div>
