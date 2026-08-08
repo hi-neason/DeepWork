@@ -411,7 +411,7 @@ const enUS = {
     permissionHint: "Auto is recommended: non-GUI tools run without prompting.",
     mode: {
       auto: "Auto",
-      manual: "Manual",
+      manual: "Manual approval",
       plan: "Plan only",
     },
     skillsLabel: "Skills",
