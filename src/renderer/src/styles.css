@@ -1575,7 +1575,7 @@ body,
 }
 .um-edit-hint { margin: 0 0 12px; font-size: 12.5px; line-height: 1.6; }
 .um-editor {
-  width: 100%; min-height: 440px;
+  width: 100%; min-height: 180px;
   background: var(--bg); border: 1px solid var(--border);
   color: var(--text); border-radius: 10px; padding: 14px 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
