@@ -615,16 +615,24 @@ export class AgentManager {
       let candidates: Array<{ content?: string }> = [];
       try {
         const model = createChatModel(settings.model);
-        const sys = `You distill durable, cross-session facts from a single user message.
-Output ONLY a JSON array (no prose) of objects: {"content":"one concise sentence"}.
-Include only facts worth remembering long-term (user preferences, stable context, notable decisions or events). If nothing worth remembering, return [].
-Respond in the same language as the user.`;
-        const resp = await model.invoke([
-          { role: "system", content: sys },
-          { role: "user", content: userText },
-        ]);
-        const raw = (resp as { content?: unknown }).content;
-        const text = typeof raw === "string" ? raw : "";
+        const prompt =
+          "从一条用户消息中提炼出值得长期记住的持久事实。\n" +
+          "要求：\n" +
+          "- 只输出一个 JSON 数组（不要其他文字），元素为对象 {\"content\":\"一句话\"}\n" +
+          "- 只包含值得长期记住的事实（用户偏好、稳定背景、重要决定或事件）\n" +
+          "- 如果没有值得记住的，返回 []\n" +
+          "- 使用与用户相同的语言\n\n" +
+          `用户消息：${userText}`;
+        const stream = await model.stream([new HumanMessage(prompt)], {
+          maxTokens: 200,
+          temperature: 0,
+        } as Record<string, unknown>);
+        const parts: string[] = [];
+        for await (const chunk of stream) {
+          const t = extractText(chunk.content);
+          if (t) parts.push(t);
+        }
+        const text = parts.join("").trim();
         const match = text.match(/\[[\s\S]*\]/);
         if (match) {
           candidates = JSON.parse(match[0]) as Array<{ content?: string }>;
@@ -680,22 +688,33 @@ Respond in the same language as the user.`;
       const project = ws ? path.basename(ws) : "(默认工作区)";
 
       // Attempt LLM-based extraction; fall back to raw-text on any error.
+      // NOTE: must use model.stream() + a single HumanMessage (same pattern as
+      // title generation). The ark-code-latest model is served from the
+      // /api/coding/v3 endpoint, which 404s on model.invoke() with a system
+      // role ("coding plan feature not supported"). Streaming a plain user
+      // prompt works fine.
       let points: string[] = [];
       try {
         const model = createChatModel(settings.model);
-        const sys = `You are logging a daily work-session timeline. From the user's latest message and the assistant's reply, extract the key points worth keeping as a memory of this conversation: decisions made, conclusions reached, tasks attempted or completed, important facts learned, and any open questions.
-Output ONLY a concise list of points (one short sentence per line, no numbering, no bullet markers, no code fences), in the same language as the user. If the conversation was trivial or small-talk, output a single short line summarizing what was discussed.`;
-        const resp = await model.invoke([
-          { role: "system", content: sys },
-          {
-            role: "user",
-            content: `User message:\n${userText}\n\n---\nAssistant reply:\n${replyText}`,
-          },
-        ]);
-        const raw = (resp as { content?: unknown }).content;
-        const text = typeof raw === "string" ? raw : "";
+        const prompt =
+          "你正在记录每日工作会话时间线。从用户的最新消息和助手的回复中，提取值得作为记忆保留的关键要点：做出的决策、得出的结论、尝试或完成的任务、学到的重要事实、遗留的问题。\n" +
+          "要求：\n" +
+          "- 每行一个要点，一句话，简洁\n" +
+          "- 不要编号、不要项目符号、不要代码块\n" +
+          "- 使用与用户相同的语言\n" +
+          "- 如果对话无关紧要或只是闲聊，输出一行简短总结\n\n" +
+          `用户消息：\n${userText}\n\n---\n助手回复：\n${replyText}`;
+        const stream = await model.stream([new HumanMessage(prompt)], {
+          maxTokens: 300,
+          temperature: 0,
+        } as Record<string, unknown>);
+        const parts: string[] = [];
+        for await (const chunk of stream) {
+          const t = extractText(chunk.content);
+          if (t) parts.push(t);
+        }
+        const text = parts.join("").trim();
         points = text
-          .trim()
           .replace(/^```[a-z]*\n?/i, "")
           .replace(/\n?```$/i, "")
           .split("\n")
