@@ -19,6 +19,10 @@ export interface ConfiguredModel {
   provider: ProviderKind;
   enabled: boolean;
   isDefault?: boolean;
+  /** Endpoint this model was configured with. Stored so a model can be used
+   *  with its own base URL (e.g. a Volcengine Ark general chat model on
+   *  /api/v3) rather than the global active endpoint. */
+  baseUrl?: string;
 }
 
 export interface ModelConfig {
@@ -159,6 +163,9 @@ export interface Automation {
   skills?: string[];
   /** MCP server ids to enable for this automation. */
   mcpServerIds?: string[];
+  /** Model id (e.g. "openai:gpt-4o") to run this automation with. Empty/undefined
+   *  means use the global default model. Honors the model's own endpoint if set. */
+  model?: string;
 }
 
 export interface AutomationWithRuns extends Automation {

@@ -45,6 +45,11 @@ function basename(p?: string): string {
   return s.slice(idx + 1) || s;
 }
 
+/** Strip the "provider:" prefix from a model id for compact display. */
+function shortModelLabel(id: string): string {
+  return id.includes(":") ? id.split(":").slice(1).join(":") : id;
+}
+
 function describeAutomation(a: Automation, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const cfg = a.scheduleConfig || {};
   switch (a.scheduleType) {
@@ -87,6 +92,8 @@ interface FormState {
   permissionMode: PermissionMode;
   skills: string[];
   mcpServerIds: string[];
+  /** Model id chosen for this automation; "" means use the global default. */
+  model: string;
 }
 
 function emptyForm(): FormState {
@@ -105,6 +112,7 @@ function emptyForm(): FormState {
     permissionMode: "auto",
     skills: [],
     mcpServerIds: [],
+    model: "",
   };
 }
 
@@ -133,6 +141,7 @@ function formFromAutomation(a: Automation): FormState {
     permissionMode: a.permissionMode || "auto",
     skills: a.skills || [],
     mcpServerIds: a.mcpServerIds || [],
+    model: a.model || "",
   };
 }
 
@@ -163,6 +172,7 @@ export function AutomationsView(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [mcpServers, setMcpServers] = useState<{ id: string; label: string }[]>([]);
   const [skills, setSkills] = useState<{ name: string; description: string }[]>([]);
+  const [models, setModels] = useState<{ id: string; label: string }[]>([]);
 
   const refresh = async (): Promise<void> => {
     setItems(await window.deepwork.automations.list());
@@ -183,6 +193,16 @@ export function AutomationsView(): React.ReactElement {
     try {
       const list = await window.deepwork.skills.list();
       setSkills(list.filter((s) => s.enabled).map((s) => ({ name: s.name, description: s.description })));
+    } catch {
+      // ignore
+    }
+    try {
+      const cfgModels = (await window.deepwork.settings.get()).configuredModels ?? [];
+      setModels(
+        cfgModels
+          .filter((m) => m.enabled)
+          .map((m) => ({ id: m.id, label: shortModelLabel(m.id) })),
+      );
     } catch {
       // ignore
     }
@@ -237,6 +257,7 @@ export function AutomationsView(): React.ReactElement {
       permissionMode: form.permissionMode,
       skills: form.skills.length ? form.skills : undefined,
       mcpServerIds: form.mcpServerIds.length ? form.mcpServerIds : undefined,
+      model: form.model || undefined,
     };
     try {
       if (editingId) {
@@ -351,6 +372,11 @@ export function AutomationsView(): React.ReactElement {
                   {basename(a.workspaceDir)}
                 </span>
               )}
+              {a.model && (
+                <span className="auto-model" title={a.model}>
+                  {shortModelLabel(a.model)}
+                </span>
+              )}
               {a.lastStatus && (
                 <span className={`auto-status ${statusClass(a.lastStatus)}`}>
                   {t("automations.last", { status: t(`automations.status.${a.lastStatus}`) })}
@@ -409,6 +435,22 @@ export function AutomationsView(): React.ReactElement {
                   {form.workspaceDir ? t("automations.changeWorkspace") : t("automations.pickWorkspace")}
                 </button>
               </div>
+            </div>
+
+            <div className="auto-field">
+              <label>{t("automations.modelLabel")}</label>
+              <select
+                value={form.model}
+                onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+              >
+                <option value="">{t("automations.modelDefault")}</option>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <p className="auto-field-hint">{t("automations.modelHint")}</p>
             </div>
 
             <div className="auto-field">

@@ -28,6 +28,7 @@ interface AutoRow {
   permission_mode: string | null;
   skills: string | null;
   mcp_server_ids: string | null;
+  model: string | null;
 }
 
 function parseScheduleConfig(json: string | null): AutomationScheduleConfig | undefined {
@@ -95,6 +96,7 @@ function rowToAutomation(r: AutoRow): Automation {
     permissionMode: (r.permission_mode as Automation["permissionMode"]) ?? undefined,
     skills: safeJsonArray(r.skills),
     mcpServerIds: safeJsonArray(r.mcp_server_ids),
+    model: r.model ?? undefined,
   };
   return migrateLegacySchedule(a);
 }
@@ -182,14 +184,15 @@ export function createAutomation(
     permission_mode: a.permissionMode ?? null,
     skills: a.skills ? JSON.stringify(a.skills) : null,
     mcp_server_ids: a.mcpServerIds ? JSON.stringify(a.mcpServerIds) : null,
+    model: a.model ?? null,
   };
   getDb()
     .prepare(
       `INSERT INTO automations (
         id, title, instructions, schedule, run_at, enabled, created_at, updated_at,
         workspace_dir, schedule_type, schedule_config, valid_from, valid_until,
-        permission_mode, skills, mcp_server_ids
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        permission_mode, skills, mcp_server_ids, model
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       row.id,
@@ -208,6 +211,7 @@ export function createAutomation(
       row.permission_mode,
       row.skills,
       row.mcp_server_ids,
+      row.model,
     );
   return rowToAutomation(row);
 }
@@ -226,7 +230,7 @@ export function updateAutomation(id: string, patch: Partial<Automation>): void {
       `UPDATE automations SET
         title = ?, instructions = ?, schedule = ?, run_at = ?, enabled = ?, updated_at = ?,
         workspace_dir = ?, schedule_type = ?, schedule_config = ?, valid_from = ?, valid_until = ?,
-        permission_mode = ?, skills = ?, mcp_server_ids = ?
+        permission_mode = ?, skills = ?, mcp_server_ids = ?, model = ?
        WHERE id = ?`,
     )
     .run(
@@ -244,6 +248,7 @@ export function updateAutomation(id: string, patch: Partial<Automation>): void {
       next.permissionMode ?? null,
       next.skills ? JSON.stringify(next.skills) : null,
       next.mcpServerIds ? JSON.stringify(next.mcpServerIds) : null,
+      next.model ?? null,
       id,
     );
 }

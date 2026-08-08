@@ -136,11 +136,13 @@ function describeSchedule(a: Automation): string {
 }
 
 export interface SchedulerHandlers {
-  /** Runs an automation turn; should stream events and return when the turn ends. */
+  /** Runs an automation turn; should stream events and return when the turn ends.
+   *  `model` is the optional model id chosen for this automation (empty = global default). */
   runAutomationTurn: (
     sessionId: string,
     instructions: string,
     onEvent: (e: unknown) => void,
+    model?: string,
   ) => Promise<void>;
 }
 
@@ -250,7 +252,7 @@ class AutomationScheduler extends EventEmitter {
     if (!fresh || !fresh.enabled) return;
     a = fresh;
     this.running.add(a.id);
-    const session = createSession(`⏰ ${a.title}`, a.workspaceDir);
+    const session = createSession(`⏰ ${a.title}`, a.workspaceDir, a.model);
     const run = startRun(a.id, session.id);
     this.emit("run:started", { automation: a, run });
     logger.info("automation", "run started", {
@@ -258,6 +260,7 @@ class AutomationScheduler extends EventEmitter {
       title: a.title,
       scheduleType: a.scheduleType,
       schedule: describeSchedule(a),
+      model: a.model ?? "(default)",
       sessionId: session.id,
       runId: run.id,
     });
@@ -266,6 +269,7 @@ class AutomationScheduler extends EventEmitter {
         session.id,
         a.instructions,
         (event) => this.emit("run:event", { automationId: a.id, sessionId: session.id, event }),
+        a.model,
       );
       finishRun(run.id, "success");
       markAutomationRun(a.id, "success", Date.now());

@@ -371,8 +371,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- automations ----
   scheduler.init({
-    runAutomationTurn: async (sessionId, instructions, onEvent) => {
-      for await (const e of agentManager.runUnattendedTurn(sessionId, instructions)) {
+    runAutomationTurn: async (sessionId, instructions, onEvent, model) => {
+      for await (const e of agentManager.runUnattendedTurn(sessionId, instructions, model)) {
         onEvent(e);
       }
     },

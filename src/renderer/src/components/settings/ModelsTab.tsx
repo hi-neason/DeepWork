@@ -314,6 +314,7 @@ function ModelEditor({
       provider,
       enabled: editing?.enabled ?? true,
       isDefault: true,
+      ...(baseUrl ? { baseUrl } : {}),
     };
     const others = settings.configuredModels.filter(
       (m) => m.id !== entry.id,

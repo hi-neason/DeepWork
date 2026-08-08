@@ -353,6 +353,7 @@ export class AgentManager {
     const settings = loadSettings();
     let provider = settings.model.provider;
     let modelName = settings.model.model;
+    let baseUrl = settings.model.baseUrl;
     if (modelId) {
       if (modelId.includes(":")) {
         const [p, ...rest] = modelId.split(":");
@@ -361,11 +362,20 @@ export class AgentManager {
       } else {
         modelName = modelId;
       }
+      // Honor a per-model endpoint if the configured model carries one (e.g. a
+      // Volcengine Ark general chat model on /api/v3 vs. the coding endpoint).
+      const cfg = settings.configuredModels.find((m) => m.id === modelId);
+      if (cfg?.baseUrl) baseUrl = cfg.baseUrl;
     }
-    const key = `${provider}:${modelName}`;
+    const key = modelId ?? `${provider}:${modelName}`;
     const existing = this.agents.get(key);
     if (existing) return existing;
-    const model = createChatModel({ ...settings.model, provider, model: modelName });
+    const model = createChatModel({
+      ...settings.model,
+      provider,
+      model: modelName,
+      ...(baseUrl ? { baseUrl } : {}),
+    });
     const agent = this.compileAgent(model);
     this.agents.set(key, agent);
     return agent;
@@ -444,6 +454,7 @@ export class AgentManager {
   async *runUnattendedTurn(
     sessionId: string,
     instructions: string,
+    modelId?: string,
   ): AsyncGenerator<DeepWorkEvent> {
     this.unattended.add(sessionId);
     // Make sure the session's workspace context is registered even without an
@@ -463,7 +474,7 @@ export class AgentManager {
       }
     }
     try {
-      yield* this.runTurn(sessionId, instructions);
+      yield* this.runTurn(sessionId, instructions, undefined, undefined, modelId);
     } finally {
       this.unattended.delete(sessionId);
     }

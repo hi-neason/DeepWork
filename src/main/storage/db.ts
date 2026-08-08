@@ -138,6 +138,7 @@ function migrate(d: Database.Database): void {
   addColumn("automations", "permission_mode", "TEXT");
   addColumn("automations", "skills", "TEXT");
   addColumn("automations", "mcp_server_ids", "TEXT");
+  addColumn("automations", "model", "TEXT");
 
   // Migration: older builds created each session's working folder directly at
   // <picked>/sessions/<id> and set root_dir to that path. The new layout uses

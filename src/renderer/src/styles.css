@@ -1756,6 +1756,10 @@ body,
 .auto-meta .auto-workspace {
   max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.auto-meta .auto-model {
+  background: var(--bg-elev2); padding: 2px 8px; border-radius: 6px;
+  font-family: ui-monospace, monospace;
+}
 .auto-status { color: var(--text-dim); }
 .auto-status.ok { color: var(--ok); }
 .auto-status.danger { color: var(--danger); }
