@@ -110,6 +110,9 @@ export function Chat({
   const [pendingModel, setPendingModel] = useState<string | undefined>(undefined);
   // Per-send permission-mode override (undefined = follow global default).
   const [pendingMode, setPendingMode] = useState<PermissionMode | undefined>(undefined);
+  // Dropdown open state for the permission-mode picker.
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const modeWrapRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -146,6 +149,8 @@ export function Chat({
   }, [slashOpen, slashQuery, skills]);
 
   const activeModel = sessionModel ?? pendingModel ?? enabledModels[0]?.id;
+  // Effective permission mode for this send (pending override → global default).
+  const currentMode: PermissionMode = pendingMode ?? defaultMode ?? "auto";
   const activeModelLabel = useMemo(() => {
     if (!activeModel) return t("chat.noModel");
     const m = enabledModels.find((x) => x.id === activeModel);
@@ -215,6 +220,18 @@ export function Chat({
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [showHistory, showSearch]);
+
+  // Close the permission-mode dropdown on outside click.
+  useEffect(() => {
+    if (!showModeMenu) return;
+    const onClick = (e: MouseEvent): void => {
+      if (!modeWrapRef.current?.contains(e.target as Node)) {
+        setShowModeMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [showModeMenu]);
 
   const submit = (): void => {
     const text = input.trim();
@@ -762,21 +779,33 @@ export function Chat({
               }}
             />
             <div className="composer-right">
-              <div className="auto-mode-seg chat-mode-seg">
-                {(["auto", "manual", "plan"] as PermissionMode[]).map((m) => {
-                  const active = (pendingMode ?? defaultMode) === m;
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      className={`auto-mode-btn ${active ? "active" : ""}`}
-                      onClick={() => setPendingMode(m)}
-                      title={t(`automations.mode.${m}`)}
-                    >
-                      {t(`automations.mode.${m}`)}
-                    </button>
-                  );
-                })}
+              <div className="mode-picker-wrap" ref={modeWrapRef}>
+                <button
+                  type="button"
+                  className="mode-picker"
+                  onClick={() => setShowModeMenu((v) => !v)}
+                  title={t("chat.permissionMode")}
+                >
+                  <span className="mode-picker-label">{t(`automations.mode.${currentMode}`)}</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                </button>
+                {showModeMenu && (
+                  <div className="mode-menu">
+                    {(["auto", "manual", "plan"] as PermissionMode[]).map((m) => (
+                      <div
+                        key={m}
+                        className={`mode-menu-item ${currentMode === m ? "active" : ""}`}
+                        onClick={() => {
+                          setPendingMode(m);
+                          setShowModeMenu(false);
+                        }}
+                      >
+                        <span>{t(`automations.mode.${m}`)}</span>
+                        {currentMode === m && <span className="check">✓</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="model-picker-wrap">
                 <button

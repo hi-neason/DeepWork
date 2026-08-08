@@ -2529,6 +2529,29 @@ body,
 }
 .mode-trigger:hover .mode-submenu { display: block; }
 
+/* ---- permission-mode dropdown (chat composer) ---- */
+.mode-picker-wrap { position: relative; }
+.mode-picker {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none; color: var(--text-dim);
+  padding: 6px 10px; border-radius: 9px; cursor: pointer;
+  font-size: 14px; font-family: inherit; min-width: 0; flex-shrink: 1;
+}
+.mode-picker:hover { background: var(--bg-elev2); color: var(--text); }
+.mode-picker-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mode-menu {
+  position: absolute; bottom: calc(100% + 6px); right: 0;
+  min-width: 150px; background: var(--bg-elev2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); z-index: 30;
+}
+.mode-menu-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text);
+}
+.mode-menu-item:hover { background: var(--bg-elev); color: var(--text); }
+.mode-menu-item.active { color: var(--accent); }
+.mode-menu-item .check { color: var(--accent); }
+
 /* ---- models list table ---- */
 .add-model-btn { margin-bottom: 14px; }
 .info-banner {
