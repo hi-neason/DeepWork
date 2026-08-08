@@ -612,22 +612,28 @@ export class AgentManager {
   ): Promise<void> {
     try {
       const settings = loadSettings();
-      const model = createChatModel(settings.model);
-      const sys = `You distill durable, cross-session facts from a single user message.
+      let candidates: Array<{ content?: string }> = [];
+      try {
+        const model = createChatModel(settings.model);
+        const sys = `You distill durable, cross-session facts from a single user message.
 Output ONLY a JSON array (no prose) of objects: {"content":"one concise sentence"}.
 Include only facts worth remembering long-term (user preferences, stable context, notable decisions or events). If nothing worth remembering, return [].
 Respond in the same language as the user.`;
-      const resp = await model.invoke([
-        { role: "system", content: sys },
-        { role: "user", content: userText },
-      ]);
-      const raw = (resp as { content?: unknown }).content;
-      const text = typeof raw === "string" ? raw : "";
-      const match = text.match(/\[[\s\S]*\]/);
-      if (!match) return;
-      const candidates = JSON.parse(match[0]) as Array<{
-        content?: string;
-      }>;
+        const resp = await model.invoke([
+          { role: "system", content: sys },
+          { role: "user", content: userText },
+        ]);
+        const raw = (resp as { content?: unknown }).content;
+        const text = typeof raw === "string" ? raw : "";
+        const match = text.match(/\[[\s\S]*\]/);
+        if (match) {
+          candidates = JSON.parse(match[0]) as Array<{ content?: string }>;
+        }
+      } catch {
+        // LLM failed (e.g. coding-only model). Store raw user text as fallback.
+        logger.info("memory", "extraction_llm_fallback", { session: sessionId });
+        candidates = [{ content: userText.slice(0, 150) }];
+      }
       // Quick dedup against existing MD profile to avoid exact repeats
       const existing = readRawMemory().toLowerCase();
       for (const c of candidates) {
@@ -669,28 +675,42 @@ Respond in the same language as the user.`;
     try {
       if (!userText || !userText.trim()) return;
       logger.info("timeline", "capture_start", { session: sessionId });
+
       const settings = loadSettings();
-      const model = createChatModel(settings.model);
-      const sys = `You are logging a daily work-session timeline. From the user's latest message and the assistant's reply, extract the key points worth keeping as a memory of this conversation: decisions made, conclusions reached, tasks attempted or completed, important facts learned, and any open questions.
-Output ONLY a concise list of points (one short sentence per line, no numbering, no bullet markers, no code fences), in the same language as the user. If the conversation was trivial or small-talk, output a single short line summarizing what was discussed.`;
-      const resp = await model.invoke([
-        { role: "system", content: sys },
-        {
-          role: "user",
-          content: `User message:\n${userText}\n\n---\nAssistant reply:\n${replyText}`,
-        },
-      ]);
-      const raw = (resp as { content?: unknown }).content;
-      const text = typeof raw === "string" ? raw : "";
-      const points = text
-        .trim()
-        .replace(/^```[a-z]*\n?/i, "")
-        .replace(/\n?```$/i, "")
-        .split("\n")
-        .map((l) => l.replace(/^[-*]\s*/, "").trim())
-        .filter((l) => l.length > 0);
-      if (points.length === 0) return;
       const project = ws ? path.basename(ws) : "(默认工作区)";
+
+      // Attempt LLM-based extraction; fall back to raw-text on any error.
+      let points: string[] = [];
+      try {
+        const model = createChatModel(settings.model);
+        const sys = `You are logging a daily work-session timeline. From the user's latest message and the assistant's reply, extract the key points worth keeping as a memory of this conversation: decisions made, conclusions reached, tasks attempted or completed, important facts learned, and any open questions.
+Output ONLY a concise list of points (one short sentence per line, no numbering, no bullet markers, no code fences), in the same language as the user. If the conversation was trivial or small-talk, output a single short line summarizing what was discussed.`;
+        const resp = await model.invoke([
+          { role: "system", content: sys },
+          {
+            role: "user",
+            content: `User message:\n${userText}\n\n---\nAssistant reply:\n${replyText}`,
+          },
+        ]);
+        const raw = (resp as { content?: unknown }).content;
+        const text = typeof raw === "string" ? raw : "";
+        points = text
+          .trim()
+          .replace(/^```[a-z]*\n?/i, "")
+          .replace(/\n?```$/i, "")
+          .split("\n")
+          .map((l) => l.replace(/^[-*]\s*/, "").trim())
+          .filter((l) => l.length > 0);
+      } catch {
+        // LLM call failed (e.g. coding-only model). Fall back to raw extraction.
+        logger.info("timeline", "llm_fallback", { session: sessionId });
+        const summary = replyText.slice(0, 200).replace(/\n/g, " ").trim();
+        points = [
+          `${userText.slice(0, 100)}${userText.length > 100 ? "…" : ""} → ${summary}${replyText.length > 200 ? "…" : ""}`,
+        ];
+      }
+
+      if (points.length === 0) return;
       appendTimelineEntry({ project, points });
       logger.info("timeline", "capture_done", { session: sessionId, project, pointsCount: points.length });
     } catch (err) {
