@@ -26,7 +26,7 @@ const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string; wip?: boole
   { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠" },
   { id: "skills", labelKey: "settings.tabs.skills", icon: "✨" },
   { id: "connectors", labelKey: "settings.tabs.connectors", icon: "🧩" },
-  { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰", wip: true },
+  { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰" },
   { id: "about", labelKey: "settings.tabs.about", icon: "ⓘ" },
 ];
 

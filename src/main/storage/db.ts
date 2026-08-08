@@ -88,8 +88,17 @@ function migrate(d: Database.Database): void {
       run_at TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
+      updated_at INTEGER,
       last_run_at INTEGER,
-      last_status TEXT
+      last_status TEXT,
+      workspace_dir TEXT,
+      schedule_type TEXT,
+      schedule_config TEXT,
+      valid_from TEXT,
+      valid_until TEXT,
+      permission_mode TEXT,
+      skills TEXT,
+      mcp_server_ids TEXT
     );
 
     CREATE TABLE IF NOT EXISTS automation_runs (
@@ -118,6 +127,17 @@ function migrate(d: Database.Database): void {
   addColumn("sessions", "root_dir", "TEXT");
   addColumn("sessions", "terminal_cwd", "TEXT");
   addColumn("sessions", "model", "TEXT");
+
+  // Automation subsystem columns (added for structured scheduling).
+  addColumn("automations", "updated_at", "INTEGER");
+  addColumn("automations", "workspace_dir", "TEXT");
+  addColumn("automations", "schedule_type", "TEXT");
+  addColumn("automations", "schedule_config", "TEXT");
+  addColumn("automations", "valid_from", "TEXT");
+  addColumn("automations", "valid_until", "TEXT");
+  addColumn("automations", "permission_mode", "TEXT");
+  addColumn("automations", "skills", "TEXT");
+  addColumn("automations", "mcp_server_ids", "TEXT");
 
   // Migration: older builds created each session's working folder directly at
   // <picked>/sessions/<id> and set root_dir to that path. The new layout uses

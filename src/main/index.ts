@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { registerIpc } from "./ipc/register";
 import { terminalManager } from "./terminal/manager";
 import { getDb } from "./storage/db";
+import { migrateLegacyAutomations } from "./storage/automations";
 import { agentManager } from "./agent/manager";
 import { loadClaudeCodeEnv } from "./config/ccEnv";
 import { loadSettings } from "./storage/settings";
@@ -151,6 +152,7 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   ensureDirs(); // create ~/DeepWork/{app,skills,workspace}
   getDb(); // initialize DB / migrations
+  migrateLegacyAutomations(); // migrate old schedule/run_at columns
   // Sync the runtime logger config from saved settings.
   const bootSettings = loadSettings();
   configureLogger({

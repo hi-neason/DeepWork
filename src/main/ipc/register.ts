@@ -64,6 +64,7 @@ import {
 } from "../storage/project-memory";
 import {
   listAutomations,
+  listAutomationsWithRuns,
   createAutomation,
   updateAutomation,
   deleteAutomation,
@@ -382,8 +383,10 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   });
 
   ipcMain.handle("automations:list", () => listAutomations());
-  ipcMain.handle("automations:create", (_e, a: Omit<Automation, "id" | "createdAt" | "enabled">) =>
-    createAutomation(a),
+  ipcMain.handle("automations:listWithRuns", () => listAutomationsWithRuns());
+  ipcMain.handle(
+    "automations:create",
+    (_e, a: Omit<Automation, "id" | "createdAt" | "updatedAt" | "enabled">) => createAutomation(a),
   );
   ipcMain.handle("automations:update", (_e, id: string, patch: Partial<Automation>) =>
     updateAutomation(id, patch),

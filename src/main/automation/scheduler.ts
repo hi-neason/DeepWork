@@ -7,8 +7,9 @@ import {
   startRun,
   finishRun,
   updateAutomation,
+  getAutomation,
 } from "../storage/automations";
-import type { Automation, AutomationRun } from "../../shared/types";
+import type { Automation, AutomationRun, AutomationScheduleConfig } from "../../shared/types";
 import { logger } from "../log/logger";
 
 // Minimal cron matcher: supports "*", step (every N), lists "a,b,c", ranges "a-b".
@@ -61,6 +62,79 @@ function nextCronFire(expr: string, from: Date): Date | null {
   return null;
 }
 
+function pad(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function parseTime(time?: string): { hour: number; minute: number } | null {
+  if (!time) return null;
+  const [h, m] = time.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return { hour: h, minute: m };
+}
+
+function isWithinValidity(a: Automation, now: Date): boolean {
+  if (a.validFrom) {
+    const from = new Date(a.validFrom + "T00:00:00");
+    if (now.getTime() < from.getTime()) return false;
+  }
+  if (a.validUntil) {
+    const until = new Date(a.validUntil + "T23:59:59.999");
+    if (now.getTime() > until.getTime()) return false;
+  }
+  return true;
+}
+
+function shouldFire(a: Automation, now: Date): boolean {
+  const cfg = a.scheduleConfig || {};
+  const type = a.scheduleType || "daily";
+  if (type === "once") {
+    const dt = cfg.datetime || a.runAt;
+    return !!dt && new Date(dt).getTime() <= now.getTime();
+  }
+  if (type === "daily") {
+    const t = parseTime(cfg.time);
+    if (!t) return false;
+    return now.getHours() === t.hour && now.getMinutes() === t.minute;
+  }
+  if (type === "weekly") {
+    const t = parseTime(cfg.time);
+    if (!t) return false;
+    const days = cfg.days ?? [];
+    if (!days.includes(now.getDay())) return false;
+    return now.getHours() === t.hour && now.getMinutes() === t.minute;
+  }
+  if (type === "cron") {
+    const expr = cfg.cron || a.schedule;
+    return !!expr && cronMatches(expr, now);
+  }
+  return false;
+}
+
+function describeSchedule(a: Automation): string {
+  const cfg = a.scheduleConfig || {};
+  switch (a.scheduleType) {
+    case "daily":
+      return cfg.time ? `每天 ${cfg.time}` : "每天";
+    case "weekly": {
+      const days = cfg.days ?? [];
+      const names = ["日", "一", "二", "三", "四", "五", "六"];
+      const dayStr = days.length ? days.map((d) => `周${names[d]}`).join(",") : "每周";
+      return cfg.time ? `${dayStr} ${cfg.time}` : dayStr;
+    }
+    case "cron":
+      return cfg.cron || a.schedule || "自定义周期";
+    case "once":
+      return cfg.datetime || a.runAt || "一次性";
+    default:
+      return a.schedule || "未知";
+  }
+}
+
 export interface SchedulerHandlers {
   /** Runs an automation turn; should stream events and return when the turn ends. */
   runAutomationTurn: (
@@ -71,9 +145,9 @@ export interface SchedulerHandlers {
 }
 
 /**
- * Lightweight in-process scheduler. Ticks every 30s. Fires cron automations
- * (at most once per minute per automation) and due one-shot tasks. Each run gets
- * its own session so transcripts live in the chat history.
+ * Lightweight in-process scheduler. Ticks every 30s. Fires daily, weekly, cron
+ * and one-shot automations. Each run gets its own session so transcripts live
+ * in the chat history.
  */
 class AutomationScheduler extends EventEmitter {
   private timer: NodeJS.Timeout | null = null;
@@ -100,17 +174,48 @@ class AutomationScheduler extends EventEmitter {
     logger.info("automation", "scheduler stopped");
   }
 
-  async previewNext(schedule: string): Promise<Date | null> {
-    if (schedule === "once") return null;
-    return nextCronFire(schedule, new Date());
+  async previewNext(a: Automation): Promise<Date | null> {
+    const now = new Date();
+    if (!isWithinValidity(a, now)) return null;
+    const cfg = a.scheduleConfig || {};
+    switch (a.scheduleType) {
+      case "once": {
+        const dt = cfg.datetime || a.runAt;
+        return dt ? new Date(dt) : null;
+      }
+      case "cron": {
+        const expr = cfg.cron || a.schedule;
+        return expr ? nextCronFire(expr, now) : null;
+      }
+      case "daily": {
+        const t = parseTime(cfg.time);
+        if (!t) return null;
+        const d = new Date(now);
+        d.setHours(t.hour, t.minute, 0, 0);
+        if (d.getTime() <= now.getTime()) d.setDate(d.getDate() + 1);
+        return d;
+      }
+      case "weekly": {
+        const t = parseTime(cfg.time);
+        const days = cfg.days ?? [];
+        if (!t || !days.length) return null;
+        const d = new Date(now);
+        d.setHours(t.hour, t.minute, 0, 0);
+        for (let i = 0; i < 14; i++) {
+          if (d.getTime() > now.getTime() && days.includes(d.getDay())) return new Date(d);
+          d.setDate(d.getDate() + 1);
+        }
+        return null;
+      }
+      default:
+        return null;
+    }
   }
 
   private async catchUpOnce(): Promise<void> {
     const due = listDueAutomations(Date.now());
     for (const a of due) {
-      if (!a.runAt) continue;
       await this.fire(a);
-      // One-shot fired — disable it.
       updateAutomation(a.id, { enabled: false });
     }
   }
@@ -126,31 +231,33 @@ class AutomationScheduler extends EventEmitter {
     }
     for (const a of automations) {
       if (!a.enabled || this.running.has(a.id)) continue;
-      if (a.schedule === "once") {
-        if (a.runAt && new Date(a.runAt).getTime() <= now.getTime()) {
-          await this.fire(a);
-          updateAutomation(a.id, { enabled: false });
-        }
-        continue;
-      }
+      if (!isWithinValidity(a, now)) continue;
       if (this.lastFire.get(a.id) === minute) continue;
-      if (cronMatches(a.schedule, now)) {
+      if (shouldFire(a, now)) {
         this.lastFire.set(a.id, minute);
         await this.fire(a);
+        if (a.scheduleType === "once") {
+          updateAutomation(a.id, { enabled: false });
+        }
       }
     }
   }
 
   private async fire(a: Automation): Promise<void> {
     if (!this.handlers) return;
+    // Re-read automation so edits/disables are respected immediately.
+    const fresh = getAutomation(a.id);
+    if (!fresh || !fresh.enabled) return;
+    a = fresh;
     this.running.add(a.id);
-    const session = createSession(`⏰ ${a.title}`);
+    const session = createSession(`⏰ ${a.title}`, a.workspaceDir);
     const run = startRun(a.id, session.id);
     this.emit("run:started", { automation: a, run });
     logger.info("automation", "run started", {
       automationId: a.id,
       title: a.title,
-      schedule: a.schedule,
+      scheduleType: a.scheduleType,
+      schedule: describeSchedule(a),
       sessionId: session.id,
       runId: run.id,
     });

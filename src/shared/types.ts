@@ -105,6 +105,21 @@ export interface MemoryConfig {
 
 export type AutomationStatus = "scheduled" | "running" | "success" | "error";
 
+export type ScheduleType = "daily" | "weekly" | "cron" | "once";
+
+/** Structured schedule configuration for an automation.
+ *  - daily:   time: "HH:mm"
+ *  - weekly:  days: [0..6] (0=Sun), time: "HH:mm"
+ *  - cron:    cron: "0 9 * * 1-5"
+ *  - once:    datetime: ISO string
+ */
+export interface AutomationScheduleConfig {
+  time?: string;
+  days?: number[];
+  cron?: string;
+  datetime?: string;
+}
+
 export interface AutomationRun {
   id: string;
   automationId: string;
@@ -119,14 +134,35 @@ export interface Automation {
   id: string;
   title: string;
   instructions: string;
-  /** cron expression or "once" */
-  schedule: string;
-  /** ISO timestamp for one-shot tasks */
+  /** Workspace directory this automation runs in. */
+  workspaceDir?: string;
+  scheduleType: ScheduleType;
+  scheduleConfig: AutomationScheduleConfig;
+  /** Legacy cron expression or "once". Kept for migration. */
+  schedule?: string;
+  /** Legacy ISO timestamp for one-shot tasks. Kept for migration. */
   runAt?: string;
+  /** ISO date (YYYY-MM-DD). Inclusive. */
+  validFrom?: string;
+  /** ISO date (YYYY-MM-DD). Inclusive. */
+  validUntil?: string;
   enabled: boolean;
   createdAt: number;
+  updatedAt: number;
   lastRunAt?: number;
   lastStatus?: AutomationStatus;
+  /** Permission mode used when the automation runs unattended.
+   *  "auto" is recommended so non-GUI tools execute without blocking.
+   */
+  permissionMode?: PermissionMode;
+  /** Skill names to enable for this automation. */
+  skills?: string[];
+  /** MCP server ids to enable for this automation. */
+  mcpServerIds?: string[];
+}
+
+export interface AutomationWithRuns extends Automation {
+  runs: AutomationRun[];
 }
 
 export interface Settings {

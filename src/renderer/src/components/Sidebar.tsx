@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Session, SessionSort } from "../../../shared/types";
+import type { AutomationWithRuns, Session, SessionSort } from "../../../shared/types";
 
 export type ViewKey = "chat" | "settings";
 
@@ -51,6 +51,9 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SessionSort>("recent");
   const [query, setQuery] = useState("");
+  const [section, setSection] = useState<"chats" | "automations">("chats");
+  const [automations, setAutomations] = useState<AutomationWithRuns[]>([]);
+  const [autoCollapsed, setAutoCollapsed] = useState<Set<string>>(new Set());
   const editRef = useRef<HTMLInputElement>(null);
   const { t } = useTranslation();
 
@@ -71,6 +74,24 @@ export function Sidebar({
       window.removeEventListener("keydown", onKey);
     };
   }, [menu]);
+
+  const refreshAutomations = async (): Promise<void> => {
+    try {
+      setAutomations(await window.deepwork.automations.listWithRuns());
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    void refreshAutomations();
+    const timer = setInterval(() => void refreshAutomations(), 10_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (section === "automations") void refreshAutomations();
+  }, [section]);
 
   const groups = useMemo(() => {
     const order: string[] = [];
@@ -161,117 +182,152 @@ export function Sidebar({
       </nav>
 
       <div className="task-section">
-        <div className="task-header">
-          <span>{t("sidebar.taskList")}</span>
-          <div className="task-header-actions">
-            <button
-              className="icon-btn"
-              title={allCollapsed ? t("sidebar.expandAll") : t("sidebar.collapseAll")}
-              onClick={toggleAll}
-            >
-              {allCollapsed ? "⤢" : "⤡"}
-            </button>
-            <button
-              className="icon-btn"
-              title={t("sidebar.sortFilter")}
-              onClick={(e) =>
-                setMenu({ kind: "header", target: "", x: e.clientX, y: e.clientY })
-              }
-            >
-              ☰
-            </button>
-          </div>
+        <div className="section-tabs">
+          <button
+            className={`section-tab ${section === "chats" ? "active" : ""}`}
+            onClick={() => setSection("chats")}
+          >
+            {t("sidebar.taskList")}
+          </button>
+          <button
+            className={`section-tab ${section === "automations" ? "active" : ""}`}
+            onClick={() => setSection("automations")}
+          >
+            {t("sidebar.automations")}
+          </button>
         </div>
-        <input
-          className="task-search"
-          placeholder={t("sidebar.searchTasks")}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        {section === "chats" && (
+          <>
+            <div className="task-header">
+              <span>{t("sidebar.taskList")}</span>
+              <div className="task-header-actions">
+                <button
+                  className="icon-btn"
+                  title={allCollapsed ? t("sidebar.expandAll") : t("sidebar.collapseAll")}
+                  onClick={toggleAll}
+                >
+                  {allCollapsed ? "⤢" : "⤡"}
+                </button>
+                <button
+                  className="icon-btn"
+                  title={t("sidebar.sortFilter")}
+                  onClick={(e) =>
+                    setMenu({ kind: "header", target: "", x: e.clientX, y: e.clientY })
+                  }
+                >
+                  ☰
+                </button>
+              </div>
+            </div>
+            <input
+              className="task-search"
+              placeholder={t("sidebar.searchTasks")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </>
+        )}
       </div>
 
       <div className="session-scroll">
-        {groups.map((g) => (
-          <div key={g.name} className="group">
-            <div
-              className="group-head"
-              onClick={() => toggleGroup(g.name)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setMenu({ kind: "group", target: g.name, x: e.clientX, y: e.clientY });
-              }}
-            >
-              <span className="group-caret">{collapsed.has(g.name) ? "▸" : "▾"}</span>
-              {editingGroup === g.name ? (
-                <input
-                  ref={editRef}
-                  className="rename-input"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={() => commitGroup(g.name)}
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter") commitGroup(g.name);
-                    if (e.key === "Escape") {
-                      setEditingGroup(null);
-                      setDraft("");
-                    }
-                  }}
-                />
-              ) : (
-                <span className="group-name">
-                  <span className="group-folder">📁</span> {g.name === DEFAULT_GROUP ? t("sidebar.defaultGroup") : g.name}
-                </span>
-              )}
-              <span className="group-count">{g.sessions.length}</span>
-            </div>
-
-            {!collapsed.has(g.name) &&
-              g.sessions.map((s) => (
-                <div
-                  key={s.id}
-                  className={`session-item ${s.id === activeId && activeView === "chat" ? "active" : ""}`}
-                  onClick={() => onSelect(s.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    onSelect(s.id);
-                    setMenu({ kind: "session", target: s.id, x: e.clientX, y: e.clientY });
-                  }}
-                >
-                  {editingSession === s.id ? (
-                    <input
-                      ref={editRef}
-                      className="rename-input"
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      onBlur={() => commitSession(s.id)}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === "Enter") commitSession(s.id);
-                        if (e.key === "Escape") {
-                          setEditingSession(null);
-                          setDraft("");
-                        }
-                      }}
-                    />
-                  ) : (
-                    <span className="session-title">{s.title}</span>
-                  )}
-                  <span
-                    className="del"
-                    onClick={(e) => {
+        {section === "chats" ? (
+          groups.map((g) => (
+            <div key={g.name} className="group">
+              <div
+                className="group-head"
+                onClick={() => toggleGroup(g.name)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ kind: "group", target: g.name, x: e.clientX, y: e.clientY });
+                }}
+              >
+                <span className="group-caret">{collapsed.has(g.name) ? "▸" : "▾"}</span>
+                {editingGroup === g.name ? (
+                  <input
+                    ref={editRef}
+                    className="rename-input"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => commitGroup(g.name)}
+                    onKeyDown={(e) => {
                       e.stopPropagation();
-                      onDelete(s.id);
+                      if (e.key === "Enter") commitGroup(g.name);
+                      if (e.key === "Escape") {
+                        setEditingGroup(null);
+                        setDraft("");
+                      }
+                    }}
+                  />
+                ) : (
+                  <span className="group-name">
+                    <span className="group-folder">📁</span> {g.name === DEFAULT_GROUP ? t("sidebar.defaultGroup") : g.name}
+                  </span>
+                )}
+                <span className="group-count">{g.sessions.length}</span>
+              </div>
+
+              {!collapsed.has(g.name) &&
+                g.sessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className={`session-item ${s.id === activeId && activeView === "chat" ? "active" : ""}`}
+                    onClick={() => onSelect(s.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      onSelect(s.id);
+                      setMenu({ kind: "session", target: s.id, x: e.clientX, y: e.clientY });
                     }}
                   >
-                    ✕
-                  </span>
-                </div>
-              ))}
-          </div>
-        ))}
+                    {editingSession === s.id ? (
+                      <input
+                        ref={editRef}
+                        className="rename-input"
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => commitSession(s.id)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") commitSession(s.id);
+                          if (e.key === "Escape") {
+                            setEditingSession(null);
+                            setDraft("");
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="session-title">{s.title}</span>
+                    )}
+                    <span
+                      className="del"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(s.id);
+                      }}
+                    >
+                      ✕
+                    </span>
+                  </div>
+                ))}
+            </div>
+          ))
+        ) : (
+          <AutomationList
+            items={automations}
+            activeId={activeId}
+            collapsed={autoCollapsed}
+            onToggle={(id) =>
+              setAutoCollapsed((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              })
+            }
+            onSelectRun={onSelect}
+          />
+        )}
       </div>
 
       <div className="sidebar-footer">
@@ -392,4 +448,67 @@ export function Sidebar({
       )}
     </aside>
   );
+}
+
+interface AutomationListProps {
+  items: AutomationWithRuns[];
+  activeId: string | null;
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
+  onSelectRun: (sessionId: string) => void;
+}
+
+function AutomationList({ items, activeId, collapsed, onToggle, onSelectRun }: AutomationListProps): React.ReactElement {
+  const { t } = useTranslation();
+  if (items.length === 0) {
+    return <p className="auto-empty">{t("sidebar.noAutomations")}</p>;
+  }
+  return (
+    <div className="auto-group-list">
+      {items.map((a) => (
+        <div key={a.id} className="group">
+          <div className="group-head" onClick={() => onToggle(a.id)}>
+            <span className="group-caret">{collapsed.has(a.id) ? "▸" : "▾"}</span>
+            <span className="group-name">
+              <span className="group-folder">⏰</span> {a.title}
+            </span>
+            <span className="group-count">{a.runs.length}</span>
+          </div>
+          {!collapsed.has(a.id) && (
+            <div className="auto-runs">
+              {a.runs.length === 0 && (
+                <div className="auto-no-runs">{t("sidebar.noAutomationRuns")}</div>
+              )}
+              {a.runs.map((r) => (
+                <div
+                  key={r.id}
+                  className={`session-item ${r.sessionId === activeId ? "active" : ""}`}
+                  onClick={() => r.sessionId && onSelectRun(r.sessionId)}
+                >
+                  <span className="session-title">{formatRunTime(r.startedAt)}</span>
+                  <span className={`auto-run-status ${statusClass(r.status)}`} title={r.error || r.status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatRunTime(ts: number): string {
+  const d = new Date(ts);
+  const m = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  const hh = d.getHours().toString().padStart(2, "0");
+  const mm = d.getMinutes().toString().padStart(2, "0");
+  return `${m}-${day} ${hh}:${mm}`;
+}
+
+function statusClass(s?: string): string {
+  if (s === "success") return "ok";
+  if (s === "error") return "danger";
+  if (s === "running") return "accent";
+  return "";
 }

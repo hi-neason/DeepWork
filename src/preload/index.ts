@@ -4,6 +4,7 @@ import type {
   ArtifactFile,
   Attachment,
   Automation,
+  AutomationWithRuns,
   DeepWorkEvent,
   HistoryItem,
   MemoryItem,
@@ -187,7 +188,9 @@ const api = {
   },
   automations: {
     list: (): Promise<Automation[]> => ipcRenderer.invoke("automations:list"),
-    create: (a: Omit<Automation, "id" | "createdAt" | "enabled">): Promise<Automation> =>
+    listWithRuns: (): Promise<AutomationWithRuns[]> =>
+      ipcRenderer.invoke("automations:listWithRuns"),
+    create: (a: Omit<Automation, "id" | "createdAt" | "updatedAt" | "enabled">): Promise<Automation> =>
       ipcRenderer.invoke("automations:create", a),
     update: (id: string, patch: Partial<Automation>): Promise<void> =>
       ipcRenderer.invoke("automations:update", id, patch),
