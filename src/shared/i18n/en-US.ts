@@ -89,10 +89,15 @@ const enUS = {
       tabs: {
         user: "Personal Memory",
         timeline: "Timeline Memory",
+        project: "Project Memory",
       },
       timeline: {
         empty: "No timeline records yet. After each conversation, the day's key points are automatically captured here.",
         dateEmpty: "Select a date on the left to view that day's conversation memory.",
+      },
+      project: {
+        empty: "No project memory yet. When you chat inside a real project folder, that project's key points are automatically captured here (grouped by date, accumulated across sessions).",
+        projectEmpty: "Select a project on the left to view its memory.",
       },
     },
     about: {

@@ -172,6 +172,11 @@ const api = {
     read: (date: string): Promise<string> => ipcRenderer.invoke("timeline:read", date),
     path: (date: string): Promise<string> => ipcRenderer.invoke("timeline:path", date),
   },
+  projectMemory: {
+    list: (): Promise<string[]> => ipcRenderer.invoke("projectMemory:list"),
+    read: (project: string): Promise<string> => ipcRenderer.invoke("projectMemory:read", project),
+    path: (project: string): Promise<string> => ipcRenderer.invoke("projectMemory:path", project),
+  },
   artifacts: {
     list: (sessionId: string): Promise<ArtifactFile[]> =>
       ipcRenderer.invoke("artifacts:list", sessionId),

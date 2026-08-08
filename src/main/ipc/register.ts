@@ -58,6 +58,11 @@ import {
   timelinePath,
 } from "../storage/timeline-memory";
 import {
+  listProjects,
+  readProjectMemory,
+  projectMemoryPath,
+} from "../storage/project-memory";
+import {
   listAutomations,
   createAutomation,
   updateAutomation,
@@ -346,6 +351,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   ipcMain.handle("timeline:list", () => listTimelineDates());
   ipcMain.handle("timeline:read", (_e, date: string) => readTimelineDate(date));
   ipcMain.handle("timeline:path", (_e, date: string) => timelinePath(date));
+
+  // ---- project memory (per-project markdown) ----
+  ipcMain.handle("projectMemory:list", () => listProjects());
+  ipcMain.handle("projectMemory:read", (_e, project: string) => readProjectMemory(project));
+  ipcMain.handle("projectMemory:path", (_e, project: string) => projectMemoryPath(project));
 
   // ---- artifacts ----
   ipcMain.handle("artifacts:list", (_e, sessionId: string) =>

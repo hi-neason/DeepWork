@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-type MemSubTab = "user" | "timeline";
+type MemSubTab = "user" | "timeline" | "project";
 
 export function MemoryTab(): React.ReactElement {
   const { t } = useTranslation();
@@ -25,9 +25,21 @@ export function MemoryTab(): React.ReactElement {
         >
           {t("settings.memory.tabs.timeline")}
         </button>
+        <button
+          className={`mem-tab ${sub === "project" ? "active" : ""}`}
+          onClick={() => setSub("project")}
+        >
+          {t("settings.memory.tabs.project")}
+        </button>
       </div>
 
-      {sub === "user" ? <UserMemoryEditor /> : <TimelineViewer />}
+      {sub === "user" ? (
+        <UserMemoryEditor />
+      ) : sub === "timeline" ? (
+        <TimelineViewer />
+      ) : (
+        <ProjectMemoryViewer />
+      )}
     </div>
   );
 }
@@ -165,6 +177,67 @@ function TimelineViewer(): React.ReactElement {
         </div>
         <pre className="tl-content">
           {content || t("settings.memory.timeline.dateEmpty")}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function ProjectMemoryViewer(): React.ReactElement {
+  const { t } = useTranslation();
+  const [projects, setProjects] = useState<string[]>([]);
+  const [sel, setSel] = useState<string | null>(null);
+  const [content, setContent] = useState("");
+  const [filePath, setFilePath] = useState("");
+
+  useEffect(() => {
+    void (async () => {
+      const list = await window.deepwork.projectMemory.list();
+      setProjects(list);
+      if (list.length) setSel(list[0]);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!sel) {
+      setContent("");
+      setFilePath("");
+      return;
+    }
+    void (async () => {
+      setContent(await window.deepwork.projectMemory.read(sel));
+      setFilePath(await window.deepwork.projectMemory.path(sel));
+    })();
+  }, [sel]);
+
+  if (projects.length === 0) {
+    return (
+      <div className="setting-card">
+        <p className="setting-hint tl-empty">{t("settings.memory.project.empty")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="setting-card tl-layout">
+      <ul className="tl-list">
+        {projects.map((p) => (
+          <li
+            key={p}
+            className={`tl-item ${sel === p ? "active" : ""}`}
+            onClick={() => setSel(p)}
+          >
+            {p}
+          </li>
+        ))}
+      </ul>
+      <div className="tl-detail">
+        <div className="tl-path-hint">
+          <span className="um-path-label">{t("settings.memory.fileLabel")}</span>
+          <code className="um-path-value">{filePath}</code>
+        </div>
+        <pre className="tl-content">
+          {content || t("settings.memory.project.projectEmpty")}
         </pre>
       </div>
     </div>

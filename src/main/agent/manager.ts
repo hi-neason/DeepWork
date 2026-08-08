@@ -49,7 +49,8 @@ import { WEB_TOOLS } from "../tools/web";
 import { createTodosTool } from "../tools/todos";
 import { createMemoryTools } from "../tools/memory";
 import { appendToRecent, readRawMemory } from "../storage/user-memory";
-import { appendTimelineEntry } from "../storage/timeline-memory";
+import { appendTimelineEntry, todayStr } from "../storage/timeline-memory";
+import { appendProjectMemoryEntry } from "../storage/project-memory";
 import { skillsSourcePath } from "../skills/store";
 import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
 
@@ -731,6 +732,12 @@ export class AgentManager {
 
       if (points.length === 0) return;
       appendTimelineEntry({ project, points });
+      // Mirror the same distilled points into the per-project memory file, but
+      // only for a real picked project folder (default workspace has no project
+      // memory). Reuses the timeline extraction — no extra LLM call.
+      if (ws && hasPickedWorkspace(ws)) {
+        appendProjectMemoryEntry({ project, date: todayStr(), points });
+      }
       logger.info("timeline", "capture_done", { session: sessionId, project, pointsCount: points.length });
     } catch (err) {
       logger.warn("timeline", "capture failed", {
