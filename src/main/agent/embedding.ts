@@ -1,5 +1,6 @@
 import type { EmbeddingConfig } from "../../shared/types";
 import { logger } from "../log/logger";
+import { getApiKey } from "../storage/settings";
 
 // If an embedding backend call fails (e.g. Ollama not running), disable it for
 // a cooldown window so we don't hammer the network on every turn.
@@ -47,7 +48,6 @@ async function embedOllama(text: string, cfg: EmbeddingConfig): Promise<number[]
 }
 
 async function embedOpenAI(text: string, cfg: EmbeddingConfig): Promise<number[]> {
-  const { getApiKey } = await import("../storage/settings");
   const key = getApiKey("openai") || process.env.OPENAI_API_KEY || "";
   const base = (cfg.baseUrl || "https://api.openai.com/v1").replace(/\/$/, "");
   const res = await fetch(base + "/embeddings", {

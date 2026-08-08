@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "./db";
+import { loadSettings } from "./settings";
 import type { MemoryItem, MemoryType } from "../../shared/types";
 import { embedText } from "../agent/embedding";
 
@@ -100,7 +101,6 @@ function keywordScore(q: string, c: string): number {
 // Best-effort, non-blocking embedding fill so `addMemory` can stay synchronous.
 async function backfillEmbedding(id: string, content: string): Promise<void> {
   try {
-    const { loadSettings } = await import("./settings");
     const cfg = loadSettings().memory.embedding;
     if (cfg.provider === "none") return;
     const vec = await embedText(content, cfg);
@@ -200,7 +200,6 @@ export async function editMemory(
   content: string,
   opts?: MemoryAddOpts,
 ): Promise<void> {
-  const { loadSettings } = await import("./settings");
   const cfg = loadSettings().memory.embedding;
   const text = content.trim();
   const vec = cfg.provider === "none" ? null : await embedText(text, cfg).catch(() => null);
@@ -245,7 +244,6 @@ export async function searchMemories(
 ): Promise<MemoryItem[]> {
   const topK = opts.topK ?? 10;
   const threshold = opts.threshold ?? 0.45;
-  const { loadSettings } = await import("./settings");
   const cfg = loadSettings().memory.embedding;
 
   const rows = getDb()
