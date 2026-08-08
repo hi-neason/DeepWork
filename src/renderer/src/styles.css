@@ -1730,8 +1730,17 @@ body,
   padding: 14px; background: var(--bg-elev);
 }
 .auto-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.auto-head .switch { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.auto-head .switch {
+  display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px;
+  flex: 1; min-width: 0;
+}
+.auto-head .switch input[type="checkbox"] { flex-shrink: 0; }
+.auto-head .switch span {
+  min-width: 0; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+}
 .auto-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.auto-actions .btn { white-space: nowrap; }
 .auto-instructions {
   font-size: 13px; color: var(--text-dim); margin: 10px 0;
   white-space: pre-wrap; line-height: 1.5;
