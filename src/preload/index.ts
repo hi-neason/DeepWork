@@ -196,6 +196,10 @@ const api = {
       ipcRenderer.invoke("automations:update", id, patch),
     delete: (id: string): Promise<void> => ipcRenderer.invoke("automations:delete", id),
     runs: (id: string) => ipcRenderer.invoke("automations:runs", id),
+    deleteRun: (runId: string): Promise<void> =>
+      ipcRenderer.invoke("automations:deleteRun", runId),
+    deleteRuns: (automationId: string): Promise<void> =>
+      ipcRenderer.invoke("automations:deleteRuns", automationId),
     runNow: (id: string): Promise<void> => ipcRenderer.invoke("automations:runNow", id),
   },
   updates: {

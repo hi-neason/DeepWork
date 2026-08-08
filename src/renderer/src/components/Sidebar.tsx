@@ -83,6 +83,26 @@ export function Sidebar({
     }
   };
 
+  const handleDeleteRun = async (runId: string): Promise<void> => {
+    if (!window.confirm(t("sidebar.confirmDeleteRun"))) return;
+    try {
+      await window.deepwork.automations.deleteRun(runId);
+      await refreshAutomations();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDeleteRuns = async (automationId: string): Promise<void> => {
+    if (!window.confirm(t("sidebar.confirmClearRuns"))) return;
+    try {
+      await window.deepwork.automations.deleteRuns(automationId);
+      await refreshAutomations();
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     void refreshAutomations();
     const timer = setInterval(() => void refreshAutomations(), 10_000);
@@ -326,6 +346,8 @@ export function Sidebar({
               })
             }
             onSelectRun={onSelect}
+            onDeleteRun={handleDeleteRun}
+            onDeleteRuns={handleDeleteRuns}
           />
         )}
       </div>
@@ -456,9 +478,19 @@ interface AutomationListProps {
   collapsed: Set<string>;
   onToggle: (id: string) => void;
   onSelectRun: (sessionId: string) => void;
+  onDeleteRun: (runId: string) => void;
+  onDeleteRuns: (automationId: string) => void;
 }
 
-function AutomationList({ items, activeId, collapsed, onToggle, onSelectRun }: AutomationListProps): React.ReactElement {
+function AutomationList({
+  items,
+  activeId,
+  collapsed,
+  onToggle,
+  onSelectRun,
+  onDeleteRun,
+  onDeleteRuns,
+}: AutomationListProps): React.ReactElement {
   const { t } = useTranslation();
   if (items.length === 0) {
     return <p className="auto-empty">{t("sidebar.noAutomations")}</p>;
@@ -473,6 +505,19 @@ function AutomationList({ items, activeId, collapsed, onToggle, onSelectRun }: A
               <span className="group-folder">⏰</span> {a.title}
             </span>
             <span className="group-count">{a.runs.length}</span>
+            {a.runs.length > 0 && (
+              <button
+                type="button"
+                className="group-clear"
+                title={t("sidebar.clearRuns")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteRuns(a.id);
+                }}
+              >
+                🗑
+              </button>
+            )}
           </div>
           {!collapsed.has(a.id) && (
             <div className="auto-runs">
@@ -487,6 +532,17 @@ function AutomationList({ items, activeId, collapsed, onToggle, onSelectRun }: A
                 >
                   <span className="session-title">{formatRunTime(r.startedAt)}</span>
                   <span className={`auto-run-status ${statusClass(r.status)}`} title={r.error || r.status} />
+                  <button
+                    type="button"
+                    className="run-delete"
+                    title={t("sidebar.deleteRun")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteRun(r.id);
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
             </div>

@@ -312,6 +312,16 @@ export function listRuns(automationId: string, limit = 50): AutomationRun[] {
   return rows.map(rowToRun);
 }
 
+export function deleteRun(runId: string): void {
+  getDb().prepare(`DELETE FROM automation_runs WHERE id = ?`).run(runId);
+}
+
+export function deleteRuns(automationId: string): void {
+  getDb()
+    .prepare(`DELETE FROM automation_runs WHERE automation_id = ?`)
+    .run(automationId);
+}
+
 export function listAutomationsWithRuns(limitPerAutomation = 20): AutomationWithRuns[] {
   const automations = listAutomations();
   const runsMap = listRunsForAll(limitPerAutomation);

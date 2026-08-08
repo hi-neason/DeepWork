@@ -69,6 +69,8 @@ import {
   updateAutomation,
   deleteAutomation,
   listRuns,
+  deleteRun,
+  deleteRuns,
 } from "../storage/automations";
 import { logger } from "../log/logger";
 import type {
@@ -393,6 +395,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
   ipcMain.handle("automations:delete", (_e, id: string) => deleteAutomation(id));
   ipcMain.handle("automations:runs", (_e, id: string) => listRuns(id));
+  ipcMain.handle("automations:deleteRun", (_e, runId: string) => deleteRun(runId));
+  ipcMain.handle("automations:deleteRuns", (_e, automationId: string) => deleteRuns(automationId));
   ipcMain.handle("automations:runNow", async (_e, id: string) => {
     const a = listAutomations().find((x) => x.id === id);
     if (a) await scheduler.runNow(a);
