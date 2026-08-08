@@ -106,6 +106,7 @@ const enUS = {
       versionHint: "DeepWork v0.0.1 · local-first",
       dataLocation: "Data storage location",
       showInFinder: "Show in Finder",
+      source: "Source code",
       update: "Update",
       updateIdle: "No update check yet.",
       updateChecking: "Checking for updates…",

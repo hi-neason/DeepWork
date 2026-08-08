@@ -104,6 +104,7 @@ const zhCN = {
       versionHint: "DeepWork v0.0.1 · local-first",
       dataLocation: "数据存储位置",
       showInFinder: "在 Finder 中显示",
+      source: "开源地址",
       update: "更新",
       updateIdle: "尚未检查更新。",
       updateChecking: "正在检查更新…",

@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { UpdateStatus } from "../../../../shared/types";
 
+/** Project open-source repository (GitHub). */
+const GITHUB_URL = "https://github.com/hi-neason/DeepWork";
+
 interface Props {
   updateStatus: UpdateStatus;
 }
@@ -34,6 +37,17 @@ export function AboutTab({ updateStatus }: Props): React.ReactElement {
           <button className="btn" onClick={() => window.deepwork.app.revealData()}>
             {t("settings.about.showInFinder")}
           </button>
+        </div>
+        <div className="setting-sep" />
+        <div className="setting-row">
+          <div>
+            <div className="setting-label">{t("settings.about.source")}</div>
+            <div className="setting-hint">
+              <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="about-link">
+                {GITHUB_URL}
+              </a>
+            </div>
+          </div>
         </div>
         <div className="setting-sep" />
         <div className="setting-row">
