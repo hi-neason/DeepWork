@@ -1,6 +1,6 @@
 {
   "name": "deepwork",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "A local-first personal desktop AI agent with MCP plugins and GUI fallback.",
   "main": "./out/main/index.js",
   "author": "DeepWork contributors",

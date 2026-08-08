@@ -23,7 +23,7 @@ interface Props {
 const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string; wip?: boolean }> = [
   { id: "general", labelKey: "settings.tabs.general", icon: "⚙" },
   { id: "models", labelKey: "settings.tabs.models", icon: "◇" },
-  { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠", wip: true },
+  { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠" },
   { id: "skills", labelKey: "settings.tabs.skills", icon: "✨" },
   { id: "connectors", labelKey: "settings.tabs.connectors", icon: "🧩" },
   { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰", wip: true },
