@@ -43,6 +43,13 @@ const enUS = {
       workspacePlaceholder: "Defaults to ~/DeepWork/workspace",
       workspaceHint:
         "Sessions that don't specify a folder when created will use this directory.",
+      importTitle: "Import Settings",
+      includeAgentsMd: "Include AGENTS.md in context",
+      includeAgentsMdDesc:
+        "The agent will read the AGENTS.md file from the project root and add it to context.",
+      includeClaudeMd: "Include CLAUDE.md in context",
+      includeClaudeMdDesc:
+        "The agent will read CLAUDE.md and CLAUDE.local.md from the project root and add them to context.",
       openAtLogin: "Launch at login",
       openAtLoginDesc: "Automatically start DeepWork after you sign in.",
       trayEnabled: "Keep running in tray on close",

@@ -92,6 +92,23 @@ export function GeneralTab({ settings, onChange, onModelChange }: Props): React.
       </div>
 
       <div className="setting-card">
+        <h3 style={{ marginBottom: 12 }}>{t("settings.general.importTitle")}</h3>
+        <Toggle
+          label={t("settings.general.includeAgentsMd")}
+          desc={t("settings.general.includeAgentsMdDesc")}
+          checked={settings.includeAgentsMd}
+          onChange={(v) => onChange({ includeAgentsMd: v })}
+        />
+        <div className="setting-sep" />
+        <Toggle
+          label={t("settings.general.includeClaudeMd")}
+          desc={t("settings.general.includeClaudeMdDesc")}
+          checked={settings.includeClaudeMd}
+          onChange={(v) => onChange({ includeClaudeMd: v })}
+        />
+      </div>
+
+      <div className="setting-card">
         <Toggle
           label={t("settings.general.openAtLogin")}
           desc={t("settings.general.openAtLoginDesc")}

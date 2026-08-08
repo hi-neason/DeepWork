@@ -3,6 +3,8 @@ import { loadSettings } from "../storage/settings";
 import { searchMemories } from "../storage/memories";
 import { readRawMemory } from "../storage/user-memory";
 import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
+import fs from "node:fs";
+import path from "node:path";
 
 const PLAN_MODE_REMINDER = `## Plan mode (read-only)
 You are in PLAN MODE. You may explore, read files, search, list directories and use
@@ -65,6 +67,45 @@ export function createContextMiddleware() {
       // --- Plan mode ---
       if (settings.permissionMode === "plan") {
         parts.push(PLAN_MODE_REMINDER);
+      }
+
+      // --- Project instruction files (AGENTS.md / CLAUDE.md) ---
+      const workspaceDir = settings.model.workspaceDir;
+      if (workspaceDir) {
+        if (settings.includeAgentsMd) {
+          const agentsPath = path.join(workspaceDir, "AGENTS.md");
+          try {
+            const agentsContent = fs.readFileSync(agentsPath, "utf-8");
+            if (agentsContent.trim()) {
+              parts.push(
+                "## Project Instructions (AGENTS.md)\n" + agentsContent.trim(),
+              );
+            }
+          } catch {
+            // file not found — skip silently
+          }
+        }
+
+        if (settings.includeClaudeMd) {
+          const claudeFiles = ["CLAUDE.md", "CLAUDE.local.md"];
+          const claudeParts: string[] = [];
+          for (const f of claudeFiles) {
+            const fp = path.join(workspaceDir, f);
+            try {
+              const content = fs.readFileSync(fp, "utf-8");
+              if (content.trim()) {
+                claudeParts.push(content.trim());
+              }
+            } catch {
+              // file not found — skip
+            }
+          }
+          if (claudeParts.length > 0) {
+            parts.push(
+              "## Project Instructions (CLAUDE.md)\n" + claudeParts.join("\n\n"),
+            );
+          }
+        }
       }
 
       if (parts.length === 0) return handler(request);

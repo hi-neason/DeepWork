@@ -173,6 +173,10 @@ export interface Settings {
   memory: MemoryConfig;
   /** Global memory entries injected into the system prompt (denormalized for renderer). */
   memories: MemoryItem[];
+  /** Read AGENTS.md from workspace root and inject it into context. */
+  includeAgentsMd: boolean;
+  /** Read CLAUDE.md (+ CLAUDE.local.md) from workspace root and inject into context. */
+  includeClaudeMd: boolean;
 }
 
 /** Settings sections shown in the settings sidebar. */

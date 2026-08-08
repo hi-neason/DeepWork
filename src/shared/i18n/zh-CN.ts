@@ -43,6 +43,13 @@ const zhCN = {
       workspace: "默认工作区目录",
       workspacePlaceholder: "默认为 ~/DeepWork/workspace",
       workspaceHint: "未在新建任务时指定文件夹的会话将使用此目录。",
+      importTitle: "导入设置",
+      includeAgentsMd: "将 AGENTS.md 包含在上下文中",
+      includeAgentsMdDesc:
+        "智能体将读取根目录中的 AGENTS.md 文件并将其添加到上下文中。",
+      includeClaudeMd: "将 CLAUDE.md 包含在上下文中",
+      includeClaudeMdDesc:
+        "智能体将读取根目录中的 CLAUDE.md 和 CLAUDE.local.md 文件并将其添加到上下文中。",
       openAtLogin: "开机时自动启动",
       openAtLoginDesc: "登录系统后自动启动 DeepWork。",
       trayEnabled: "关闭窗口时驻留托盘",

@@ -45,6 +45,8 @@ const DEFAULT_SETTINGS: Settings = {
     threshold: 0.45,
   },
   memories: [],
+  includeAgentsMd: true,
+  includeClaudeMd: true,
 };
 
 export function loadSettings(): Settings {
