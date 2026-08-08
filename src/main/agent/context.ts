@@ -1,7 +1,7 @@
 import { createMiddleware } from "langchain";
 import { loadSettings } from "../storage/settings";
-import { listMemories, searchMemories } from "../storage/memories";
-import type { MemoryItem } from "../../shared/types";
+import { searchMemories } from "../storage/memories";
+import { readRawMemory } from "../storage/user-memory";
 import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
 
 const PLAN_MODE_REMINDER = `## Plan mode (read-only)
@@ -11,9 +11,12 @@ task, respond with a clear, step-by-step PLAN (commands to run, files to change,
 services to touch, and risks), then wait for the user to approve before executing.`;
 
 /**
- * Injects per-turn, non-persisted context into every model call: long-term
- * memories and a plan-mode reminder. We use wrapModelCall (rather than adding
- * messages to the input) so these are not saved into the checkpointer history.
+ * Injects per-turn, non-persisted context into every model call:
+ *   1. Global user profile (from memory.md — always injected in full)
+ *   2. Workspace-scoped memories (semantic Top-K from SQLite)
+ *   3. Plan-mode reminder when applicable
+ *
+ * We use wrapModelCall so these are not saved into checkpointer history.
  */
 export function createContextMiddleware() {
   return createMiddleware({
@@ -22,34 +25,44 @@ export function createContextMiddleware() {
       const settings = loadSettings();
       const parts: string[] = [];
 
+      // --- Global user profile from MD file ---
+      const profile = readRawMemory();
+      if (profile.trim()) {
+        parts.push(
+          "## User Profile\n" +
+            "The following information about the user was curated by them. " +
+            "Treat these as durable facts and preferences.\n\n" +
+            profile.trim(),
+        );
+      }
+
+      // --- Workspace-scoped memories (SQLite, semantic) ---
       const scopeKey = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
-      // Semantic retrieval instead of dumping the whole table: rank by the
-      // current user query, then inject only the top-K relevant memories.
       const lastUser = [...(request.messages ?? [])]
         .reverse()
         .find((m) => m.role === "user");
       const query =
         typeof lastUser?.content === "string" ? lastUser.content : "";
-      let memories: MemoryItem[];
+
       if (query) {
-        memories = await searchMemories(scopeKey, query, {
+        const workspaceMemories = await searchMemories(scopeKey, query, {
           topK: settings.memory.topK,
           threshold: settings.memory.threshold,
         });
-      } else {
-        memories = listMemories(scopeKey);
+        if (workspaceMemories.length > 0) {
+          const lines = workspaceMemories.map((m) => {
+            const tag = m.type ? ` (${m.type})` : "";
+            return `- ${m.content}${tag}`;
+          });
+          parts.push(
+            "## Workspace context\n" +
+              "Facts relevant to this project from past sessions:\n" +
+              lines.join("\n"),
+          );
+        }
       }
-      if (memories.length > 0) {
-        const lines = memories.map((m) => {
-          const tag = m.type ? ` (${m.type})` : "";
-          return `- ${m.content}${tag}`;
-        });
-        parts.push(
-          "## Long-term memory\n" +
-            "These facts were saved in earlier sessions and may be relevant:\n" +
-            lines.join("\n"),
-        );
-      }
+
+      // --- Plan mode ---
       if (settings.permissionMode === "plan") {
         parts.push(PLAN_MODE_REMINDER);
       }

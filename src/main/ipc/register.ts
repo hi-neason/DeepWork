@@ -43,6 +43,15 @@ import {
 } from "../storage/settings";
 import { listAllMemories, listMemoriesByScope, addMemory, removeMemory, searchMemories, editMemory } from "../storage/memories";
 import {
+  readUserMemory,
+  saveUserMemory,
+  appendToRecent,
+  readRawMemory,
+  MEMORY_FILE,
+  MEMORY_SECTIONS,
+  type MemorySectionId,
+} from "../storage/user-memory";
+import {
   listAutomations,
   createAutomation,
   updateAutomation,
@@ -305,6 +314,26 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
   ipcMain.handle("memories:edit", (_e, id: string, content: string) => editMemory(id, content));
   ipcMain.handle("memories:remove", (_e, id: string) => removeMemory(id));
+
+  // ---- user memory (MD file) ----
+  ipcMain.handle("userMemory:read", () => {
+    const sections = readUserMemory();
+    return Object.fromEntries(sections);
+  });
+  ipcMain.handle("userMemory:save", (_e, sections: Record<string, string>) => {
+    const map = new Map<MemorySectionId, string>();
+    for (const [k, v] of Object.entries(sections)) {
+      if (MEMORY_SECTIONS.includes(k as MemorySectionId)) {
+        map.set(k as MemorySectionId, v);
+      }
+    }
+    saveUserMemory(map);
+  });
+  ipcMain.handle("userMemory:append", (_e, content: string, source?: string) =>
+    appendToRecent(content, source),
+  );
+  ipcMain.handle("userMemory:raw", () => readRawMemory());
+  ipcMain.handle("userMemory:path", () => MEMORY_FILE);
 
   // ---- artifacts ----
   ipcMain.handle("artifacts:list", (_e, sessionId: string) =>

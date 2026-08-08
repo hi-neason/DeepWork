@@ -48,6 +48,7 @@ import { touchSession } from "../storage/sessions";
 import { WEB_TOOLS } from "../tools/web";
 import { createTodosTool } from "../tools/todos";
 import { createMemoryTools } from "../tools/memory";
+import { appendToRecent, readRawMemory } from "../storage/user-memory";
 import { skillsSourcePath } from "../skills/store";
 import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
 
@@ -609,8 +610,8 @@ export class AgentManager {
       const settings = loadSettings();
       const model = createChatModel(settings.model);
       const sys = `You distill durable, cross-session facts from a single user message.
-Output ONLY a JSON array (no prose) of objects: {"type":"preference|fact|event","content":"one concise sentence","importance":0..1}.
-Include only facts worth remembering long-term (user preferences, stable context, notable past events). If nothing, return [].
+Output ONLY a JSON array (no prose) of objects: {"content":"one concise sentence"}.
+Include only facts worth remembering long-term (user preferences, stable context, notable decisions or events). If nothing worth remembering, return [].
 Respond in the same language as the user.`;
       const resp = await model.invoke([
         { role: "system", content: sys },
@@ -621,20 +622,16 @@ Respond in the same language as the user.`;
       const match = text.match(/\[[\s\S]*\]/);
       if (!match) return;
       const candidates = JSON.parse(match[0]) as Array<{
-        type?: "preference" | "fact" | "event";
         content?: string;
-        importance?: number;
       }>;
+      // Quick dedup against existing MD profile to avoid exact repeats
+      const existing = readRawMemory().toLowerCase();
       for (const c of candidates) {
         if (!c.content || !c.content.trim()) continue;
-        // Dedup: skip if a near-identical active memory already exists.
-        const sim = await searchMemories(scopeKey, c.content, { topK: 3, threshold: 0.9 });
-        if (sim.length > 0) continue;
-        addMemory(c.content.trim(), scopeKey, {
-          type: c.type,
-          importance: typeof c.importance === "number" ? c.importance : 0.5,
-          source: `session:${sessionId}`,
-        });
+        const trimmed = c.content.trim();
+        // Skip if a substantially similar sentence already exists in the profile
+        if (existing.includes(trimmed.slice(0, 30).toLowerCase())) continue;
+        appendToRecent(trimmed, `session:${sessionId}`);
       }
     } catch (err) {
       logger.warn("memory", "extraction failed", {

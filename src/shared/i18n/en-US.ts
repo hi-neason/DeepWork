@@ -74,11 +74,22 @@ const enUS = {
     },
     memory: {
       title: "Memory",
-      desc: "Facts and preferences remembered across sessions. Injected into the system prompt at the start of every chat.",
-      addLabel: "Add a memory",
-      placeholder: "e.g. The user prefers concise answers in Chinese.",
-      empty: "No memories yet. The agent can also save them automatically with the remember tool.",
-      forget: "Forget",
+      desc: "Let DeepWork remember your preferences and habits. The more you chat, the better it understands you. Memory content follows the WorkBuddy privacy policy — visible only to you.",
+      fileLabel: "File location",
+      editSection: "Edit this section",
+      saved: "Saved",
+      sections: {
+        personal: "Personal Background",
+        workstyle: "Work Style",
+        focus: "Recent Focus",
+        recent: "Recent Updates",
+      },
+      placeholders: {
+        personal: "Your personal background: role, industry, core focus, team structure…",
+        workstyle: "How you work: collaboration style, decision-making habits, toolchain…",
+        focus: "Areas you're currently focused on, directions you're pushing…",
+        recent: "Auto-appended updates will appear here (from the remember tool or auto-extraction)…",
+      },
     },
     about: {
       title: "About",

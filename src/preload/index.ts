@@ -156,6 +156,15 @@ const api = {
       ipcRenderer.invoke("memories:edit", id, content),
     remove: (id: string): Promise<void> => ipcRenderer.invoke("memories:remove", id),
   },
+  userMemory: {
+    read: (): Promise<Record<string, string>> => ipcRenderer.invoke("userMemory:read"),
+    save: (sections: Record<string, string>): Promise<void> =>
+      ipcRenderer.invoke("userMemory:save", sections),
+    append: (content: string, source?: string): Promise<void> =>
+      ipcRenderer.invoke("userMemory:append", content, source),
+    raw: (): Promise<string> => ipcRenderer.invoke("userMemory:raw"),
+    path: (): Promise<string> => ipcRenderer.invoke("userMemory:path"),
+  },
   artifacts: {
     list: (sessionId: string): Promise<ArtifactFile[]> =>
       ipcRenderer.invoke("artifacts:list", sessionId),

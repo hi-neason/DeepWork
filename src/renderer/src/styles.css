@@ -1561,6 +1561,56 @@ body,
   color: var(--text); border-radius: 8px; padding: 9px 11px;
   font-family: inherit; font-size: 13px; resize: vertical;
 }
+
+/* ---- user memory (MD editor) ---- */
+.um-path-hint {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; margin-bottom: 16px;
+  background: var(--bg-elev); border-radius: 8px; font-size: 12px;
+}
+.um-path-label { color: var(--text-dim); white-space: nowrap; }
+.um-path-value {
+  color: var(--text-dim); font-size: 11px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.um-sections { display: flex; flex-direction: column; gap: 4px; }
+.um-section {
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-elev); overflow: hidden;
+  transition: border-color 0.15s;
+}
+.um-section:hover { border-color: var(--border-hover, rgba(128,128,128,0.35)); }
+.um-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; cursor: default;
+}
+.um-section-title {
+  font-weight: 600; font-size: 14px; color: var(--text);
+}
+.um-section-actions { display: flex; gap: 6px; }
+.um-edit-btn {
+  opacity: 0.5; transition: opacity 0.15s; font-size: 15px;
+  padding: 2px 6px; border-radius: 4px;
+}
+.um-edit-btn:hover { opacity: 1; background: var(--bg); }
+.um-textarea {
+  width: 100%; min-height: 100px;
+  background: var(--bg); border: none; border-top: 1px solid var(--border);
+  color: var(--text); padding: 12px 14px;
+  font-family: inherit; font-size: 13px; line-height: 1.6;
+  resize: vertical; outline: none;
+}
+.um-content { padding: 0 14px 12px; }
+.um-pre {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: inherit; font-size: 13px; line-height: 1.65;
+  color: var(--text); max-height: 300px; overflow-y: auto;
+}
+.um-empty { margin: 4px 0 0; }
+.um-saved {
+  text-align: right; font-size: 12px; color: var(--accent, #3b82f6);
+  margin-top: 12px; opacity: 0.8;
+}
 /* ---- MCP connectors (compact card list) ---- */
 .mcp-list { display: flex; flex-direction: column; gap: 8px; }
 .mcp-item {

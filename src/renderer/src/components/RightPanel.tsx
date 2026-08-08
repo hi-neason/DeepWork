@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ArtifactFile, MemoryItem, MemoryType, TodoItem } from "../../../shared/types";
+import type { ArtifactFile, TodoItem } from "../../../shared/types";
 
 interface Props {
   sessionId: string | null;
@@ -36,8 +36,6 @@ const ICONS: Record<string, string> = {
   zip: "🗜",
 };
 
-const MEM_TYPES: Array<MemoryType | ""> = ["", "preference", "fact", "event"];
-
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -62,12 +60,6 @@ export function RightPanel({
   const { t } = useTranslation();
   const [progressOpen, setProgressOpen] = useState(true);
   const [artifactsOpen, setArtifactsOpen] = useState(true);
-  const [memOpen, setMemOpen] = useState(true);
-  const [memories, setMemories] = useState<MemoryItem[]>([]);
-  const [memFilter, setMemFilter] = useState<MemoryType | "">("");
-  const [addText, setAddText] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
 
   // Auto-refresh artifacts when the session first loads.
@@ -75,53 +67,6 @@ export function RightPanel({
     if (sessionId) onRefreshArtifacts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
-
-  // Memories: load on mount / session change.
-  const refreshMemories = useCallback(async () => {
-    try {
-      const items = await window.deepwork.memories.list();
-      setMemories(items);
-    } catch {
-      // ignore IPC failures
-    }
-  }, []);
-  useEffect(() => {
-    void refreshMemories();
-  }, [refreshMemories, sessionId]);
-
-  const filtered = memFilter
-    ? memories.filter((m) => m.type === memFilter)
-    : memories;
-
-  const handleAdd = async (): Promise<void> => {
-    const text = addText.trim();
-    if (!text) return;
-    await window.deepwork.memories.add(text);
-    setAddText("");
-    await refreshMemories();
-  };
-  const startEdit = (m: MemoryItem): void => {
-    setEditingId(m.id);
-    setEditText(m.content);
-  };
-  const handleEdit = async (): Promise<void> => {
-    const text = editText.trim();
-    if (!text || !editingId) return;
-    await window.deepwork.memories.edit(editingId, text);
-    setEditingId(null);
-    setEditText("");
-    await refreshMemories();
-  };
-  const handleDelete = async (id: string): Promise<void> => {
-    await window.deepwork.memories.remove(id);
-    await refreshMemories();
-  };
-  const memTypeLabel = (type?: MemoryType): string => {
-    if (type === "preference") return t("rightPanel.typePreference");
-    if (type === "fact") return t("rightPanel.typeFact");
-    if (type === "event") return t("rightPanel.typeEvent");
-    return "";
-  };
 
   // Jump-to-artifact: open the section, scroll the row into view, flash it.
   useEffect(() => {
@@ -249,107 +194,6 @@ export function RightPanel({
         )}
       </section>
       )}
-
-      <section className="rp-section">
-        <button
-          className="rp-head"
-          onClick={() => setMemOpen((v) => !v)}
-        >
-          <span className="rp-caret">{memOpen ? "▾" : "▸"}</span>
-          <span>{t("rightPanel.memories")}</span>
-          {memories.length > 0 && <span className="rp-count">{memories.length}</span>}
-          <span
-            className="rp-refresh"
-            role="button"
-            title={t("rightPanel.refresh")}
-            onClick={(e) => {
-              e.stopPropagation();
-              void refreshMemories();
-            }}
-          >
-            ↻
-          </span>
-        </button>
-        {memOpen && (
-          <div className="rp-memories">
-            <div className="rp-mem-add">
-              <input
-                className="rp-mem-input"
-                placeholder={t("rightPanel.memoryPlaceholder")}
-                value={addText}
-                onChange={(e) => setAddText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void handleAdd();
-                }}
-              />
-              <button className="rp-mem-add-btn" onClick={() => void handleAdd()}>
-                {t("rightPanel.addMemory")}
-              </button>
-            </div>
-            <div className="rp-mem-filter">
-              {MEM_TYPES.map((tp) => (
-                <button
-                  key={tp || "all"}
-                  className={`rp-mem-chip ${memFilter === tp ? "active" : ""}`}
-                  onClick={() => setMemFilter(tp)}
-                >
-                  {tp === "" ? t("rightPanel.all") : memTypeLabel(tp)}
-                </button>
-              ))}
-            </div>
-            {filtered.length === 0 ? (
-              <p className="rp-empty">{t("rightPanel.emptyMemories")}</p>
-            ) : (
-              <ul className="rp-mem-list">
-                {filtered.map((m) => (
-                  <li key={m.id} className="rp-mem-item">
-                    {editingId === m.id ? (
-                      <div className="rp-mem-edit">
-                        <textarea
-                          className="rp-mem-textarea"
-                          value={editText}
-                          onChange={(e) => setEditText(e.target.value)}
-                        />
-                        <div className="rp-mem-edit-actions">
-                          <button onClick={() => void handleEdit()}>
-                            {t("rightPanel.saveMemory")}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingId(null);
-                              setEditText("");
-                            }}
-                          >
-                            {t("rightPanel.cancel")}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="rp-mem-content">{m.content}</div>
-                        {m.type && (
-                          <span className="rp-mem-type">{memTypeLabel(m.type)}</span>
-                        )}
-                        <div className="rp-mem-actions">
-                          <button onClick={() => startEdit(m)}>
-                            {t("rightPanel.editMemory")}
-                          </button>
-                          <button
-                            className="rp-mem-del"
-                            onClick={() => void handleDelete(m.id)}
-                          >
-                            {t("rightPanel.deleteMemory")}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </section>
     </aside>
   );
 }
