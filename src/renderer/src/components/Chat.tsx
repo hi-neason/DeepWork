@@ -18,6 +18,7 @@ import type {
   ArtifactFile,
   ConfiguredModel,
   DeepWorkEvent,
+  PermissionMode,
   Skill,
   TodoItem,
   TurnStats,
@@ -50,7 +51,10 @@ interface Props {
     attachments?: File[],
     workspaceDir?: string,
     modelId?: string,
+    mode?: PermissionMode,
   ) => void;
+  /** Global default permission mode (from settings) — highlighted when no per-send override is chosen. */
+  defaultMode?: PermissionMode;
   onCancel: () => void;
   onRegenerate: () => void;
   onSetModel: (modelId: string) => void;
@@ -81,6 +85,7 @@ export function Chat({
   showReasoning = true,
   funMode = false,
   onSend,
+  defaultMode,
   onCancel,
   onRegenerate,
   onSetModel,
@@ -103,6 +108,8 @@ export function Chat({
   // Workspace/model chosen for a brand-new session (before it is created).
   const [pendingWorkspace, setPendingWorkspace] = useState<string | undefined>(undefined);
   const [pendingModel, setPendingModel] = useState<string | undefined>(undefined);
+  // Per-send permission-mode override (undefined = follow global default).
+  const [pendingMode, setPendingMode] = useState<PermissionMode | undefined>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -215,9 +222,10 @@ export function Chat({
     setInput("");
     setAttachments([]);
     setSlashOpen(false);
-    void onSend(text, attachments, activeWorkspace, activeModel);
+    void onSend(text, attachments, activeWorkspace, activeModel, pendingMode);
     setPendingWorkspace(undefined);
     setPendingModel(undefined);
+    setPendingMode(undefined);
   };
 
   /** Replace "/query" with "/skill-name " and close the slash menu. */
@@ -754,6 +762,22 @@ export function Chat({
               }}
             />
             <div className="composer-right">
+              <div className="auto-mode-seg chat-mode-seg">
+                {(["auto", "manual", "plan"] as PermissionMode[]).map((m) => {
+                  const active = (pendingMode ?? defaultMode) === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`auto-mode-btn ${active ? "active" : ""}`}
+                      onClick={() => setPendingMode(m)}
+                      title={t(`automations.mode.${m}`)}
+                    >
+                      {t(`automations.mode.${m}`)}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="model-picker-wrap">
                 <button
                   className="model-picker"

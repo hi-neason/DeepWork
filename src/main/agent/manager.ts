@@ -32,6 +32,7 @@ import type {
   Attachment,
   DeepWorkEvent,
   HistoryItem,
+  PermissionMode,
   TodoItem,
 } from "../../shared/types";
 import { screenshotTool } from "../tools/gui";
@@ -202,6 +203,8 @@ export class AgentManager {
   private unattended = new Set<string>();
   /** Per-session model override. */
   private sessionModel = new Map<string, string>();
+  /** Per-session permission mode override (falls back to global setting). */
+  private sessionMode = new Map<string, PermissionMode>();
 
   /** Wire up the renderer sender so title updates can be pushed independently. */
   setSender(send: (channel: string, ...args: unknown[]) => void): void {
@@ -285,7 +288,9 @@ export class AgentManager {
     const approvalMiddleware = createApprovalMiddleware({
       getAlwaysAllow: () => this.alwaysAllow,
       onAlwaysAllow: (name) => this.alwaysAllow.add(name),
-      getMode: () => loadSettings().permissionMode,
+      getMode: (threadId?: string) =>
+        (threadId ? this.sessionMode.get(threadId) : undefined) ??
+        loadSettings().permissionMode,
       isUnattended: (threadId) => this.unattended.has(threadId),
     });
 
@@ -328,7 +333,11 @@ export class AgentManager {
         createSanitizeMiddleware(),
         summarization,
         this.skillsMiddleware!,
-        createContextMiddleware(),
+        createContextMiddleware({
+          getMode: (threadId?: string) =>
+            (threadId ? this.sessionMode.get(threadId) : undefined) ??
+            loadSettings().permissionMode,
+        }),
         approvalMiddleware,
       ],
       stateSchema: stateSchema as unknown as StateSchemaT,
@@ -455,6 +464,7 @@ export class AgentManager {
     sessionId: string,
     instructions: string,
     modelId?: string,
+    mode?: PermissionMode,
   ): AsyncGenerator<DeepWorkEvent> {
     this.unattended.add(sessionId);
     // Make sure the session's workspace context is registered even without an
@@ -474,7 +484,7 @@ export class AgentManager {
       }
     }
     try {
-      yield* this.runTurn(sessionId, instructions, undefined, undefined, modelId);
+      yield* this.runTurn(sessionId, instructions, undefined, undefined, modelId, mode);
     } finally {
       this.unattended.delete(sessionId);
     }
@@ -519,6 +529,7 @@ export class AgentManager {
     attachments?: Attachment[],
     workspaceDir?: string,
     modelId?: string,
+    mode?: PermissionMode,
   ): AsyncGenerator<DeepWorkEvent> {
     const content = buildUserContent(userText, attachments);
     const tTurn = Date.now();
@@ -547,6 +558,7 @@ export class AgentManager {
       setThreadRoot(sessionId, workspaceDir, outputDir, picked);
     }
     if (modelId) this.sessionModel.set(sessionId, modelId);
+    if (mode) this.sessionMode.set(sessionId, mode);
     const ws = this.sessionWorkspace.get(sessionId);
     const result = yield* this.runStream(
       sessionId,

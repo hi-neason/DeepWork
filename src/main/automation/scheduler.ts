@@ -9,7 +9,7 @@ import {
   updateAutomation,
   getAutomation,
 } from "../storage/automations";
-import type { Automation, AutomationRun, AutomationScheduleConfig } from "../../shared/types";
+import type { Automation, AutomationRun, AutomationScheduleConfig, PermissionMode } from "../../shared/types";
 import { logger } from "../log/logger";
 
 // Minimal cron matcher: supports "*", step (every N), lists "a,b,c", ranges "a-b".
@@ -137,12 +137,14 @@ function describeSchedule(a: Automation): string {
 
 export interface SchedulerHandlers {
   /** Runs an automation turn; should stream events and return when the turn ends.
-   *  `model` is the optional model id chosen for this automation (empty = global default). */
+   *  `model` is the optional model id chosen for this automation (empty = global default).
+   *  `mode` is the optional permission mode (empty = global default). */
   runAutomationTurn: (
     sessionId: string,
     instructions: string,
     onEvent: (e: unknown) => void,
     model?: string,
+    mode?: PermissionMode,
   ) => Promise<void>;
 }
 
@@ -270,6 +272,7 @@ class AutomationScheduler extends EventEmitter {
         a.instructions,
         (event) => this.emit("run:event", { automationId: a.id, sessionId: session.id, event }),
         a.model,
+        a.permissionMode,
       );
       finishRun(run.id, "success");
       markAutomationRun(a.id, "success", Date.now());

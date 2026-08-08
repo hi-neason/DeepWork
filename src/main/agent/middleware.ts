@@ -71,7 +71,7 @@ function previewContent(content: unknown): string {
 export interface MiddlewareDeps {
   getAlwaysAllow: () => Set<string>;
   onAlwaysAllow: (toolName: string) => void;
-  getMode: () => PermissionMode;
+  getMode: (threadId?: string) => PermissionMode;
   isUnattended: (threadId: string) => boolean;
 }
 
@@ -90,7 +90,7 @@ export function createApprovalMiddleware(deps: MiddlewareDeps) {
         request.config?.configurable?.thread_id;
       const risk = riskOf(toolCall.name);
       const argsPreview = previewArgs(toolCall.args);
-      const mode = getMode();
+      const mode = getMode(threadId);
 
       const emit = (e: DeepWorkEvent) => emitTurnEvent(threadId, e);
       emit({ type: "tool_call_started", id: toolCall.id, name: toolCall.name, argsPreview });

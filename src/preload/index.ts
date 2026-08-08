@@ -12,6 +12,7 @@ import type {
   ModelConfig,
   ModelInfo,
   McpServerConfig,
+  PermissionMode,
   ProviderKind,
   Session,
   Settings,
@@ -108,6 +109,7 @@ const api = {
       attachments?: Attachment[],
       workspaceDir?: string,
       modelId?: string,
+      mode?: PermissionMode,
     ): Promise<void> =>
       ipcRenderer.invoke(
         "chat:send",
@@ -116,6 +118,7 @@ const api = {
         attachments,
         workspaceDir,
         modelId,
+        mode,
       ),
     cancel: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke("chat:cancel", sessionId),

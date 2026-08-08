@@ -3,6 +3,7 @@ import { loadSettings } from "../storage/settings";
 import { searchMemories } from "../storage/memories";
 import { readRawMemory } from "../storage/user-memory";
 import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
+import type { PermissionMode } from "../../shared/types";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -20,11 +21,19 @@ services to touch, and risks), then wait for the user to approve before executin
  *
  * We use wrapModelCall so these are not saved into checkpointer history.
  */
-export function createContextMiddleware() {
+export function createContextMiddleware(deps: {
+  getMode: (threadId?: string) => PermissionMode;
+}) {
+  const { getMode } = deps;
   return createMiddleware({
     name: "deepwork_context",
     wrapModelCall: async (request: any, handler: any) => {
       const settings = loadSettings();
+      const threadId =
+        request.runtime?.configurable?.thread_id ??
+        request.runtime?.config?.configurable?.thread_id ??
+        request.config?.configurable?.thread_id;
+      const mode = getMode(threadId);
       const parts: string[] = [];
 
       // --- Global user profile from MD file ---
@@ -65,7 +74,7 @@ export function createContextMiddleware() {
       }
 
       // --- Plan mode ---
-      if (settings.permissionMode === "plan") {
+      if (mode === "plan") {
         parts.push(PLAN_MODE_REMINDER);
       }
 

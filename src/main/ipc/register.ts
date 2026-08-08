@@ -79,6 +79,7 @@ import type {
   Automation,
   DeepWorkEvent,
   ModelInfo,
+  PermissionMode,
   ProviderKind,
   VerifyResult,
 } from "../../shared/types";
@@ -253,6 +254,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       attachments?: Attachment[],
       workspaceDir?: string,
       modelId?: string,
+      mode?: PermissionMode,
     ) => {
       const sender = event.sender;
       const push = (e: DeepWorkEvent) => {
@@ -274,6 +276,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
           attachments,
           root,
           modelId,
+          mode,
         )) {
           push(e);
         }
@@ -373,8 +376,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- automations ----
   scheduler.init({
-    runAutomationTurn: async (sessionId, instructions, onEvent, model) => {
-      for await (const e of agentManager.runUnattendedTurn(sessionId, instructions, model)) {
+    runAutomationTurn: async (sessionId, instructions, onEvent, model, mode) => {
+      for await (const e of agentManager.runUnattendedTurn(sessionId, instructions, model, mode)) {
         onEvent(e);
       }
     },

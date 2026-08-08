@@ -3,6 +3,7 @@ import type {
   ArtifactFile,
   DeepWorkEvent,
   HistoryItem,
+  PermissionMode,
   Session,
   Settings as AppSettings,
   SettingsTab,
@@ -442,6 +443,7 @@ export function App(): React.ReactElement {
     attachments?: File[],
     workspaceDir?: string,
     modelId?: string,
+    mode?: PermissionMode,
   ): Promise<void> => {
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
     let sid = sessionId;
@@ -467,7 +469,7 @@ export function App(): React.ReactElement {
     const atts = attachments && attachments.length > 0
       ? await Promise.all(attachments.map(fileToAttachment))
       : undefined;
-    await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId);
+    await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId, mode);
     // Guarantee the right panel reflects produced files even if a streamed
     // event was missed during the new-session handoff.
     setArtifacts(await window.deepwork.artifacts.list(sid));
@@ -578,6 +580,7 @@ export function App(): React.ReactElement {
               showReasoning={settings?.showReasoning ?? true}
               funMode={settings?.funMode ?? false}
               onSend={send}
+              defaultMode={settings?.permissionMode}
               onCancel={cancel}
               onRegenerate={regenerate}
               onSetModel={setSessionModel}
