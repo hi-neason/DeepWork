@@ -228,6 +228,7 @@ const enUS = {
     addModel: "+ Add model",
     stopGenerating: "Stop generating",
     send: "Send",
+    turnTimeout: "The agent stopped responding and was automatically stopped. Try sending again.",
     thinkingNow: "Thinking…",
     chars: "chars",
     toolBadge: "Tool: {{name}}",

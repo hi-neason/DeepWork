@@ -153,8 +153,29 @@ describe("Chat 组件（渲染层）", () => {
     });
   });
 
-  // H：发送后若无 turn_completed / turn_error 事件回来（如 IPC 超时、agent 未响应），
-  // UI 会一直卡在 streaming，用户无法再次发送。正确行为：发送应有超时/失败兜底，
-  // 异常时复位 streaming。
-  it.todo("发送失败或无响应时应复位 streaming，避免永久卡死（Chat 提交逻辑）");
+  // H：onSend 抛错（同步 throw 或 rejected promise）时，submit 必须吞掉 rejection，
+  // 不能冒出 unhandled rejection；真正的 streaming/error 复位由父组件（App）的
+  // set_error 与 useTurnWatchdog 看门狗负责。
+  it("onSend 抛错时 submit 不产生 unhandled rejection（H 提交兜底）", async () => {
+    const onSend = vi.fn(() => Promise.reject(new Error("boom")));
+    const { container } = render(<Chat {...makeProps({ onSend })} />);
+    const ta = container.querySelector("textarea")!;
+    fireEvent.change(ta, { target: { value: "hi" } });
+
+    // 捕获未处理的 Promise rejection
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: PromiseRejectionEvent): void => {
+      unhandled.push(e.reason);
+    };
+    window.addEventListener("unhandledrejection", onUnhandled);
+
+    fireEvent.click(screen.getByRole("button", { name: "chat.send" }));
+    // 等 rejected promise 穿透 microtask 队列
+    await Promise.resolve();
+    await Promise.resolve();
+
+    window.removeEventListener("unhandledrejection", onUnhandled);
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(unhandled).toHaveLength(0);
+  });
 });

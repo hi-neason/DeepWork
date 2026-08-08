@@ -226,6 +226,7 @@ const zhCN = {
     addModel: "+ 新增模型",
     stopGenerating: "停止生成",
     send: "发送",
+    turnTimeout: "Agent 长时间无响应，已自动停止。可重新发送。",
     thinkingNow: "正在思考…",
     chars: "字",
     toolBadge: "工具：{{name}}",

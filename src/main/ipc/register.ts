@@ -87,6 +87,14 @@ import type {
 
 const MEMORY_TYPES: readonly MemoryType[] = ["preference", "fact", "event"];
 
+/** Strict YYYY-MM-DD guard for timeline date params (C-A3 path traversal). */
+const TIMELINE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function assertTimelineDate(date: unknown): asserts date is string {
+  if (typeof date !== "string" || !TIMELINE_DATE_RE.test(date)) {
+    throw new Error(`Invalid timeline date: ${JSON.stringify(date)}`);
+  }
+}
+
 /** Coerce an untrusted IPC string into a valid MemoryType, or undefined. */
 function asMemoryType(t: string | undefined): MemoryType | undefined {
   return t && (MEMORY_TYPES as readonly string[]).includes(t)
@@ -372,8 +380,14 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- timeline memory (per-day markdown) ----
   handle("timeline:list", () => listTimelineDates());
-  handle("timeline:read", (_e, date: string) => readTimelineDate(date));
-  handle("timeline:path", (_e, date: string) => timelinePath(date));
+  handle("timeline:read", (_e, date: string) => {
+    assertTimelineDate(date);
+    return readTimelineDate(date);
+  });
+  handle("timeline:path", (_e, date: string) => {
+    assertTimelineDate(date);
+    return timelinePath(date);
+  });
 
   // ---- project memory (per-project markdown) ----
   handle("projectMemory:list", () => listProjects());

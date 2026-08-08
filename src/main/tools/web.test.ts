@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import dns from "node:dns/promises";
 import { webFetchTool, webSearchTool } from "./web";
 
 describe("tools/web", () => {
@@ -53,8 +54,28 @@ describe("tools/web", () => {
     expect(res).toContain("https://example.com");
   });
 
-  // C-A2 缺口：webGuard 对域名不解析 DNS，指向私网的域名（如 *.nip.io 解析到
-  // 127.0.0.1、或 169.254.169.254 的云元数据域名）会被放行，webFetchTool 也不会
-  // 拦截。正确行为：应解析域名并校验解析后的 IP。重构修掉后此 todo 转绿。
-  it.todo("webFetchTool 应拦截指向私网的域名（C-A2：webGuard 不解析 DNS）");
+  // C-A2：webGuard 在发起请求前解析域名并校验解析后的 IP，因此指向私网的
+  // 公网域名（如 *.nip.io 解析到 127.0.0.1、云元数据 169.254.169.254）会被拦截，
+  // 且 fetch 在拦截前不会被调用。
+  it("webFetchTool 应拦截指向私网的域名（C-A2：webGuard 解析 DNS）", async () => {
+    vi.spyOn(dns, "lookup").mockResolvedValue([
+      { address: "127.0.0.1", family: 4 },
+    ] as never);
+
+    await expect(
+      webFetchTool.tool.invoke({ url: "http://private.nip.io/" }),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("webFetchTool 拦截解析到云元数据地址（169.254.169.254）的域名", async () => {
+    vi.spyOn(dns, "lookup").mockResolvedValue([
+      { address: "169.254.169.254", family: 4 },
+    ] as never);
+
+    await expect(
+      webFetchTool.tool.invoke({ url: "http://169.254.169.254.nip.io/latest/meta-data/" }),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

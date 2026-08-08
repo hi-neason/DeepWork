@@ -20,6 +20,7 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { TerminalErrorBoundary } from "./components/TerminalErrorBoundary";
 import { fileToAttachment } from "./lib/attachments";
 import { applyAppearance, watchSystemTheme } from "./lib/theme";
+import { useTurnWatchdog } from "./lib/useTurnWatchdog";
 import i18n from "./i18n";
 
 type ToolRecord = {
@@ -329,12 +330,27 @@ export function App(): React.ReactElement {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
 
+  // Liveness watchdog: if a streaming turn goes silent (no event at all) for
+  // the window, the agent or IPC channel is wedged. Reset streaming and show an
+  // error so the user isn't permanently locked out of sending (H fix). Each
+  // incoming chat event below pokes the timer.
+  const pokeWatchdog = useTurnWatchdog(chat.streaming, () => {
+    if (sessionIdRef.current) {
+      // Tell the main process to abandon the turn; it will no-op if already done.
+      void window.deepwork.chat.cancel(sessionIdRef.current);
+    }
+    dispatch({ type: "set_error", message: i18n.t("chat.turnTimeout") });
+  });
+
   // Subscribe to ALL chat events once, on mount. We filter to the active
   // session inside the callback using the ref. This is race-free for new
   // sessions because the listener already exists before chat.send is called.
   useEffect(() => {
     return window.deepwork.chat.onAnyEvent((sid, event) => {
       if (sid !== sessionIdRef.current) return;
+      // Any event (including a terminal one) proves the turn is alive; the
+      // effect cleanup disarms the timer when streaming flips to false.
+      pokeWatchdog();
       if (event.type === "approval_requested") {
         setApproval(event);
       }
@@ -350,7 +366,7 @@ export function App(): React.ReactElement {
       }
       dispatch({ type: "event", event });
     });
-  }, [refreshSessions]);
+  }, [refreshSessions, pokeWatchdog]);
 
   const refreshArtifacts = useCallback(async (): Promise<void> => {
     if (!sessionId) return;

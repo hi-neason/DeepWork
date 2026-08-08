@@ -89,6 +89,7 @@ vi.mock("../storage/timeline-memory", () => ({
   readTimelineDate: vi.fn(() => ""),
   timelinePath: vi.fn(() => "/tmp/dw/tl.md"),
 }));
+import * as timelineMemory from "../storage/timeline-memory";
 vi.mock("../storage/project-memory", () => ({
   listProjects: vi.fn(() => []),
   readProjectMemory: vi.fn(() => ""),
@@ -247,9 +248,39 @@ describe("ipc/register 链路闭合", () => {
     expect(sched.runNow).toHaveBeenCalled();
   });
 
-  // C-A3：timeline:read 当前把 date 原样透传给 readTimelineDate，没有 safeFileName 校验，
-  // 路径穿越风险存在。正确行为应是先校验/归一化 date 再读文件。重构修掉后此 todo 转绿。
-  it.todo(
-    "timeline:read 应通过 safeFileName 校验 date，避免路径穿越（C-A3）",
-  );
+  // C-A3：timeline:read 在 IPC 边界先用 YYYY-MM-DD 正则校验 date，拒绝路径穿越
+  // 载荷，且不会把非法值透传给存储层。timeline:path 同理。
+  it("timeline:read 拒绝非法/穿越 date，不透传给 readTimelineDate（C-A3）", async () => {
+    const handlers = __test_getHandlers();
+    const read = handlers.get("timeline:read")!;
+    const readSpy = vi.mocked(timelineMemory.readTimelineDate);
+
+    for (const bad of [
+      "../../secret",
+      "2026-08-08/../../x",
+      "not-a-date",
+      "",
+      "../etc/passwd",
+    ]) {
+      await expect(read({}, bad)).rejects.toThrow();
+      expect(readSpy).not.toHaveBeenCalledWith(bad);
+    }
+    readSpy.mockClear();
+
+    // 合法日期正常透传
+    await read({}, "2026-08-08");
+    expect(readSpy).toHaveBeenCalledWith("2026-08-08");
+  });
+
+  it("timeline:path 拒绝非法 date（C-A3 边界校验）", async () => {
+    const handlers = __test_getHandlers();
+    const pathHandler = handlers.get("timeline:path")!;
+    const pathSpy = vi.mocked(timelineMemory.timelinePath);
+
+    await expect(pathHandler({}, "../../x")).rejects.toThrow();
+    expect(pathSpy).not.toHaveBeenCalled();
+
+    await pathHandler({}, "2026-08-08");
+    expect(pathSpy).toHaveBeenCalledWith("2026-08-08");
+  });
 });

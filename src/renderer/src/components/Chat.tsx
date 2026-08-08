@@ -239,7 +239,16 @@ export function Chat({
     setInput("");
     setAttachments([]);
     setSlashOpen(false);
-    void onSend(text, attachments, activeWorkspace, activeModel, pendingMode);
+    // Wrap in Promise.resolve so a synchronous throw or rejected promise from
+    // onSend doesn't surface as an unhandled rejection. The parent (App) owns
+    // streaming/error state and already dispatches set_error on failure; the
+    // liveness watchdog additionally resets streaming if no terminal event
+    // ever arrives (H fix).
+    Promise.resolve(
+      onSend(text, attachments, activeWorkspace, activeModel, pendingMode),
+    ).catch(() => {
+      /* already handled by parent */
+    });
     setPendingWorkspace(undefined);
     setPendingModel(undefined);
     setPendingMode(undefined);
