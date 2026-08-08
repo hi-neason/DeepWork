@@ -1860,6 +1860,8 @@ body,
   background: var(--bg-elev); border: 1px solid var(--border); color: var(--text);
   border-radius: 6px; padding: 7px 9px; font-family: inherit;
 }
+.auto-validity-row { flex-wrap: nowrap; }
+.auto-validity-row input[type="date"] { flex: 1; min-width: 0; width: auto; }
 .auto-weekdays { display: flex; gap: 6px; margin-bottom: 12px; }
 .auto-weekday {
   width: 32px; height: 32px; border-radius: 50%;

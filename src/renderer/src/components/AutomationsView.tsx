@@ -776,7 +776,7 @@ export function AutomationsView(): React.ReactElement {
 
               <div className="auto-field">
                 <label>{t("automations.validityLabel")}</label>
-                <div className="auto-row">
+                <div className="auto-row auto-validity-row">
                   <input
                     type="date"
                     value={form.validFrom}

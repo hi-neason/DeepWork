@@ -395,7 +395,7 @@ const zhCN = {
       plan: "仅规划",
     },
     skillsLabel: "技能",
-    mcpLabel: "连接器（勾选即授权该连接器在任务中免确认使用）",
+    mcpLabel: "连接器",
     scheduleLabel: "执行频率",
     tab: {
       daily: "每天",

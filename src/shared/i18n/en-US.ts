@@ -403,7 +403,7 @@ const enUS = {
       plan: "Plan only",
     },
     skillsLabel: "Skills",
-    mcpLabel: "Connectors (checked connectors are allowed to run without confirmation)",
+    mcpLabel: "Connectors",
     scheduleLabel: "Schedule",
     tab: {
       daily: "Daily",
