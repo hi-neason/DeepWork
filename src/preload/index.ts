@@ -163,6 +163,8 @@ const api = {
     append: (content: string, source?: string): Promise<void> =>
       ipcRenderer.invoke("userMemory:append", content, source),
     raw: (): Promise<string> => ipcRenderer.invoke("userMemory:raw"),
+    saveRaw: (markdown: string): Promise<void> =>
+      ipcRenderer.invoke("userMemory:saveRaw", markdown),
     path: (): Promise<string> => ipcRenderer.invoke("userMemory:path"),
   },
   artifacts: {

@@ -122,3 +122,11 @@ export function readRawMemory(): string {
     return "";
   }
 }
+
+/** Overwrite memory.md with the given raw markdown content (atomic write). */
+export function saveRawMemory(markdown: string): void {
+  ensureMemoryFile();
+  const tmp = MEMORY_FILE + ".tmp";
+  fs.writeFileSync(tmp, markdown, "utf-8");
+  fs.renameSync(tmp, MEMORY_FILE);
+}

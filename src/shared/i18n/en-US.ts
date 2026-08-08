@@ -76,20 +76,8 @@ const enUS = {
       title: "Memory",
       desc: "Let DeepWork remember your preferences and habits. The more you chat, the better it understands you. Memory content follows the WorkBuddy privacy policy — visible only to you.",
       fileLabel: "File location",
-      editSection: "Edit this section",
+      editHint: "Edit this Markdown file directly. Organize it into four blocks: Personal Background / Work Style / Recent Focus / Recent Updates (auto-extracted content is appended to \"Recent Updates\").",
       saved: "Saved",
-      sections: {
-        personal: "Personal Background",
-        workstyle: "Work Style",
-        focus: "Recent Focus",
-        recent: "Recent Updates",
-      },
-      placeholders: {
-        personal: "Your personal background: role, industry, core focus, team structure…",
-        workstyle: "How you work: collaboration style, decision-making habits, toolchain…",
-        focus: "Areas you're currently focused on, directions you're pushing…",
-        recent: "Auto-appended updates will appear here (from the remember tool or auto-extraction)…",
-      },
     },
     about: {
       title: "About",

@@ -47,6 +47,7 @@ import {
   saveUserMemory,
   appendToRecent,
   readRawMemory,
+  saveRawMemory,
   MEMORY_FILE,
   MEMORY_SECTIONS,
   type MemorySectionId,
@@ -333,6 +334,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     appendToRecent(content, source),
   );
   ipcMain.handle("userMemory:raw", () => readRawMemory());
+  ipcMain.handle("userMemory:saveRaw", (_e, markdown: string) => saveRawMemory(markdown));
   ipcMain.handle("userMemory:path", () => MEMORY_FILE);
 
   // ---- artifacts ----

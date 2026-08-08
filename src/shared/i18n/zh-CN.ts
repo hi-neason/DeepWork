@@ -74,20 +74,8 @@ const zhCN = {
       title: "记忆",
       desc: "记忆让 DeepWork 记住你的偏好和习惯，对话越多，它越懂你。记忆内容遵循 WorkBuddy 隐私政策，仅你本人可见。",
       fileLabel: "文件位置",
-      editSection: "编辑此区域",
+      editHint: "直接编辑这个 Markdown 文件。建议按四个区块组织：个人背景 / 工作思路 / 近期关注 / 近期动态（自动抽取的内容会追加到「近期动态」）。",
       saved: "已保存",
-      sections: {
-        personal: "个人背景",
-        workstyle: "工作思路",
-        focus: "近期关注",
-        recent: "近期动态",
-      },
-      placeholders: {
-        personal: "描述你的个人背景：职位、行业、核心方向、团队情况等…",
-        workstyle: "描述你的工作方式和偏好：协作风格、决策习惯、常用工具链…",
-        focus: "记录你当前关注的重点领域、正在推进的方向…",
-        recent: "自动追加的动态会出现在这里（来自对话中的 remember 工具或自动抽取）…",
-      },
     },
     about: {
       title: "关于",
