@@ -385,6 +385,8 @@ const enUS = {
     saving: "Saving…",
     banner: "Keep the app running. Automations will not execute if the computer sleeps or the app is quit.",
     nameLabel: "Name",
+    titleLabel: "Task Title",
+    descriptionLabel: "Task Description",
     namePlaceholder: "Morning brief",
     modelLabel: "Model",
     modelDefault: "Default (global setting)",

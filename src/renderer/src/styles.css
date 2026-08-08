@@ -1800,9 +1800,11 @@ body,
 }
 .auto-banner-icon { font-weight: 700; color: var(--accent); }
 .auto-field { display: flex; flex-direction: column; gap: 8px; }
-.auto-field > label {
+.auto-field > label,
+.auto-field-label {
   font-size: 13px; font-weight: 500; color: var(--text);
 }
+.auto-field-label { display: block; margin: 2px 0 6px; }
 .auto-field input[type="text"],
 .auto-field input[type="time"],
 .auto-field input[type="date"],

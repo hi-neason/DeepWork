@@ -377,6 +377,8 @@ const zhCN = {
     saving: "保存中…",
     banner: "自动化任务执行时，请勿关闭电脑或退出客户端，否则任务将无法正常执行。",
     nameLabel: "名称",
+    titleLabel: "任务标题",
+    descriptionLabel: "任务描述",
     namePlaceholder: "晨间简报",
     modelLabel: "模型",
     modelDefault: "默认（跟随全局设置）",

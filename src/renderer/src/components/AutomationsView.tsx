@@ -421,6 +421,7 @@ export function AutomationsView(): React.ReactElement {
               <span>{t("automations.banner")}</span>
             </div>
 
+            <label className="auto-field-label">{t("automations.titleLabel")}</label>
             <div className="auto-title-row">
               <input
                 type="text"
@@ -431,6 +432,7 @@ export function AutomationsView(): React.ReactElement {
               />
             </div>
 
+            <label className="auto-field-label">{t("automations.descriptionLabel")}</label>
             <div className="composer auto-composer">
               <div className="composer-box">
                 {(form.skills.length > 0 || form.mcpServerIds.length > 0) && (
