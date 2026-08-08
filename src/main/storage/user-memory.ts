@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { APP_DATA_DIR } from "../config/paths";
+import { APP_DATA_DIR, USER_MEMORY_DIR } from "../config/paths";
 
 /** The four fixed sections of the user's global memory MD file. */
 export const MEMORY_SECTIONS = [
@@ -20,7 +20,10 @@ const DEFAULT_HEADINGS: Record<MemorySectionId, string> = {
   recent: "近期动态",
 };
 
-export const MEMORY_FILE = path.join(APP_DATA_DIR, "memory.md");
+export const MEMORY_FILE = path.join(USER_MEMORY_DIR, "user_memory.md");
+
+/** Legacy location before the ~/DeepWork/memory unification. */
+const LEGACY_MEMORY_FILE = path.join(APP_DATA_DIR, "memory.md");
 
 /**
  * Parse the memory.md file into a map of section-id → markdown body string.
@@ -77,8 +80,19 @@ export function serializeMemorySections(sections: Map<MemorySectionId, string>):
 
 /** Ensure memory.md exists with the default template. Idempotent. */
 export function ensureMemoryFile(): void {
+  // One-time migration: copy the legacy app/memory.md into the unified
+  // ~/DeepWork/memory/user/user_memory.md location if the new file is absent.
+  if (!fs.existsSync(MEMORY_FILE) && fs.existsSync(LEGACY_MEMORY_FILE)) {
+    try {
+      fs.mkdirSync(USER_MEMORY_DIR, { recursive: true });
+      fs.copyFileSync(LEGACY_MEMORY_FILE, MEMORY_FILE);
+    } catch {
+      // best-effort
+    }
+  }
   if (fs.existsSync(MEMORY_FILE)) return;
   const empty = serializeMemorySections(new Map());
+  fs.mkdirSync(USER_MEMORY_DIR, { recursive: true });
   fs.writeFileSync(MEMORY_FILE, empty, "utf-8");
 }
 

@@ -1593,6 +1593,46 @@ body,
 .um-saved {
   font-size: 12px; color: var(--accent, #3b82f6); opacity: 0.85;
 }
+
+/* ---- memory sub-tabs + timeline viewer ---- */
+.mem-tabs { display: flex; gap: 6px; margin: 4px 0 16px; }
+.mem-tab {
+  padding: 7px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-elev);
+  color: var(--text-dim); font-size: 13px; font-weight: 500;
+  transition: all 0.15s;
+}
+.mem-tab:hover { color: var(--text); border-color: var(--border-hover, rgba(128,128,128,0.4)); }
+.mem-tab.active {
+  color: var(--text); border-color: var(--accent, #3b82f6);
+  background: var(--accent-soft, rgba(59,130,246,0.12));
+}
+.tl-layout { display: flex; gap: 14px; align-items: stretch; }
+.tl-list {
+  list-style: none; margin: 0; padding: 4px; flex: 0 0 150px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-elev); max-height: 420px; overflow-y: auto;
+}
+.tl-item {
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.tl-item:hover { background: var(--bg); color: var(--text); }
+.tl-item.active { background: var(--accent-soft, rgba(59,130,246,0.14)); color: var(--text); }
+.tl-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tl-path-hint {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 12px; margin-bottom: 10px;
+}
+.tl-content {
+  flex: 1; margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.65; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; max-height: 400px; overflow-y: auto;
+}
+.tl-empty { margin: 8px 0 0; }
+
 /* ---- MCP connectors (compact card list) ---- */
 .mcp-list { display: flex; flex-direction: column; gap: 8px; }
 .mcp-item {

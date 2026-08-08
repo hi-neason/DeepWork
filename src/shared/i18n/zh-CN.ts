@@ -84,6 +84,14 @@ const zhCN = {
       heading: "个人记忆",
       editHint: "直接编辑这个 Markdown 文件。建议按四个区块组织：个人背景 / 工作思路 / 近期关注 / 近期动态（自动抽取的内容会追加到「近期动态」）。",
       saved: "已保存",
+      tabs: {
+        user: "个人记忆",
+        timeline: "时间线记忆",
+      },
+      timeline: {
+        empty: "暂无时间线记录。每轮对话结束后，当天的关键要点会自动沉淀到这里。",
+        dateEmpty: "选择左侧日期查看当天的对话记忆。",
+      },
     },
     about: {
       title: "关于",

@@ -53,6 +53,11 @@ import {
   type MemorySectionId,
 } from "../storage/user-memory";
 import {
+  listTimelineDates,
+  readTimelineDate,
+  timelinePath,
+} from "../storage/timeline-memory";
+import {
   listAutomations,
   createAutomation,
   updateAutomation,
@@ -336,6 +341,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   ipcMain.handle("userMemory:raw", () => readRawMemory());
   ipcMain.handle("userMemory:saveRaw", (_e, markdown: string) => saveRawMemory(markdown));
   ipcMain.handle("userMemory:path", () => MEMORY_FILE);
+
+  // ---- timeline memory (per-day markdown) ----
+  ipcMain.handle("timeline:list", () => listTimelineDates());
+  ipcMain.handle("timeline:read", (_e, date: string) => readTimelineDate(date));
+  ipcMain.handle("timeline:path", (_e, date: string) => timelinePath(date));
 
   // ---- artifacts ----
   ipcMain.handle("artifacts:list", (_e, sessionId: string) =>

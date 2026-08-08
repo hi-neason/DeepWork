@@ -18,6 +18,20 @@ export const SKILLS_DIR = path.join(DEEPWORK_ROOT, "skills");
 export const DEFAULT_WORKSPACE_DIR = path.join(DEEPWORK_ROOT, "workspace");
 
 /**
+ * Unified root for all memory stores. Everything long-term the assistant
+ * remembers lives under ~/DeepWork/memory so the layout is predictable:
+ *
+ *   ~/DeepWork/memory/
+ *     user/           personal curated memory (user_memory.md)
+ *     timeline_memory/  one file per day (2026-08-08.md)
+ *     project_memory/   one file per project (reserved, not yet used)
+ */
+export const MEMORY_ROOT = path.join(DEEPWORK_ROOT, "memory");
+export const USER_MEMORY_DIR = path.join(MEMORY_ROOT, "user");
+export const TIMELINE_MEMORY_DIR = path.join(MEMORY_ROOT, "timeline_memory");
+export const PROJECT_MEMORY_DIR = path.join(MEMORY_ROOT, "project_memory");
+
+/**
  * The session's working directory = the agent's cwd AND the fs-tool sandbox
  * root. When the user picked a folder, that folder itself is the root so the
  * agent can read the project's source; without a pick we fall back to an
@@ -66,7 +80,16 @@ const DB_FILES = ["deepwork.db", "deepwork.db-wal", "deepwork.db-shm", "checkpoi
 
 /** Ensure all the standard directories exist. Safe to call at startup. */
 export function ensureDirs(): void {
-  for (const dir of [DEEPWORK_ROOT, APP_DATA_DIR, SKILLS_DIR, DEFAULT_WORKSPACE_DIR]) {
+  for (const dir of [
+    DEEPWORK_ROOT,
+    APP_DATA_DIR,
+    SKILLS_DIR,
+    DEFAULT_WORKSPACE_DIR,
+    MEMORY_ROOT,
+    USER_MEMORY_DIR,
+    TIMELINE_MEMORY_DIR,
+    PROJECT_MEMORY_DIR,
+  ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
   migrateLegacyData();

@@ -49,6 +49,7 @@ import { WEB_TOOLS } from "../tools/web";
 import { createTodosTool } from "../tools/todos";
 import { createMemoryTools } from "../tools/memory";
 import { appendToRecent, readRawMemory } from "../storage/user-memory";
+import { appendTimelineEntry } from "../storage/timeline-memory";
 import { skillsSourcePath } from "../skills/store";
 import { APP_DATA_DIR, DEFAULT_WORKSPACE_DIR, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
 
@@ -558,6 +559,9 @@ export class AgentManager {
     };
     // Background memory extraction (non-blocking) when enabled.
     this.maybeExtractMemory(sessionId, userText, ws);
+    // Background timeline capture (non-blocking, always on): distill this
+    // turn's key points into today's timeline memory file.
+    this.maybeAppendTimeline(sessionId, userText, result.replyText, ws);
     // Unlock the input immediately after the turn finishes.
     yield { type: "turn_completed" };
     logger.info(
@@ -635,6 +639,58 @@ Respond in the same language as the user.`;
       }
     } catch (err) {
       logger.warn("memory", "extraction failed", {
+        session: sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Fire-and-forget timeline capture after every turn (always on, unlike the
+   * opt-in autoExtract). Distills this turn's user+assistant exchange into a
+   * few bullet points and appends them to today's timeline memory file, so the
+   * day accumulates every project's conversations.
+   */
+  private maybeAppendTimeline(
+    sessionId: string,
+    userText: string,
+    replyText: string,
+    ws?: string,
+  ): void {
+    void this.runTimelineCapture(sessionId, userText, replyText, ws);
+  }
+
+  private async runTimelineCapture(
+    sessionId: string,
+    userText: string,
+    replyText: string,
+    ws?: string,
+  ): Promise<void> {
+    try {
+      if (!userText || !userText.trim()) return;
+      const settings = loadSettings();
+      const model = createChatModel(settings.model);
+      const sys = `You are logging a daily work-session timeline. From the user's latest message and the assistant's reply, extract the key points worth keeping as a memory of this conversation: decisions made, conclusions reached, tasks attempted or completed, important facts learned, and any open questions.
+Output ONLY a markdown bullet list (each line starting with "- "), concise, in the same language as the user. If the conversation was trivial or small-talk, output a single short "- " line summarizing what was discussed. Do not wrap the output in code fences.`;
+      const resp = await model.invoke([
+        { role: "system", content: sys },
+        {
+          role: "user",
+          content: `User message:\n${userText}\n\n---\nAssistant reply:\n${replyText}`,
+        },
+      ]);
+      const raw = (resp as { content?: unknown }).content;
+      const text = typeof raw === "string" ? raw : "";
+      const bullets = text
+        .trim()
+        .replace(/^```[a-z]*\n?/i, "")
+        .replace(/\n?```$/i, "")
+        .trim();
+      if (!bullets) return;
+      const project = ws ? path.basename(ws) : "(默认工作区)";
+      appendTimelineEntry({ project, sessionId, bullets });
+    } catch (err) {
+      logger.warn("timeline", "capture failed", {
         session: sessionId,
         error: err instanceof Error ? err.message : String(err),
       });

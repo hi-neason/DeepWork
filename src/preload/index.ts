@@ -167,6 +167,11 @@ const api = {
       ipcRenderer.invoke("userMemory:saveRaw", markdown),
     path: (): Promise<string> => ipcRenderer.invoke("userMemory:path"),
   },
+  timeline: {
+    list: (): Promise<string[]> => ipcRenderer.invoke("timeline:list"),
+    read: (date: string): Promise<string> => ipcRenderer.invoke("timeline:read", date),
+    path: (date: string): Promise<string> => ipcRenderer.invoke("timeline:path", date),
+  },
   artifacts: {
     list: (sessionId: string): Promise<ArtifactFile[]> =>
       ipcRenderer.invoke("artifacts:list", sessionId),
