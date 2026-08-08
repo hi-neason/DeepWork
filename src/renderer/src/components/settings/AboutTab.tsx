@@ -12,9 +12,11 @@ interface Props {
 export function AboutTab({ updateStatus }: Props): React.ReactElement {
   const { t } = useTranslation();
   const [dataPath, setDataPath] = useState("");
+  const [version, setVersion] = useState("");
 
   useEffect(() => {
     void window.deepwork.app.dataPath().then(setDataPath);
+    void window.deepwork.app.version().then(setVersion);
   }, []);
 
   return (
@@ -25,7 +27,9 @@ export function AboutTab({ updateStatus }: Props): React.ReactElement {
         <div className="setting-row">
           <div>
             <div className="setting-label">{t("settings.about.version")}</div>
-            <div className="setting-hint">{t("settings.about.versionHint")}</div>
+            <div className="setting-hint">
+              {version ? `DeepWork v${version} · local-first` : t("settings.about.versionHint")}
+            </div>
           </div>
         </div>
         <div className="setting-sep" />

@@ -90,6 +90,7 @@ const api = {
   app: {
     dataPath: (): Promise<string> => ipcRenderer.invoke("app:dataPath"),
     revealData: (): Promise<void> => ipcRenderer.invoke("app:revealData"),
+    version: (): Promise<string> => ipcRenderer.invoke("app:version"),
   },
   models: {
     catalog: (): Promise<ModelInfo[]> => ipcRenderer.invoke("models:catalog"),

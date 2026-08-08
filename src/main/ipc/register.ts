@@ -224,6 +224,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     shell.openPath(DEEPWORK_ROOT);
   });
   ipcMain.handle("app:dataPath", () => DEEPWORK_ROOT);
+  ipcMain.handle("app:version", () => app.getVersion());
 
   // ---- model catalog / verification ----
   ipcMain.handle("models:catalog", (): ModelInfo[] => MODEL_CATALOG);
