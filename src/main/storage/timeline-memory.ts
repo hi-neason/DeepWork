@@ -9,52 +9,120 @@ export function todayStr(d: Date = new Date()): string {
   return d.toLocaleDateString("en-CA", { timeZone: TZ });
 }
 
-/** Current time as HH:MM in the app's timezone. */
-function timeStr(d: Date = new Date()): string {
-  return d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: TZ,
-  });
-}
-
 /** Absolute path of a given day's timeline file. */
 export function timelineFilePath(dateStr: string): string {
   return path.join(TIMELINE_MEMORY_DIR, `${dateStr}.md`);
 }
 
-export interface TimelineEntry {
+export interface TimelineAppend {
   /** ISO-ish day string; defaults to today. */
   date?: string;
   /** Project (workspace) name this conversation belonged to. */
   project: string;
-  /** Session id the conversation happened in. */
-  sessionId: string;
-  /** Markdown bullet lines (each starting with "- ") distilled from the turn. */
-  bullets: string;
+  /** Distilled point strings; each becomes a numbered item under the project. */
+  points: string[];
+}
+
+/** Locate a project's `## <project>` section: returns [headingIdx, nextHeadingOrEof). */
+function projectSectionBounds(
+  lines: string[],
+  project: string,
+): { start: number; end: number } | null {
+  const heading = `## ${project}`;
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === heading) {
+      start = i;
+      break;
+    }
+  }
+  if (start === -1) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (lines[i].startsWith("## ")) {
+      end = i;
+      break;
+    }
+  }
+  return { start, end };
+}
+
+/** Last numbered-list item index within [start+1, end), or start if none. */
+function lastItemIndex(lines: string[], start: number, end: number): number {
+  let last = start;
+  for (let i = start + 1; i < end; i++) {
+    if (/^\d+\.\s/.test(lines[i].trim())) last = i;
+  }
+  return last;
+}
+
+/** Count existing numbered items within [start+1, end). */
+function countNumbered(lines: string[], start: number, end: number): number {
+  let n = 0;
+  for (let i = start + 1; i < end; i++) {
+    if (/^\d+\.\s/.test(lines[i].trim())) n++;
+  }
+  return n;
 }
 
 /**
- * Append one conversation's distilled points to that day's timeline file.
- * The file is created with a `# <date> 时间线记忆` heading on first write.
- * Atomic write (tmp + rename) prevents corruption from concurrent turns.
+ * Append distilled points to today's timeline file, grouped by project.
+ *
+ * Resulting layout:
+ *   # 2026-08-08 时间线记忆
+ *   ## PROJECT_A
+ *   1. xxxxxx
+ *   2. xxxxxxx
+ *   ## PROJECT_B
+ *   1. xxxxxxxxx
+ *   2. xxxxxxxx
+ *
+ * Each call appends to the matching project section (continuing the numbering)
+ * or creates the section if absent. Atomic write (tmp + rename) prevents
+ * corruption from concurrent turns.
  */
-export function appendTimelineEntry(entry: TimelineEntry): void {
+export function appendTimelineEntry(entry: TimelineAppend): void {
   const date = entry.date ?? todayStr();
   const file = timelineFilePath(date);
   fs.mkdirSync(TIMELINE_MEMORY_DIR, { recursive: true });
 
-  let content = "";
+  let lines: string[];
   if (fs.existsSync(file)) {
-    content = fs.readFileSync(file, "utf-8");
+    lines = fs.readFileSync(file, "utf-8").split("\n");
   } else {
-    content = `# ${date} 时间线记忆\n`;
+    lines = [`# ${date} 时间线记忆`, ""];
   }
 
-  const header = `## ${timeStr()} · ${entry.project} · 会话${entry.sessionId.slice(0, 8)}`;
-  const block = `${header}\n${entry.bullets.trim()}\n`;
-  const updated = content.replace(/\s*$/, "") + "\n\n" + block + "\n";
+  const points = entry.points
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  if (points.length === 0) return;
 
+  const bounds = projectSectionBounds(lines, entry.project);
+  if (bounds) {
+    const existing = lines
+      .slice(bounds.start + 1, bounds.end)
+      .map((l) => l.replace(/^\d+\.\s*/, "").trim().toLowerCase());
+    const fresh = points.filter(
+      (p) => !existing.includes(p.toLowerCase()),
+    );
+    if (fresh.length === 0) return;
+
+    let next = countNumbered(lines, bounds.start, bounds.end) + 1;
+    const insertAt = lastItemIndex(lines, bounds.start, bounds.end) + 1;
+    const newLines = fresh.map((p) => `${next++}. ${p}`);
+    lines.splice(insertAt, 0, ...newLines);
+  } else {
+    if (lines.length > 0 && lines[lines.length - 1].trim() !== "") {
+      lines.push("");
+    }
+    lines.push(
+      `## ${entry.project}`,
+      ...points.map((p, i) => `${i + 1}. ${p}`),
+    );
+  }
+
+  const updated = lines.join("\n").replace(/\n+$/, "\n");
   const tmp = file + ".tmp";
   fs.writeFileSync(tmp, updated, "utf-8");
   fs.renameSync(tmp, file);

@@ -671,7 +671,7 @@ Respond in the same language as the user.`;
       const settings = loadSettings();
       const model = createChatModel(settings.model);
       const sys = `You are logging a daily work-session timeline. From the user's latest message and the assistant's reply, extract the key points worth keeping as a memory of this conversation: decisions made, conclusions reached, tasks attempted or completed, important facts learned, and any open questions.
-Output ONLY a markdown bullet list (each line starting with "- "), concise, in the same language as the user. If the conversation was trivial or small-talk, output a single short "- " line summarizing what was discussed. Do not wrap the output in code fences.`;
+Output ONLY a concise list of points (one short sentence per line, no numbering, no bullet markers, no code fences), in the same language as the user. If the conversation was trivial or small-talk, output a single short line summarizing what was discussed.`;
       const resp = await model.invoke([
         { role: "system", content: sys },
         {
@@ -681,14 +681,16 @@ Output ONLY a markdown bullet list (each line starting with "- "), concise, in t
       ]);
       const raw = (resp as { content?: unknown }).content;
       const text = typeof raw === "string" ? raw : "";
-      const bullets = text
+      const points = text
         .trim()
         .replace(/^```[a-z]*\n?/i, "")
         .replace(/\n?```$/i, "")
-        .trim();
-      if (!bullets) return;
+        .split("\n")
+        .map((l) => l.replace(/^[-*]\s*/, "").trim())
+        .filter((l) => l.length > 0);
+      if (points.length === 0) return;
       const project = ws ? path.basename(ws) : "(默认工作区)";
-      appendTimelineEntry({ project, sessionId, bullets });
+      appendTimelineEntry({ project, points });
     } catch (err) {
       logger.warn("timeline", "capture failed", {
         session: sessionId,
