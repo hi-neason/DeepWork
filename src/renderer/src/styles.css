@@ -373,7 +373,7 @@ body,
   text-decoration: underline;
 }
 .msg.assistant .bubble {
-  width: 100%;
+  max-width: min(85%, 780px);
   border-bottom-left-radius: 4px;
 }
 .bubble pre {
