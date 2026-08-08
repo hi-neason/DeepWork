@@ -88,8 +88,8 @@ export function Sidebar({
     try {
       await window.deepwork.automations.deleteRun(runId);
       await refreshAutomations();
-    } catch {
-      // ignore
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -98,8 +98,8 @@ export function Sidebar({
     try {
       await window.deepwork.automations.deleteRuns(automationId);
       await refreshAutomations();
-    } catch {
-      // ignore
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
     }
   };
 
