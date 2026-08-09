@@ -4,7 +4,6 @@ import type {
   Settings,
   ModelConfig,
   McpServerConfig,
-  PermissionMode,
   ProviderKind,
 } from "../../shared/types";
 import { listAllMemories } from "./memories";
@@ -33,7 +32,7 @@ const DEFAULT_SETTINGS: Settings = {
   openAtLogin: false,
   keepAwake: true,
   theme: "dark",
-  language: "zh-CN",
+  language: "en-US",
   fontScale: 1,
   telemetry: false,
   showReasoning: true,
@@ -70,11 +69,6 @@ export function loadSettings(): Settings {
       try {
         const parsed = JSON.parse(row.value) as Partial<Settings>;
         base = { ...base, ...parsed };
-        // Migrate legacy approvalMode -> permissionMode.
-        const legacyApproval = (parsed as { approvalMode?: PermissionMode }).approvalMode;
-        if (!parsed.permissionMode && legacyApproval) {
-          base.permissionMode = legacyApproval;
-        }
       } catch {
         // keep defaults
       }
@@ -108,30 +102,17 @@ export function getApiKey(provider: ProviderKind | string): string {
     .prepare("SELECT value FROM settings WHERE key = ?")
     .get(k) as { value: string } | undefined;
   if (!row) return "";
+  if (!safeStorage.isEncryptionAvailable()) return "";
   try {
-    // Current envelope format (H-S1): `{v:1,enc:"<base64-ciphertext>"}`.
-    if (row.value.startsWith("{")) {
-      const parsed = JSON.parse(row.value) as { v?: number; enc?: string };
-      if (parsed.v === 1 && typeof parsed.enc === "string") {
-        if (!safeStorage.isEncryptionAvailable()) return "";
-        return safeStorage.decryptString(Buffer.from(parsed.enc, "base64"));
-      }
+    // Envelope format (H-S1): `{v:1,enc:"<base64-ciphertext>"}`.
+    const parsed = JSON.parse(row.value) as { v?: number; enc?: string };
+    if (parsed.v === 1 && typeof parsed.enc === "string") {
+      return safeStorage.decryptString(Buffer.from(parsed.enc, "base64"));
     }
-    // Legacy: raw ciphertext written before the envelope existed. Decrypt
-    // when possible; if encryption is unavailable we cannot distinguish it
-    // from plaintext, so refuse to hand it back rather than leak ciphertext.
-    if (safeStorage.isEncryptionAvailable()) {
-      try {
-        return safeStorage.decryptString(Buffer.from(row.value, "base64"));
-      } catch {
-        // Not valid base64 ciphertext — treat as legacy plaintext (pre-fix).
-        return row.value;
-      }
-    }
-    return "";
   } catch {
-    return "";
+    // fall through
   }
+  return "";
 }
 
 export function setApiKey(provider: ProviderKind | string, value: string): void {

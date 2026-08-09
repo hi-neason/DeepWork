@@ -109,7 +109,7 @@ export class McpManager {
     // Attribute outcomes per server. The LangChain adapter throws a single
     // aggregated error rather than per-server rejections, so a build failure is
     // reported against every server that actually made it into the config;
-    // successful servers are marked ok (M-存储⑤).
+    // successful servers are marked ok (M-storage⑤).
     for (const s of enabled) {
       if (this.lastStatus.has(s.id)) continue; // already marked skipped
       this.lastStatus.set(s.id, {

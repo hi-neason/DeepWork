@@ -2,20 +2,20 @@ import { describe, it, expect } from "vitest";
 import { evaluateApprovalDecision } from "./middleware";
 import type { RiskLevel, PermissionMode } from "../../shared/types";
 
-describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
+describe("agent/middleware - evaluateApprovalDecision (5 gates)", () => {
   const base = {
     toolName: "write_file",
     risk: "write" as RiskLevel,
     alwaysAllowed: false,
   };
 
-  it("plan 模式 + 破坏性工具 → BLOCK (plan-mode)", () => {
+  it("plan mode + destructive tool -> BLOCK (plan-mode)", () => {
     expect(
       evaluateApprovalDecision({ ...base, mode: "plan", unattended: false }),
     ).toEqual({ action: "block", blockReason: "plan-mode" });
   });
 
-  it("plan 模式 + 只读工具 → ALLOW (计划阶段探索自由)", () => {
+  it("plan mode + read-only tool -> ALLOW (free exploration during planning)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "read_file",
@@ -27,7 +27,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "allow" });
   });
 
-  it("无人值守 + GUI 工具 → BLOCK (unattended-gui, 无人可批)", () => {
+  it("unattended + GUI tool -> BLOCK (unattended-gui, no human available to approve)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "screenshot",
@@ -43,7 +43,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
   // (MCP) tools must never auto-run — a web_fetch content-injection could
   // otherwise achieve unsupervised RCE. write-level tools may still run when
   // the automation opted into auto mode.
-  it("无人值守 + exec(execute) → BLOCK (unattended-highrisk)", () => {
+  it("unattended + exec(execute) -> BLOCK (unattended-highrisk)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "execute",
@@ -55,7 +55,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "block", blockReason: "unattended-highrisk" });
   });
 
-  it("无人值守 + external(MCP) → BLOCK (unattended-highrisk)", () => {
+  it("unattended + external(MCP) -> BLOCK (unattended-highrisk)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "mcp_weather",
@@ -67,7 +67,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "block", blockReason: "unattended-highrisk" });
   });
 
-  it("无人值守 + write 工具 + auto 模式 → ALLOW (自动化内可写文件)", () => {
+  it("unattended + write tool + auto mode -> ALLOW (file writes allowed within automation)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "write_file",
@@ -79,19 +79,19 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "allow" });
   });
 
-  it("auto 模式 + 写文件 → ALLOW (autoAllowed)", () => {
+  it("auto mode + file write -> ALLOW (autoAllowed)", () => {
     expect(
       evaluateApprovalDecision({ ...base, mode: "auto", unattended: false }),
     ).toEqual({ action: "allow" });
   });
 
-  it("manual + 写文件 + 未 always_allow → ASK", () => {
+  it("manual + file write + not always_allow -> ASK", () => {
     expect(
       evaluateApprovalDecision({ ...base, mode: "manual", unattended: false }),
     ).toEqual({ action: "ask" });
   });
 
-  it("manual + 写文件 + 已 always_allow → ALLOW (直通)", () => {
+  it("manual + file write + already always_allow -> ALLOW (pass-through)", () => {
     expect(
       evaluateApprovalDecision({
         ...base,
@@ -102,7 +102,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "allow" });
   });
 
-  it("manual + 只读工具 → ALLOW (无需审批)", () => {
+  it("manual + read-only tool -> ALLOW (no approval needed)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "read_file",
@@ -114,7 +114,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "allow" });
   });
 
-  it("manual + 系统工具(ask_user) → ALLOW (白名单免审)", () => {
+  it("manual + system tool(ask_user) -> ALLOW (whitelist, no approval)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "ask_user",
@@ -126,7 +126,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "allow" });
   });
 
-  it("manual + GUI 工具 + 未 always_allow → ASK", () => {
+  it("manual + GUI tool + not always_allow -> ASK", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "mouse_click",
@@ -138,7 +138,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "ask" });
   });
 
-  it("manual + GUI 工具 + 即使 always_allow 仍 ASK (GUI 永不直通)", () => {
+  it("manual + GUI tool + still ASK even when always_allow (GUI never pass-through)", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "mouse_click",
@@ -150,7 +150,7 @@ describe("agent/middleware — evaluateApprovalDecision (5 道闸门)", () => {
     ).toEqual({ action: "ask" });
   });
 
-  it("manual + external 工具(MCP) → ASK", () => {
+  it("manual + external tool(MCP) -> ASK", () => {
     expect(
       evaluateApprovalDecision({
         toolName: "mcp_weather",

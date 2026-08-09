@@ -11,7 +11,9 @@ import {
 } from "../config/paths";
 import { logger } from "../log/logger";
 
-export const DEFAULT_GROUP = "默认";
+/** Internal identifier for the default session group. The display name is
+ *  localized via the `sidebar.defaultGroup` i18n key. */
+export const DEFAULT_GROUP = "Default";
 
 /** Columns selected when loading a session row (terminal_cwd is derived). */
 const SESSION_COLUMNS =

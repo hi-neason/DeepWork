@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-// 用 node:sqlite 实现的 better-sqlite3 替身（见 src/test/mocks/better-sqlite3.ts），
-// 避免加载 Electron ABI 的原生二进制。
+// Use a better-sqlite3 substitute implemented with node:sqlite (see
+// src/test/mocks/better-sqlite3.ts) to avoid loading the Electron-ABI native binary.
 import MockSqlite from "../../test/mocks/better-sqlite3";
 vi.mock("better-sqlite3", () => ({ default: MockSqlite }));
 
-// 临时数据目录在 mock 工厂内创建，保证模块加载时即捕获到正确路径（避免 TDZ）。
+// The temporary data directory is created inside the mock factory so that the
+// correct path is captured at module-load time (avoiding the TDZ).
 vi.mock("../config/paths", async (importOriginal) => {
   const f = await import("node:fs");
   const p = await import("node:path");
@@ -22,7 +23,7 @@ vi.mock("../config/paths", async (importOriginal) => {
 
 import * as paths from "../config/paths";
 
-describe("storage/db — 增量迁移与 schema", () => {
+describe("storage/db - schema", () => {
   let getDb: () => any;
   let audit: (e: { tool: string; risk?: string; decision?: string }) => void;
   let tmp: string;
@@ -34,7 +35,7 @@ describe("storage/db — 增量迁移与 schema", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("首次打开即创建全部表并补齐记忆子系统列", () => {
+  it("creates all tables and adds the memory-subsystem columns on first open", () => {
     const db = getDb();
     const cols = (t: string) =>
       (db.prepare(`PRAGMA table_info(${t})`).all() as Array<{ name: string }>).map(
@@ -57,7 +58,7 @@ describe("storage/db — 增量迁移与 schema", () => {
     );
   });
 
-  it("sessions 表补齐 workspace_dir / root_dir / terminal_cwd / model / group_name / source", () => {
+  it("the sessions table includes workspace_dir / root_dir / terminal_cwd / model / group_name / source", () => {
     const db = getDb();
     const cols = (db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).map(
       (c) => c.name,
@@ -76,7 +77,7 @@ describe("storage/db — 增量迁移与 schema", () => {
     );
   });
 
-  it("automations 表补齐结构化调度列", () => {
+  it("the automations table includes structured scheduling columns", () => {
     const db = getDb();
     const cols = (db.prepare("PRAGMA table_info(automations)").all() as Array<{ name: string }>).map(
       (c) => c.name,
@@ -96,7 +97,7 @@ describe("storage/db — 增量迁移与 schema", () => {
     );
   });
 
-  it("session_groups 表存在", () => {
+  it("the session_groups table exists", () => {
     const db = getDb();
     const row = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='session_groups'")
@@ -104,18 +105,18 @@ describe("storage/db — 增量迁移与 schema", () => {
     expect(row).toBeTruthy();
   });
 
-  it("getDb 是单例（多次调用返回同一实例）", () => {
+  it("getDb is a singleton (multiple calls return the same instance)", () => {
     expect(getDb()).toBe(getDb());
   });
 
-  it("audit() 写入审计日志且不抛错", () => {
+  it("audit() writes to the audit log without throwing", () => {
     const db = getDb();
     audit({ tool: "unit_test_tool", risk: "read", decision: "allow" });
     const count = (db.prepare("SELECT COUNT(*) c FROM audit_log").get() as any).c;
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
-  it("参数化写入可防注入：特殊字符被当作值而非 SQL", () => {
+  it("parameterized writes prevent injection: special characters are treated as values, not SQL", () => {
     const db = getDb();
     const evil = "'); DROP TABLE memories; --";
     db.prepare("INSERT INTO memories (id, content, scope, scope_key, created_at) VALUES (?, ?, 'workspace', ?, ?)").run(
@@ -126,7 +127,7 @@ describe("storage/db — 增量迁移与 schema", () => {
     );
     const rows = db.prepare("SELECT content FROM memories WHERE id = ?").all("evt1") as any[];
     expect(rows[0].content).toBe(evil);
-    // 表仍完好，说明注入未生效
+    // The table is still intact, proving the injection did not take effect
     const stillThere = db.prepare("SELECT COUNT(*) c FROM memories").get() as any;
     expect(stillThere.c).toBeGreaterThanOrEqual(1);
   });

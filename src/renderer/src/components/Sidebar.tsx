@@ -4,9 +4,10 @@ import type { AutomationWithRuns, Session, SessionSort } from "../../../shared/t
 
 export type ViewKey = "chat" | "settings";
 
-/** Storage sentinel for sessions with no explicit group. Kept untranslated in
- * storage; the UI shows a localized label via sidebar.defaultGroup. */
-const DEFAULT_GROUP = "默认";
+/** Storage sentinel for sessions with no explicit group. Must match
+ * DEFAULT_GROUP in src/main/storage/sessions.ts. The UI shows a localized
+ * label via sidebar.defaultGroup; this id itself stays language-neutral. */
+const DEFAULT_GROUP = "Default";
 
 interface Props {
   sessions: Session[];

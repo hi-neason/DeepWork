@@ -27,7 +27,7 @@ export function createMemoryTools(scopeKey = ""): ToolInterface[] {
       // Always append to the global user profile's "recent" section.
       // The agent decides what's worth keeping; the user curates later.
       appendToRecent(content, "agent");
-      return "Saved to your profile (近期动态). It will be available in future sessions.";
+      return "Saved to your profile (Recent updates). It will be available in future sessions.";
     },
     {
       name: "remember",

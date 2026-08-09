@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { extractLastUserQuery } from "./context";
 
-describe("agent/context — extractLastUserQuery (C-T4 根因)", () => {
-  it("普通对象带 role:'user' 能提取最后一条用户文本", () => {
+describe("agent/context - extractLastUserQuery (C-T4 root cause)", () => {
+  it("extracts the last user text from plain objects with role:'user'", () => {
     const msgs = [
       { role: "system", content: "sys" },
       { role: "user", content: "第一条" },
@@ -12,11 +12,11 @@ describe("agent/context — extractLastUserQuery (C-T4 根因)", () => {
     expect(extractLastUserQuery(msgs as any)).toBe("第二条");
   });
 
-  it("无用户消息时返回空串", () => {
+  it("returns an empty string when there are no user messages", () => {
     expect(extractLastUserQuery([{ role: "system", content: "x" }] as any)).toBe("");
   });
 
-  it("LangChain BaseMessage 用 type/human 标记, 能提取最后一条 human 文本 (C-A2 修复前按 role 匹配永远取不到 → workspace 记忆永不注入)", () => {
+  it("extracts the last human text from LangChain BaseMessages marked via type/human (before the C-A2 fix matching by role never found it, so workspace memory was never injected)", () => {
     const lcMsgs = [
       { type: "system", content: "sys" },
       { type: "human", content: "我是用户" },
@@ -24,7 +24,7 @@ describe("agent/context — extractLastUserQuery (C-T4 根因)", () => {
     expect(extractLastUserQuery(lcMsgs as any)).toBe("我是用户");
   });
 
-  it("BaseMessage 实例 (getType()==='human') 也能提取, 且 content 为 blocks[] 时取文本", () => {
+  it("also extracts from BaseMessage instances (getType()==='human'), and reads text when content is blocks[]", () => {
     const humanMsg = {
       getType: () => "human",
       content: [

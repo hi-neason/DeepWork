@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Automation } from "../../shared/types";
 
-// 纯逻辑部分：直接测导出的 cron/validity 判定。
-// 集成部分：用 vi.mock 替换 storage 层，驱动真实 tick/fire 流程。
+// Pure-logic portion: directly test the exported cron/validity checks.
+// Integration portion: use vi.mock to replace the storage layer and drive the
+// real tick/fire flow.
 vi.mock("../storage/automations", () => ({
   listAutomations: vi.fn(() => []),
   listDueAutomations: vi.fn(() => []),
@@ -37,29 +38,28 @@ function auto(partial: Partial<Automation>): Automation {
     id: "a1",
     title: "t",
     instructions: "do",
-    schedule: "",
     enabled: true,
     createdAt: 0,
     ...partial,
   } as Automation;
 }
 
-describe("automation/scheduler — 纯逻辑", () => {
-  it("cronMatches: 5 段匹配，段数不对返回 false", () => {
-    const d = new Date(2026, 7, 10, 9, 30, 0); // 周一 9:30
+describe("automation/scheduler - pure logic", () => {
+  it("cronMatches: matches 5 fields; wrong field count returns false", () => {
+    const d = new Date(2026, 7, 10, 9, 30, 0); // Monday 9:30
     expect(cronMatches("30 9 10 8 1", d)).toBe(true);
     expect(cronMatches("31 9 10 8 1", d)).toBe(false);
     expect(cronMatches("* * * * *", d)).toBe(true);
-    expect(cronMatches("*/15 * * * *", d)).toBe(true); // 30 在 0,15,30,45
-    expect(cronMatches("0 9 * * 1", d)).toBe(false); // 分钟 0 != 30
+    expect(cronMatches("*/15 * * * *", d)).toBe(true); // 30 is in 0,15,30,45
+    expect(cronMatches("0 9 * * 1", d)).toBe(false); // minute 0 != 30
     expect(cronMatches("bad", d)).toBe(false);
   });
 
-  it("cronMatches: 列表与范围", () => {
+  it("cronMatches: lists and ranges", () => {
     const d = new Date(2026, 7, 10, 9, 0, 0);
-    expect(cronMatches("0 9 * 8 1,3,5", d)).toBe(true); // 周一命中列表
-    expect(cronMatches("0 9 * 8 2", d)).toBe(false); // 周二不在列表
-    expect(cronMatches("0 9-10 * 8 1", d)).toBe(true); // 小时范围 9-10
+    expect(cronMatches("0 9 * 8 1,3,5", d)).toBe(true); // Monday matches the list
+    expect(cronMatches("0 9 * 8 2", d)).toBe(false); // Tuesday is not in the list
+    expect(cronMatches("0 9-10 * 8 1", d)).toBe(true); // hour range 9-10
     expect(cronMatches("0 11 * 8 1", d)).toBe(false);
   });
 
@@ -70,16 +70,16 @@ describe("automation/scheduler — 纯逻辑", () => {
     expect(parseTime("nope")).toBeNull();
   });
 
-  it("isWithinValidity: validFrom/validUntil 边界（含当天）", () => {
+  it("isWithinValidity: validFrom/validUntil boundaries (inclusive of the day)", () => {
     const now = new Date(2026, 7, 15, 12, 0, 0);
     expect(isWithinValidity(auto({ validFrom: "2026-08-10", validUntil: "2026-08-20" }), now)).toBe(true);
-    expect(isWithinValidity(auto({ validFrom: "2026-08-16" }), now)).toBe(false); // 还没到
-    expect(isWithinValidity(auto({ validUntil: "2026-08-14" }), now)).toBe(false); // 已过期
+    expect(isWithinValidity(auto({ validFrom: "2026-08-16" }), now)).toBe(false); // not yet reached
+    expect(isWithinValidity(auto({ validUntil: "2026-08-14" }), now)).toBe(false); // already expired
     expect(isWithinValidity(auto({}), now)).toBe(true);
   });
 
   it("shouldFire: daily / weekly / cron / once", () => {
-    const mon = new Date(2026, 7, 10, 9, 30, 0); // 周一
+    const mon = new Date(2026, 7, 10, 9, 30, 0); // Monday
     expect(shouldFire(auto({ scheduleType: "daily", scheduleConfig: { time: "09:30" } }), mon)).toBe(true);
     expect(shouldFire(auto({ scheduleType: "daily", scheduleConfig: { time: "09:31" } }), mon)).toBe(false);
     expect(shouldFire(auto({ scheduleType: "weekly", scheduleConfig: { time: "09:30", days: [1] } }), mon)).toBe(true);
@@ -90,7 +90,7 @@ describe("automation/scheduler — 纯逻辑", () => {
   });
 });
 
-describe("automation/scheduler — tick/fire 集成（mock storage）", () => {
+describe("automation/scheduler - tick/fire integration (mock storage)", () => {
   let s: AutomationScheduler;
   let handler: ReturnType<typeof vi.fn>;
 
@@ -104,7 +104,7 @@ describe("automation/scheduler — tick/fire 集成（mock storage）", () => {
     s.stop();
   });
 
-  it("到期自动化在 tick 中被触发一次", async () => {
+  it("a due automation is triggered once during a tick", async () => {
     const a = auto({ scheduleType: "cron", scheduleConfig: { cron: "* * * * *" } });
     vi.mocked(automations.listAutomations).mockReturnValue([a]);
     vi.mocked(automations.getAutomation).mockReturnValue(a);
@@ -122,7 +122,7 @@ describe("automation/scheduler — tick/fire 集成（mock storage）", () => {
     );
   });
 
-  it("未到期自动化不被触发", async () => {
+  it("an automation that is not due is not triggered", async () => {
     const a = auto({ scheduleType: "daily", scheduleConfig: { time: "03:33" } });
     vi.mocked(automations.listAutomations).mockReturnValue([a]);
     vi.mocked(automations.getAutomation).mockReturnValue(a);
@@ -130,7 +130,7 @@ describe("automation/scheduler — tick/fire 集成（mock storage）", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("同一分钟内重复 tick 去重（lastFire 命中即跳过），不重复触发", async () => {
+  it("deduplicates repeated ticks within the same minute (skips when lastFire matches) without double-firing", async () => {
     const a = auto({ scheduleType: "cron", scheduleConfig: { cron: "* * * * *" } });
     vi.mocked(automations.listAutomations).mockReturnValue([a]);
     vi.mocked(automations.getAutomation).mockReturnValue(a);
@@ -139,9 +139,9 @@ describe("automation/scheduler — tick/fire 集成（mock storage）", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("running 集合防止并发重入", async () => {
+  it("the running set prevents concurrent re-entry", async () => {
     const a = auto({ scheduleType: "cron", scheduleConfig: { cron: "* * * * *" } });
-    // 第一次 fire 未结束前，running 含 a.id
+    // Before the first fire finishes, running contains a.id
     let resolveFire: () => void;
     const gate = new Promise<void>((res) => (resolveFire = res));
     handler.mockImplementation(async () => {
@@ -151,20 +151,20 @@ describe("automation/scheduler — tick/fire 集成（mock storage）", () => {
       .mockReturnValueOnce([a])
       .mockReturnValueOnce([a]);
     vi.mocked(automations.getAutomation).mockReturnValue(a);
-    const p1 = (s as any).tick(); // 进入 fire 后挂起在 gate
-    const p2 = (s as any).tick(); // 同步部分应看到 running，跳过
-    await new Promise((r) => setTimeout(r, 0)); // 让 p2 的同步逻辑跑完
-    expect(handler).toHaveBeenCalledTimes(1); // p2 因 running 含 a.id 而跳过
+    const p1 = (s as any).tick(); // enters fire and then suspends at gate
+    const p2 = (s as any).tick(); // its synchronous portion should see running and skip
+    await new Promise((r) => setTimeout(r, 0)); // let p2's synchronous logic finish
+    expect(handler).toHaveBeenCalledTimes(1); // p2 was skipped because running contains a.id
     resolveFire!();
     await p1;
     await p2;
   });
 
-  it("重启后从持久化的 lastFiredSlot 恢复，宽限期内不重复触发同一槽位", async () => {
+  it("after a restart it recovers from the persisted lastFiredSlot and does not re-fire the same slot within the grace period", async () => {
     const a = auto({ scheduleType: "cron", scheduleConfig: { cron: "* * * * *" } });
     vi.mocked(automations.listAutomations).mockReturnValue([a]);
     vi.mocked(automations.getAutomation).mockReturnValue(a);
-    // 模拟重启：该槽位已在上一进程触发并持久化
+    // Simulate a restart: this slot already fired and was persisted in the previous process
     vi.mocked(automations.getLastFiredSlot).mockImplementation(() => dueInstant(a, new Date()));
     await (s as any).tick();
     expect(handler).not.toHaveBeenCalled();

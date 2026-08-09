@@ -17,7 +17,8 @@ vi.mock("../config/paths", async (importOriginal) => {
   };
 });
 
-// 记忆检索走 embedding 配置；测试统一用 provider:"none"，落到关键词回退路径。
+// Memory retrieval follows the embedding config; tests uniformly use
+// provider:"none" to exercise the keyword fallback path.
 vi.mock("./settings", () => ({
   loadSettings: () => ({
     memory: { embedding: { provider: "none" }, topK: 5, threshold: 0.1 },
@@ -28,7 +29,7 @@ vi.mock("./settings", () => ({
 
 import * as paths from "../config/paths";
 
-describe("storage/memories — CRUD 与语义/关键词检索", () => {
+describe("storage/memories - CRUD and semantic/keyword retrieval", () => {
   let mem: typeof import("./memories");
   let tmp: string;
   beforeAll(async () => {
@@ -39,7 +40,7 @@ describe("storage/memories — CRUD 与语义/关键词检索", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("addMemory 写入并返回带 scope 的条目（workspace vs global）", () => {
+  it("addMemory writes and returns an entry with scope (workspace vs global)", () => {
     const ws = mem.addMemory("工作区秘密", "ws-1");
     expect(ws.scope).toBe("workspace");
     expect(ws.content).toBe("工作区秘密");
@@ -49,7 +50,7 @@ describe("storage/memories — CRUD 与语义/关键词检索", () => {
     expect(g.scope).toBe("global");
   });
 
-  it("listMemories 按 scope_key 过滤（不串工作区）", () => {
+  it("listMemories filters by scope_key (no cross-workspace leakage)", () => {
     mem.addMemory("A 的工作区条目", "ws-A");
     mem.addMemory("B 的工作区条目", "ws-B");
     const a = mem.listMemories("ws-A").map((m) => m.content);
@@ -57,7 +58,7 @@ describe("storage/memories — CRUD 与语义/关键词检索", () => {
     expect(a).not.toContain("B 的工作区条目");
   });
 
-  it("searchMemories 关键词回退：返回最相关条目", async () => {
+  it("searchMemories keyword fallback: returns the most relevant entries", async () => {
     mem.addMemory("React 组件性能优化", "ws-search");
     mem.addMemory("今天天气不错", "ws-search");
     const res = await mem.searchMemories("ws-search", "React 性能", { topK: 5, threshold: 0 });
@@ -65,20 +66,20 @@ describe("storage/memories — CRUD 与语义/关键词检索", () => {
     expect(res[0].content).toContain("React");
   });
 
-  it("searchMemories 在无匹配时降级不抛错（keyword 模式返回数组、受 topK 约束、不崩溃）", async () => {
+  it("searchMemories degrades gracefully without throwing when there is no match (keyword mode returns an array bounded by topK and does not crash)", async () => {
     const res = await mem.searchMemories("ws-empty", "zzz没有这种记忆", { topK: 3 });
     expect(Array.isArray(res)).toBe(true);
     expect(res.length).toBeLessThanOrEqual(3);
   });
 
-  it("invalidateMemory 软失效后不再被 listMemories 列出", () => {
+  it("after invalidateMemory soft-invalidates an entry it is no longer listed by listMemories", () => {
     const item = mem.addMemory("将被废弃的记忆", "ws-inv");
     mem.invalidateMemory(item.id);
     const listed = mem.listMemories("ws-inv").map((m) => m.id);
     expect(listed).not.toContain(item.id);
   });
 
-  it("editMemory 更新内容并重新激活", async () => {
+  it("editMemory updates content and reactivates the entry", async () => {
     const item = mem.addMemory("旧内容", "ws-edit");
     mem.invalidateMemory(item.id);
     await mem.editMemory(item.id, "新内容", { type: "fact" });
@@ -86,7 +87,7 @@ describe("storage/memories — CRUD 与语义/关键词检索", () => {
     expect(listed.map((m) => m.content)).toContain("新内容");
   });
 
-  it("removeMemory 物理删除", () => {
+  it("removeMemory physically deletes the entry", () => {
     const item = mem.addMemory("临时记忆", "ws-rm");
     mem.removeMemory(item.id);
     expect(mem.listMemories("ws-rm").map((m) => m.id)).not.toContain(item.id);

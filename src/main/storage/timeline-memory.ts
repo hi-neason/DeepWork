@@ -90,7 +90,7 @@ function countNumbered(lines: string[], start: number, end: number): number {
  * Append distilled points to today's timeline file, grouped by project.
  *
  * Resulting layout:
- *   # 2026-08-08 时间线记忆
+ *   # 2026-08-08 Timeline memory
  *   ## PROJECT_A
  *   1. xxxxxx
  *   2. xxxxxxx
@@ -112,7 +112,7 @@ export function appendTimelineEntry(entry: TimelineAppend): void {
   if (fs.existsSync(file)) {
     lines = fs.readFileSync(file, "utf-8").split("\n");
   } else {
-    lines = [`# ${date} 时间线记忆`, ""];
+    lines = [`# ${date} Timeline memory`, ""];
   }
 
   const points = entry.points

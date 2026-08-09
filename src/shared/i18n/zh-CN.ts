@@ -1,4 +1,5 @@
-// Simplified Chinese UI strings (source language).
+// Simplified Chinese UI strings. en-US.ts is the source of truth; keep this
+// file's keys in sync with it.
 // Keys are namespaced, e.g. "common.save", "settings.general.title".
 const zhCN = {
   common: {

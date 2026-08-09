@@ -6,7 +6,7 @@ import {
   TURN_LIVENESS_TIMEOUT_MS,
 } from "./useTurnWatchdog";
 
-describe("useTurnWatchdog (H: streaming 卡死兜底)", () => {
+describe("useTurnWatchdog (H: streaming stall safety net)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -14,7 +14,7 @@ describe("useTurnWatchdog (H: streaming 卡死兜底)", () => {
     vi.useRealTimers();
   });
 
-  it("streaming=true 后超过窗口未收到事件 → 触发 onTimeout", () => {
+  it("after streaming=true, no event within the window triggers onTimeout", () => {
     const onTimeout = vi.fn();
     const { rerender } = renderHook(
       ({ streaming }) => useTurnWatchdog(streaming, onTimeout, 1000),
@@ -30,26 +30,26 @@ describe("useTurnWatchdog (H: streaming 卡死兜底)", () => {
     expect(onTimeout).toHaveBeenCalledTimes(1);
   });
 
-  it("收到事件（poke）会重置窗口；持续有事件则不超时", () => {
+  it("receiving an event (poke) resets the window; continuous events do not time out", () => {
     const onTimeout = vi.fn();
     const { result, rerender } = renderHook(
       ({ streaming }) => useTurnWatchdog(streaming, onTimeout, 1000),
       { initialProps: { streaming: true } },
     );
 
-    // 每隔 900ms 来一个事件，累计超过窗口也不应超时
+    // An event every 900ms should not time out even cumulatively beyond the window
     for (let i = 0; i < 5; i++) {
       vi.advanceTimersByTime(900);
-      result.current(); // poke
+      result.current(); // poke the watchdog
     }
     expect(onTimeout).not.toHaveBeenCalled();
 
-    // 停止 poke 后，满窗口才超时
+    // After poke stops, a full window must elapse before timeout
     vi.advanceTimersByTime(1000);
     expect(onTimeout).toHaveBeenCalledTimes(1);
   });
 
-  it("streaming 变为 false（收到终态事件）立即清除定时器，不触发 onTimeout", () => {
+  it("when streaming becomes false (terminal event received) the timer is cleared immediately without onTimeout", () => {
     const onTimeout = vi.fn();
     const { rerender } = renderHook(
       ({ streaming }) => useTurnWatchdog(streaming, onTimeout, 1000),
@@ -62,14 +62,14 @@ describe("useTurnWatchdog (H: streaming 卡死兜底)", () => {
     expect(onTimeout).not.toHaveBeenCalled();
   });
 
-  it("只在超时时触发一次，不会因定时器重复触发", () => {
+  it("fires only once on timeout and does not re-fire from the timer", () => {
     const onTimeout = vi.fn();
     renderHook(() => useTurnWatchdog(true, onTimeout, 1000));
     vi.advanceTimersByTime(5000);
     expect(onTimeout).toHaveBeenCalledTimes(1);
   });
 
-  it("默认超时窗口为 3 分钟", () => {
+  it("default timeout window is 3 minutes", () => {
     expect(TURN_LIVENESS_TIMEOUT_MS).toBe(3 * 60 * 1000);
   });
 });

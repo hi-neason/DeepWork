@@ -10,17 +10,18 @@ import {
 } from "./registry";
 import type { RiskLevel } from "../../shared/types";
 
-describe("tools/registry — 风险注册表", () => {
+describe("tools/registry - risk registry", () => {
   afterEach(() => {
-    // annotateRisk 单调不可降级，跨用例清理必须用 resetToolRisk
+    // annotateRisk is monotonic and cannot be downgraded, so cross-case cleanup
+    // must use resetToolRisk
     for (const name of ["tmp_tool_a", "tmp_tool_b"]) resetToolRisk(name);
   });
 
-  it("riskOf 未知工具默认返回 exec（fail-closed，H-T1 修复前默认 read 会免审放行）", () => {
+  it("riskOf returns exec by default for unknown tools (fail-closed; before the H-T1 fix the default was read, which bypassed approval)", () => {
     expect(riskOf("does_not_exist_xyz")).toBe("exec");
   });
 
-  it("annotateRisk 能为任意工具名标注风险，riskOf 能读回", () => {
+  it("annotateRisk can annotate risk for any tool name and riskOf can read it back", () => {
     annotateRisk("tmp_tool_a", "exec");
     expect(riskOf("tmp_tool_a")).toBe("exec");
     annotateRisk("tmp_tool_a", "external");
@@ -38,8 +39,9 @@ describe("tools/registry — 风险注册表", () => {
     expect(isHighRisk("tmp_tool_b")).toBe(expected);
   });
 
-  // C-T4：MCP 工具被标 external 后，后续内建注解不得把它降级成 write/read
-  it("annotateRisk 单调不降级：external 不会被 write/read 覆盖", () => {
+  // C-T4: after an MCP tool is marked external, subsequent built-in annotations
+  // must not downgrade it to write/read
+  it("annotateRisk is monotonic without downgrade: external is not overwritten by write/read", () => {
     annotateRisk("tmp_tool_a", "external");
     annotateRisk("tmp_tool_a", "write");
     expect(riskOf("tmp_tool_a")).toBe("external");
@@ -47,27 +49,28 @@ describe("tools/registry — 风险注册表", () => {
     expect(riskOf("tmp_tool_a")).toBe("external");
   });
 
-  it("annotateRisk 可升级：read → exec 生效", () => {
+  it("annotateRisk can upgrade: read -> exec takes effect", () => {
     annotateRisk("tmp_tool_a", "read");
     annotateRisk("tmp_tool_a", "exec");
     expect(riskOf("tmp_tool_a")).toBe("exec");
   });
 
-  it("resetToolRisk 清除后回落到 fail-closed 默认值 exec", () => {
+  it("after resetToolRisk clears the annotation it falls back to the fail-closed default exec", () => {
     annotateRisk("tmp_tool_a", "read");
     resetToolRisk("tmp_tool_a");
     expect(riskOf("tmp_tool_a")).toBe("exec");
   });
 
-  // C-T4：MCP 服务器不得注册与内建同名的工具（劫持 + 降级风险）
-  it("isReservedToolName 覆盖内建 / 系统 / defineTool 注册的名字", () => {
+  // C-T4: an MCP server must not register a tool with the same name as a
+  // built-in tool (hijacking + downgrade risk)
+  it("isReservedToolName covers names registered by built-in / system / defineTool", () => {
     expect(isReservedToolName("execute")).toBe(true);
     expect(isReservedToolName("write_file")).toBe(true);
     expect(isReservedToolName("ask_user")).toBe(true);
     expect(isReservedToolName("some_mcp_tool")).toBe(false);
   });
 
-  it("isSystemTool: 系统工具白名单命中", () => {
+  it("isSystemTool: matches the system-tool whitelist", () => {
     expect(isSystemTool("ask_user")).toBe(true);
     expect(isSystemTool("write_todos")).toBe(true);
     expect(isSystemTool("read_file")).toBe(true);
@@ -77,13 +80,13 @@ describe("tools/registry — 风险注册表", () => {
     expect(isSystemTool("task")).toBe(true);
   });
 
-  it("isSystemTool: 非白名单工具返回 false", () => {
+  it("isSystemTool: returns false for non-whitelisted tools", () => {
     expect(isSystemTool("execute")).toBe(false);
     expect(isSystemTool("write_file")).toBe(false);
     expect(isSystemTool("random_tool")).toBe(false);
   });
 
-  it("defineTool 返回带 risk 元数据的包装对象，并登记到注册表", () => {
+  it("defineTool returns a wrapped object with risk metadata and registers it", () => {
     const wrapped = defineTool(
       "write" as RiskLevel,
       () => "ok",

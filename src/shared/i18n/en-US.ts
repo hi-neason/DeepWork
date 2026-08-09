@@ -1,4 +1,5 @@
-// English UI strings.
+// English UI strings — canonical/source locale. Add or change keys here first,
+// then mirror them in zh-CN.ts so the two files stay in sync.
 const enUS = {
   common: {
     save: "Save",

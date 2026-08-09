@@ -245,7 +245,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- mcp ----
   // Per-server connection status from the last agent build, so the Connectors
-  // UI can surface connection failures instead of failing silently (M-存储⑤).
+  // UI can surface connection failures instead of failing silently (M-storage⑤).
   handle("mcp:status", () => agentManager.getMcpStatus());
 
   // ---- settings / keys ----

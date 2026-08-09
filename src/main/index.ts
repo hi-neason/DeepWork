@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { registerIpc } from "./ipc/register";
 import { terminalManager } from "./terminal/manager";
 import { getDb, closeDb } from "./storage/db";
-import { migrateLegacyAutomations } from "./storage/automations";
 import { agentManager } from "./agent/manager";
 import { loadClaudeCodeEnv } from "./config/ccEnv";
 import { loadSettings } from "./storage/settings";
@@ -152,7 +151,6 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   ensureDirs(); // create ~/DeepWork/{app,skills,workspace}
   getDb(); // initialize DB / migrations
-  migrateLegacyAutomations(); // migrate old schedule/run_at columns
   // Sync the runtime logger config from saved settings.
   const bootSettings = loadSettings();
   configureLogger({
@@ -164,6 +162,9 @@ app.whenReady().then(async () => {
   installHttpLogging();
   logger.info("app", "ready", { version: app.getVersion() });
   await i18nReady;
+  // Apply the user's saved interface language to the main process (tray menu,
+  // error messages). The renderer keeps its own instance and syncs separately.
+  if (bootSettings.language) void i18n.changeLanguage(bootSettings.language);
   registerIpc(() => win);
   createWindow();
   createTray();

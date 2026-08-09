@@ -74,7 +74,7 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
   // Per-server connection outcomes from the last agent build. Loaded on mount
   // and refreshed whenever the server list changes (the agent rebuilds on
   // settings save), so connection failures are visible instead of silent
-  // (M-存储⑤).
+  // (M-storage⑤).
   const [statuses, setStatuses] = useState<Record<string, McpServerStatus>>({});
   const reloadStatus = (): void => {
     void window.deepwork.mcp

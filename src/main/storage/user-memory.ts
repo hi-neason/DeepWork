@@ -1,30 +1,27 @@
 import fs from "node:fs";
 import path from "node:path";
-import { APP_DATA_DIR, USER_MEMORY_DIR } from "../config/paths";
+import { USER_MEMORY_DIR } from "../config/paths";
 import { atomicWriteFileSync } from "./atomic";
 
 /** The four fixed sections of the user's global memory MD file. */
 export const MEMORY_SECTIONS = [
-  "personal",    // 个人背景
-  "workstyle",   // 工作思路
-  "focus",       // 近期关注
-  "recent",      // 近期动态
+  "personal", // personal background
+  "workstyle", // work style / approach
+  "focus", // current focus
+  "recent", // recent updates
 ] as const;
 
 export type MemorySectionId = (typeof MEMORY_SECTIONS)[number];
 
-/** Default section headings (zh-CN). Used only for initial template creation. */
+/** Canonical (English) section headings used in the user memory MD file. */
 const DEFAULT_HEADINGS: Record<MemorySectionId, string> = {
-  personal: "个人背景",
-  workstyle: "工作思路",
-  focus: "近期关注",
-  recent: "近期动态",
+  personal: "Personal background",
+  workstyle: "Work style",
+  focus: "Current focus",
+  recent: "Recent updates",
 };
 
 export const MEMORY_FILE = path.join(USER_MEMORY_DIR, "user_memory.md");
-
-/** Legacy location before the ~/DeepWork/memory unification. */
-const LEGACY_MEMORY_FILE = path.join(APP_DATA_DIR, "memory.md");
 
 /**
  * Parse the memory.md file into a map of section-id → markdown body string.
@@ -52,10 +49,11 @@ export function parseMemorySections(markdown: string): Map<MemorySectionId, stri
     if (m) {
       flush();
       const heading = m[1].trim();
-      // Match heading to section id by checking if any default heading is contained
-      currentSection = MEMORY_SECTIONS.find((s) =>
-        heading.includes(DEFAULT_HEADINGS[s]) || DEFAULT_HEADINGS[s].includes(heading),
-      ) ?? currentSection; // unknown heading → keep in current section
+      // Match the heading to a section id by its canonical English heading.
+      currentSection = MEMORY_SECTIONS.find((s) => {
+        const c = DEFAULT_HEADINGS[s];
+        return heading.includes(c) || c.includes(heading);
+      }) ?? currentSection; // unknown heading → keep in current section
       continue;
     }
     if (currentSection != null) {
@@ -79,18 +77,8 @@ export function serializeMemorySections(sections: Map<MemorySectionId, string>):
 
 // ---- File I/O -------------------------------------------------------------
 
-/** Ensure memory.md exists with the default template. Idempotent. */
+/** Ensure the user memory file exists with the default template. Idempotent. */
 export function ensureMemoryFile(): void {
-  // One-time migration: copy the legacy app/memory.md into the unified
-  // ~/DeepWork/memory/user/user_memory.md location if the new file is absent.
-  if (!fs.existsSync(MEMORY_FILE) && fs.existsSync(LEGACY_MEMORY_FILE)) {
-    try {
-      fs.mkdirSync(USER_MEMORY_DIR, { recursive: true });
-      fs.copyFileSync(LEGACY_MEMORY_FILE, MEMORY_FILE);
-    } catch {
-      // best-effort
-    }
-  }
   if (fs.existsSync(MEMORY_FILE)) return;
   const empty = serializeMemorySections(new Map());
   fs.mkdirSync(USER_MEMORY_DIR, { recursive: true });
@@ -115,10 +103,15 @@ export function saveUserMemory(sections: Map<MemorySectionId, string>): void {
   atomicWriteFileSync(MEMORY_FILE, serialized);
 }
 
-/** Append a timestamped entry to the "recent" (近期动态) section. */
+/** Append a timestamped entry to the "Recent updates" section. */
 export function appendToRecent(content: string, source?: string): void {
   const sections = readUserMemory();
-  const ts = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+  // Locale-neutral timestamp (YYYY-MM-DD HH:MM:SS in Asia/Shanghai) so the
+  // memory file format doesn't depend on the machine's locale.
+  const ts = new Date().toLocaleString("en-CA", {
+    timeZone: "Asia/Shanghai",
+    hour12: false,
+  });
   const tag = source ? ` — *${source}*` : "";
   const entry = `- **${ts}**${tag}\n  ${content}`;
   const existing = sections.get("recent")?.trim() ?? "";

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// embedText 在 provider==="none" 时短路返回 null，且不触碰网络。
-// 其余路径会 fetch embedding 后端；本测试用 stubGlobal 伪造 fetch。
-describe("agent/embedding — embedText", () => {
+// embedText short-circuits and returns null when provider==="none", without
+// touching the network. Other paths fetch the embedding backend; this test
+// fakes fetch with stubGlobal.
+describe("agent/embedding - embedText", () => {
   const realFetch = globalThis.fetch;
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
@@ -12,14 +13,14 @@ describe("agent/embedding — embedText", () => {
     vi.restoreAllMocks();
   });
 
-  it("provider==='none' 时直接返回 null，且不发起任何网络请求", async () => {
+  it("returns null directly and makes no network request when provider==='none'", async () => {
     const { embedText } = await import("./embedding");
     const out = await embedText("hello", { provider: "none" } as any);
     expect(out).toBeNull();
     expect((globalThis.fetch as any).mock.calls.length).toBe(0);
   });
 
-  it("ollama 后端正常返回向量", async () => {
+  it("the ollama backend returns a vector normally", async () => {
     const { embedText } = await import("./embedding");
     (globalThis.fetch as any).mockResolvedValue({
       ok: true,
@@ -33,7 +34,7 @@ describe("agent/embedding — embedText", () => {
     expect(vec).toEqual([0.1, 0.2, 0.3]);
   });
 
-  it("ollama 后端异常时返回 null 且不抛错（带 5 分钟冷却）", async () => {
+  it("returns null without throwing when the ollama backend errors (with a 5-minute cooldown)", async () => {
     const { embedText } = await import("./embedding");
     (globalThis.fetch as any).mockRejectedValue(new Error("ECONNREFUSED"));
     let threw = false;

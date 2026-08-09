@@ -5,17 +5,19 @@ import React from "react";
 import { Chat, buildSegments } from "./Chat";
 import type { ChatState } from "../App";
 
-// 渲染层不依赖真实 i18n：t() 直接返回 key，便于断言组件逻辑。
-// Trans 渲染 i18nKey 文本并把 values 注入 components 占位；最小桩直接输出
-// i18nKey + values，使断言能命中工具名且不产生 [object Object]。
+// The render layer does not depend on real i18n: t() returns the key directly,
+// making component logic easy to assert. Trans renders the i18nKey text and
+// injects values into component slots; the minimal stub outputs i18nKey +
+// values so assertions can match the tool name without [object Object].
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: {} }),
   initReactI18next: { type: "3rdParty", init: () => {} },
   Trans: ({ i18nKey, values }: any) =>
     React.createElement("span", null, `${i18nKey} ${values?.name ?? ""}`),
 }));
-// 让 renderer/src/i18n.ts 的 `i18n.use(initReactI18next).init(...)` 在测试里变成 no-op。
-// prettyToolName 会调用 i18n.exists/t，这里给出最小桩：t 返回 key 本身，exists 恒 false。
+// Make renderer/src/i18n.ts's `i18n.use(initReactI18next).init(...)` a no-op in tests.
+// prettyToolName calls i18n.exists/t; provide a minimal stub: t returns the key
+// itself, exists always returns false.
 vi.mock("i18next", () => ({
   default: {
     use: () => ({ init: () => {} }),
@@ -55,7 +57,7 @@ function makeProps(overrides: Record<string, any> = {}) {
 }
 
 beforeEach(() => {
-  // jsdom 未实现 scrollTo
+  // jsdom does not implement scrollTo
   Element.prototype.scrollTo = vi.fn();
   (window as any).deepwork = {
     skills: { list: vi.fn(() => Promise.resolve([])) },
@@ -72,14 +74,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("Chat 组件（渲染层）", () => {
-  it("能挂载并渲染 composer 输入框（smoke）", () => {
+describe("Chat component (render layer)", () => {
+  it("mounts and renders the composer textarea (smoke)", () => {
     const { container } = render(<Chat {...makeProps()} />);
     const ta = container.querySelector("textarea");
     expect(ta).toBeTruthy();
   });
 
-  it("输入文字并点击发送会调用 onSend，且透传文本/模型/默认 mode", () => {
+  it("typing text and clicking send calls onSend, passing through text/model/default mode", () => {
     const onSend = vi.fn();
     const { container } = render(<Chat {...makeProps({ onSend })} />);
     const ta = container.querySelector("textarea")!;
@@ -90,12 +92,12 @@ describe("Chat 组件（渲染层）", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     const args = onSend.mock.calls[0];
-    expect(args[0]).toBe("hello world"); // 文本
-    expect(args[3]).toBe("m1"); // activeModel 取自 enabledModels[0]
-    expect(args[4]).toBeUndefined(); // 未选 per-send mode → 透传 undefined
+    expect(args[0]).toBe("hello world"); // text
+    expect(args[3]).toBe("m1"); // activeModel comes from enabledModels[0]
+    expect(args[4]).toBeUndefined(); // no per-send mode selected → passes through undefined
   });
 
-  it("默认情况下 per-send mode 为 undefined（mode 透传基线）", () => {
+  it("per-send mode defaults to undefined (mode passthrough baseline)", () => {
     const onSend = vi.fn();
     const { container } = render(<Chat {...makeProps({ onSend })} />);
     const ta = container.querySelector("textarea")!;
@@ -104,8 +106,8 @@ describe("Chat 组件（渲染层）", () => {
     expect(onSend.mock.calls[0][4]).toBeUndefined();
   });
 
-  // C2 修复：用 <Trans> 渲染，工具名以纯文本出现，不再 [object Object]。
-  it("chat.needApproval 渲染出工具名而非 [object Object]", () => {
+  // C2 fix: render with <Trans> so the tool name appears as plain text instead of [object Object].
+  it("chat.needApproval renders the tool name instead of [object Object]", () => {
     const props = makeProps({
       approval: {
         id: "a1",
@@ -116,15 +118,16 @@ describe("Chat 组件（渲染层）", () => {
     });
     render(<Chat {...props} />);
     expect(screen.queryByText(/\[object Object\]/)).toBeNull();
-    // 工具名（execute 的本地化展示）应出现在授权横幅里
+    // The tool name (execute's localized display) should appear in the approval banner
     expect(document.querySelector(".approval-banner-title")?.textContent).toMatch(
       /execute|执行/,
     );
   });
 
-  // M-渲染③：Segment 必须带稳定 id，使流式重建时 ActivityGroup 复用同一节点，
-  // 折叠态不会因数组下标错位而丢失。
-  it("每个 segment 都有稳定 id，且追加 thinking 不改变既有 segment 的 id", () => {
+  // M-render③: every segment must carry a stable id so that on streaming rebuild
+  // ActivityGroup reuses the same node and the collapsed state is not lost due to
+  // array-index shifting.
+  it("every segment has a stable id, and appending thinking does not change existing segment ids", () => {
     const base: ChatState = {
       timeline: [
         { kind: "msg", role: "user", content: "hi" },
@@ -137,7 +140,7 @@ describe("Chat 组件（渲染层）", () => {
     const first = buildSegments(base);
     expect(first.every((s) => typeof s.id === "string" && s.id.length > 0)).toBe(true);
 
-    // 同一个 reasoning 块追加新文本（流式 delta 的典型场景）
+    // Append new text to the same reasoning block (a typical streaming-delta scenario)
     const grown: ChatState = {
       ...base,
       timeline: [
@@ -146,23 +149,25 @@ describe("Chat 组件（渲染层）", () => {
       ],
     };
     const second = buildSegments(grown);
-    // 段数不变，且每个位置的 id 保持一致（不会因为重排而错位）
+    // Segment count stays the same and each position's id is consistent
+    // (no shift due to reordering)
     expect(second.length).toBe(first.length);
     second.forEach((s, i) => {
       expect(s.id).toBe(first[i].id);
     });
   });
 
-  // H：onSend 抛错（同步 throw 或 rejected promise）时，submit 必须吞掉 rejection，
-  // 不能冒出 unhandled rejection；真正的 streaming/error 复位由父组件（App）的
-  // set_error 与 useTurnWatchdog 看门狗负责。
-  it("onSend 抛错时 submit 不产生 unhandled rejection（H 提交兜底）", async () => {
+  // H: when onSend throws (synchronous throw or rejected promise), submit must
+  // swallow the rejection so no unhandled rejection bubbles up; the actual
+  // streaming/error reset is handled by the parent component's (App) set_error
+  // and the useTurnWatchdog watchdog.
+  it("submit does not produce an unhandled rejection when onSend throws (H submit safety net)", async () => {
     const onSend = vi.fn(() => Promise.reject(new Error("boom")));
     const { container } = render(<Chat {...makeProps({ onSend })} />);
     const ta = container.querySelector("textarea")!;
     fireEvent.change(ta, { target: { value: "hi" } });
 
-    // 捕获未处理的 Promise rejection
+    // Capture unhandled Promise rejections
     const unhandled: unknown[] = [];
     const onUnhandled = (e: PromiseRejectionEvent): void => {
       unhandled.push(e.reason);
@@ -170,7 +175,7 @@ describe("Chat 组件（渲染层）", () => {
     window.addEventListener("unhandledrejection", onUnhandled);
 
     fireEvent.click(screen.getByRole("button", { name: "chat.send" }));
-    // 等 rejected promise 穿透 microtask 队列
+    // Let the rejected promise propagate through the microtask queue
     await Promise.resolve();
     await Promise.resolve();
 

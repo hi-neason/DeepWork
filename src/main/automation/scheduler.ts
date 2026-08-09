@@ -119,7 +119,7 @@ export function shouldFire(a: Automation, now: Date): boolean {
   const type = a.scheduleType || "daily";
   const tz = tzOf(a);
   if (type === "once") {
-    const dt = cfg.datetime || a.runAt;
+    const dt = cfg.datetime;
     return !!dt && new Date(dt).getTime() <= now.getTime();
   }
   if (type === "daily") {
@@ -137,7 +137,7 @@ export function shouldFire(a: Automation, now: Date): boolean {
     return w.hour === t.hour && w.minute === t.minute;
   }
   if (type === "cron") {
-    const expr = cfg.cron || a.schedule;
+    const expr = cfg.cron;
     return !!expr && cronMatches(expr, now, tz);
   }
   return false;
@@ -164,7 +164,7 @@ export function dueInstant(
   const type = a.scheduleType || "daily";
   const tz = tzOf(a);
   if (type === "once") {
-    const dt = cfg.datetime || a.runAt;
+    const dt = cfg.datetime;
     if (!dt) return null;
     const t = new Date(dt).getTime();
     // One-shots are never dropped: they fire whenever we first see them due.
@@ -184,7 +184,7 @@ export function dueInstant(
     return delta >= 0 && delta <= graceMs ? sched : null;
   }
   if (type === "cron") {
-    const expr = cfg.cron || a.schedule;
+    const expr = cfg.cron;
     if (!expr) return null;
     // Walk back minute by minute within the grace window, testing each instant
     // against the cron in the automation's timezone.
@@ -200,23 +200,26 @@ export function dueInstant(
   return null;
 }
 
+const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 function describeSchedule(a: Automation): string {
   const cfg = a.scheduleConfig || {};
   switch (a.scheduleType) {
     case "daily":
-      return cfg.time ? `每天 ${cfg.time}` : "每天";
+      return cfg.time ? `Daily ${cfg.time}` : "Daily";
     case "weekly": {
       const days = cfg.days ?? [];
-      const names = ["日", "一", "二", "三", "四", "五", "六"];
-      const dayStr = days.length ? days.map((d) => `周${names[d]}`).join(",") : "每周";
+      const dayStr = days.length
+        ? days.map((d) => WEEKDAY_NAMES[d]).join(",")
+        : "Weekly";
       return cfg.time ? `${dayStr} ${cfg.time}` : dayStr;
     }
     case "cron":
-      return cfg.cron || a.schedule || "自定义周期";
+      return cfg.cron || "custom schedule";
     case "once":
-      return cfg.datetime || a.runAt || "一次性";
+      return cfg.datetime || "one-shot";
     default:
-      return a.schedule || "未知";
+      return "unknown";
   }
 }
 
@@ -254,7 +257,7 @@ export class AutomationScheduler extends EventEmitter {
   start(): void {
     if (this.timer) return;
     // Catch up any one-shots that came due while the app was closed. This goes
-    // through the same running/dedup gate as a normal tick (M-存储②).
+    // through the same running/dedup gate as a normal tick (M-storage②).
     void this.catchUpOnce();
     this.timer = setInterval(() => void this.tick(), 30_000);
     logger.info("automation", "scheduler started", { intervalMs: 30_000 });
@@ -273,11 +276,11 @@ export class AutomationScheduler extends EventEmitter {
     const tz = tzOf(a);
     switch (a.scheduleType) {
       case "once": {
-        const dt = cfg.datetime || a.runAt;
+        const dt = cfg.datetime;
         return dt ? new Date(dt) : null;
       }
       case "cron": {
-        const expr = cfg.cron || a.schedule;
+        const expr = cfg.cron;
         return expr ? nextCronFire(expr, now, tz) : null;
       }
       case "daily":
@@ -311,7 +314,7 @@ export class AutomationScheduler extends EventEmitter {
     const due = listDueAutomations(Date.now());
     // Process missed one-shots sequentially: if the app was closed for a long
     // stretch many could be due at once, and launching them all concurrently
-    // would stampede sessions/models (M-存储②). Each is still fire-and-forget
+    // would stampede sessions/models (M-storage②). Each is still fire-and-forget
     // relative to the scheduler loop but bounded to one-at-a-time here.
     for (const a of due) {
       if (this.running.has(a.id)) continue;
@@ -362,7 +365,7 @@ export class AutomationScheduler extends EventEmitter {
         if (due === null) continue;
         // Seed the in-memory dedupe from the persisted slot so a restart
         // inside the grace window doesn't re-fire the same recurring slot
-        // (M-存储②).
+        // (M-storage②).
         if (!this.lastFire.has(a.id)) {
           const persisted = getLastFiredSlot(a.id);
           if (persisted != null) this.lastFire.set(a.id, persisted);

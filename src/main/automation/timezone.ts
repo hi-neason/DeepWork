@@ -3,7 +3,7 @@
  *
  * Daily/weekly/cron schedules describe a *wall clock* ("every day at 09:00")
  * that must stay anchored to the timezone the automation was created in, even
- * if the machine travels or its system timezone changes (M-存储①). When no
+ * if the machine travels or its system timezone changes (M-storage①). When no
  * explicit IANA timezone is stored we fall back to the system local time, which
  * preserves the behaviour of automations created before this field existed.
  */

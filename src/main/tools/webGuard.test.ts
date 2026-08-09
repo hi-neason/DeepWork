@@ -10,131 +10,132 @@ import {
 } from "./webGuard";
 
 /**
- * webGuard 单元测试。
+ * webGuard unit tests.
  *
- * 设计原则：用例编码"应当正确的行为"。其中被当前实现遗漏的 SSRF 缺口，
- * 写成 `it.todo(...)`（运行时不红，呈 pending），作为重构修掉 C-A2 后的
- * 回归项——届时把这些 todo 改成 `it` 即可转绿。
+ * Design principle: the cases encode "the correct behavior". SSRF gaps that are
+ * missed by the current implementation are written as `it.todo(...)` (not red at
+ * runtime, shown as pending) to serve as regression items once C-A2 is fixed in
+ * a refactor — at that point turning these todos into `it` will make them green.
  */
 
-describe("isPublicHost - IPv4 私网/保留地址拦截", () => {
-  it("拦截 loopback 127.0.0.0/8", () => {
+describe("isPublicHost - IPv4 private/reserved address blocking", () => {
+  it("blocks loopback 127.0.0.0/8", () => {
     expect(isPublicHost("127.0.0.1")).toBe(false);
     expect(isPublicHost("127.255.255.254")).toBe(false);
   });
 
-  it("拦截私有网段 10.0.0.0/8", () => {
+  it("blocks private range 10.0.0.0/8", () => {
     expect(isPublicHost("10.0.0.1")).toBe(false);
     expect(isPublicHost("10.255.255.255")).toBe(false);
   });
 
-  it("拦截 0.0.0.0/8", () => {
+  it("blocks 0.0.0.0/8", () => {
     expect(isPublicHost("0.0.0.0")).toBe(false);
     expect(isPublicHost("0.255.255.255")).toBe(false);
   });
 
-  it("拦截链路本地 / 云元数据 169.254.0.0/16", () => {
+  it("blocks link-local / cloud metadata 169.254.0.0/16", () => {
     expect(isPublicHost("169.254.169.254")).toBe(false);
     expect(isPublicHost("169.254.0.1")).toBe(false);
   });
 
-  it("拦截私有网段 172.16.0.0/12", () => {
+  it("blocks private range 172.16.0.0/12", () => {
     expect(isPublicHost("172.16.0.1")).toBe(false);
     expect(isPublicHost("172.31.255.255")).toBe(false);
-    // 172.32 不在范围内，应放行
+    // 172.32 is not in range and should be allowed
     expect(isPublicHost("172.32.0.1")).toBe(true);
   });
 
-  it("拦截私有网段 192.168.0.0/16", () => {
+  it("blocks private range 192.168.0.0/16", () => {
     expect(isPublicHost("192.168.1.1")).toBe(false);
     expect(isPublicHost("192.168.255.254")).toBe(false);
   });
 
-  it("拦截组播 / 保留 224.0.0.0/3", () => {
+  it("blocks multicast / reserved 224.0.0.0/3", () => {
     expect(isPublicHost("224.0.0.1")).toBe(false);
     expect(isPublicHost("255.255.255.255")).toBe(false);
   });
 
-  it("拦截 CGNAT 100.64.0.0/10", () => {
+  it("blocks CGNAT 100.64.0.0/10", () => {
     expect(isPublicHost("100.64.0.0")).toBe(false);
     expect(isPublicHost("100.127.255.255")).toBe(false);
     expect(isPublicHost("100.128.0.0")).toBe(true);
   });
 
-  it("放行公网 IPv4", () => {
+  it("allows public IPv4", () => {
     expect(isPublicHost("8.8.8.8")).toBe(true);
     expect(isPublicHost("1.1.1.1")).toBe(true);
     expect(isPublicHost("203.0.113.5")).toBe(true);
   });
 });
 
-describe("isPublicHost - IPv6 拦截", () => {
-  it("拦截 loopback ::1 与未指定 ::", () => {
+describe("isPublicHost - IPv6 blocking", () => {
+  it("blocks loopback ::1 and unspecified ::", () => {
     expect(isPublicHost("::1")).toBe(false);
     expect(isPublicHost("::")).toBe(false);
   });
 
-  it("拦截链路本地 fe80::/10", () => {
+  it("blocks link-local fe80::/10", () => {
     expect(isPublicHost("fe80::1")).toBe(false);
     expect(isPublicHost("febf:ffff::1")).toBe(false);
   });
 
-  it("拦截唯一本地 fc00::/7", () => {
+  it("blocks unique-local fc00::/7", () => {
     expect(isPublicHost("fc00::1")).toBe(false);
     expect(isPublicHost("fd12:3456::1")).toBe(false);
   });
 
-  it("放行公网 IPv6", () => {
+  it("allows public IPv6", () => {
     expect(isPublicHost("2001:db8::1")).toBe(true);
     expect(isPublicHost("2606:4700:4700::1111")).toBe(true);
   });
 });
 
-describe("isPublicHost - 主机名 / 特殊 TLD", () => {
-  it("拦截 localhost 及其子域", () => {
+describe("isPublicHost - hostnames / special TLDs", () => {
+  it("blocks localhost and its subdomains", () => {
     expect(isPublicHost("localhost")).toBe(false);
     expect(isPublicHost("api.localhost")).toBe(false);
   });
 
-  it("拦截 .internal / .local TLD", () => {
+  it("blocks .internal / .local TLDs", () => {
     expect(isPublicHost("db.internal")).toBe(false);
     expect(isPublicHost("printer.local")).toBe(false);
   });
 
-  it("放行普通公网域名", () => {
+  it("allows ordinary public domains", () => {
     expect(isPublicHost("example.com")).toBe(true);
     expect(isPublicHost("api.deepwork.app")).toBe(true);
   });
 });
 
 describe("assertPublicUrl", () => {
-  it("放行合法公网 http/https", () => {
+  it("allows valid public http/https", () => {
     expect(assertPublicUrl("https://example.com/path").hostname).toBe("example.com");
     expect(assertPublicUrl("http://1.1.1.1/").hostname).toBe("1.1.1.1");
   });
 
-  it("拒绝非 http/https 协议", () => {
+  it("rejects non-http/https protocols", () => {
     expect(() => assertPublicUrl("ftp://example.com")).toThrow();
     expect(() => assertPublicUrl("file:///etc/passwd")).toThrow();
   });
 
-  it("拒绝非法 URL", () => {
+  it("rejects invalid URLs", () => {
     expect(() => assertPublicUrl("not a url")).toThrow();
   });
 
-  it("拒绝私网主机", () => {
+  it("rejects private hosts", () => {
     expect(() => assertPublicUrl("http://169.254.169.254/latest/meta-data/")).toThrow();
     expect(() => assertPublicUrl("http://localhost:8080/")).toThrow();
   });
 });
 
 describe("htmlToText", () => {
-  it("剥离 script / style / noscript", () => {
+  it("strips script / style / noscript", () => {
     const html = "<p>hi</p><script>alert(1)</script><style>.a{color:red}</style>";
     expect(htmlToText(html)).toBe("hi");
   });
 
-  it("将块级标签与 <br> 转为换行", () => {
+  it("converts block-level tags and <br> to newlines", () => {
     const html = "a<br>b<div>c</div><p>d</p>";
     const out = htmlToText(html);
     expect(out).toContain("a");
@@ -143,34 +144,34 @@ describe("htmlToText", () => {
     expect(out).toContain("d");
   });
 
-  it("解码常见 HTML 实体", () => {
+  it("decodes common HTML entities", () => {
     expect(htmlToText("a&amp;b&lt;c&gt;d&quot;e&quot;")).toBe('a&b<c>d"e"');
     expect(htmlToText("&#65;&#66;")).toBe("AB");
   });
 });
 
-// ---- C-T1 / C-T2 修复后的 SSRF 回归 ----
-describe("isPublicHost - IP 编码变体（C-T1）", () => {
-  it("拦截 IPv4-mapped / IPv4-compatible IPv6", () => {
+// ---- Post-fix SSRF regression for C-T1 / C-T2 ----
+describe("isPublicHost - IP encoding variants (C-T1)", () => {
+  it("blocks IPv4-mapped / IPv4-compatible IPv6", () => {
     expect(isPublicHost("::ffff:127.0.0.1")).toBe(false);
     expect(isPublicHost("[::ffff:127.0.0.1]")).toBe(false);
     expect(isPublicHost("::ffff:169.254.169.254")).toBe(false);
-    // 十六进制写法的同一地址
+    // The same address in hexadecimal notation
     expect(isPublicHost("::ffff:7f00:1")).toBe(false);
-    // mapped 的公网地址仍放行
+    // A mapped public address is still allowed
     expect(isPublicHost("::ffff:8.8.8.8")).toBe(true);
   });
 
-  it("拦截十进制 / 十六进制 / 八进制编码的 IPv4", () => {
+  it("blocks IPv4 encoded in decimal / hexadecimal / octal", () => {
     expect(isPublicHost("2130706433")).toBe(false); // 127.0.0.1
     expect(isPublicHost("0x7f000001")).toBe(false);
     expect(isPublicHost("0177.0.0.1")).toBe(false);
-    expect(isPublicHost("127.1")).toBe(false); // 短写法
+    expect(isPublicHost("127.1")).toBe(false); // short notation
     expect(isPublicHost("2852039166")).toBe(false); // 169.254.169.254
     expect(assertPublicUrl.bind(null, "http://2130706433/")).toThrow();
   });
 
-  it("normalizeIPv4 归一化各种写法", () => {
+  it("normalizeIPv4 normalizes various notations", () => {
     expect(normalizeIPv4("2130706433")).toBe("127.0.0.1");
     expect(normalizeIPv4("0x7f000001")).toBe("127.0.0.1");
     expect(normalizeIPv4("127.1")).toBe("127.0.0.1");
@@ -179,16 +180,16 @@ describe("isPublicHost - IP 编码变体（C-T1）", () => {
     expect(normalizeIPv4("999.1.1.1")).toBeNull();
   });
 
-  it("拦截其它内网 TLD", () => {
+  it("blocks other intranet TLDs", () => {
     expect(isPublicHost("box.home.arpa")).toBe(false);
     expect(isPublicHost("nas.localdomain")).toBe(false);
   });
 });
 
-describe("assertPublicUrlResolved - DNS 解析后重判（C-T1）", () => {
+describe("assertPublicUrlResolved - re-check after DNS resolution (C-T1)", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("域名解析到私网地址时拒绝（如 nip.io 类回环域名）", async () => {
+  it("rejects when the domain resolves to a private address (e.g. nip.io-style loopback domains)", async () => {
     vi.spyOn(dns, "lookup").mockResolvedValue([
       { address: "169.254.169.254", family: 4 },
     ] as never);
@@ -197,7 +198,7 @@ describe("assertPublicUrlResolved - DNS 解析后重判（C-T1）", () => {
     ).rejects.toThrow(/non-public/);
   });
 
-  it("多条 A 记录中只要有一条私网就整体拒绝", async () => {
+  it("rejects the whole set when any one of multiple A records is private", async () => {
     vi.spyOn(dns, "lookup").mockResolvedValue([
       { address: "93.184.216.34", family: 4 },
       { address: "10.0.0.5", family: 4 },
@@ -207,7 +208,7 @@ describe("assertPublicUrlResolved - DNS 解析后重判（C-T1）", () => {
     );
   });
 
-  it("解析到 IPv4-mapped IPv6 私网也拒绝", async () => {
+  it("also rejects when resolution yields an IPv4-mapped IPv6 private address", async () => {
     vi.spyOn(dns, "lookup").mockResolvedValue([
       { address: "::ffff:127.0.0.1", family: 6 },
     ] as never);
@@ -216,7 +217,7 @@ describe("assertPublicUrlResolved - DNS 解析后重判（C-T1）", () => {
     );
   });
 
-  it("全部解析为公网地址时放行", async () => {
+  it("allows when all resolutions are public addresses", async () => {
     vi.spyOn(dns, "lookup").mockResolvedValue([
       { address: "93.184.216.34", family: 4 },
     ] as never);
@@ -224,7 +225,7 @@ describe("assertPublicUrlResolved - DNS 解析后重判（C-T1）", () => {
     expect(u.hostname).toBe("example.com");
   });
 
-  it("解析失败 / 无地址时拒绝（fail-closed）", async () => {
+  it("rejects on resolution failure / no addresses (fail-closed)", async () => {
     vi.spyOn(dns, "lookup").mockRejectedValue(new Error("ENOTFOUND"));
     await expect(assertPublicUrlResolved("https://nope.example/")).rejects.toThrow(
       /cannot resolve/,
@@ -235,36 +236,36 @@ describe("assertPublicUrlResolved - DNS 解析后重判（C-T1）", () => {
     );
   });
 
-  it("IP 字面量直连不触发 DNS 查询", async () => {
+  it("a direct IP literal does not trigger a DNS lookup", async () => {
     const spy = vi.spyOn(dns, "lookup");
     const u = await assertPublicUrlResolved("http://1.1.1.1/");
     expect(u.hostname).toBe("1.1.1.1");
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("拒绝 URL 内嵌凭据（绕过审计的常见手法）", () => {
+  it("rejects credentials embedded in the URL (a common audit-bypass technique)", () => {
     expect(() => assertPublicUrl("http://user:pw@example.com/")).toThrow();
   });
 });
 
-describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 校验", () => {
+describe("assertConfiguredEndpoint - validation of user-configured model/embedding base URLs", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("放行 localhost / 127.0.0.1（本地 Ollama 合法用例）", async () => {
+  it("allows localhost / 127.0.0.1 (legitimate local Ollama use case)", async () => {
     const u = await assertConfiguredEndpoint("http://localhost:11434");
     expect(u.hostname).toBe("localhost");
     const u2 = await assertConfiguredEndpoint("http://127.0.0.1:11434");
     expect(u2.hostname).toBe("127.0.0.1");
   });
 
-  it("放行私网地址（自托管网关合法用例）", async () => {
+  it("allows private addresses (legitimate self-hosted gateway use case)", async () => {
     const u = await assertConfiguredEndpoint("http://192.168.1.10:8080");
     expect(u.hostname).toBe("192.168.1.10");
   });
 
-  it("放行公网 HTTPS 地址", async () => {
+  it("allows public HTTPS addresses", async () => {
     vi.spyOn(dns, "lookup").mockResolvedValue([
       { address: "93.184.216.34", family: 4 },
     ] as never);
@@ -272,19 +273,19 @@ describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 
     expect(u.hostname).toBe("api.example.com");
   });
 
-  it("拦截 169.254.169.254 云元数据地址（SSRF 目标）", async () => {
+  it("blocks the 169.254.169.254 cloud metadata address (an SSRF target)", async () => {
     await expect(
       assertConfiguredEndpoint("http://169.254.169.254/latest/meta-data/"),
     ).rejects.toThrow(/link-local|metadata/i);
   });
 
-  it("拦截 169.254 段内其他地址", async () => {
+  it("blocks other addresses within the 169.254 range", async () => {
     await expect(
       assertConfiguredEndpoint("http://169.254.0.1/"),
     ).rejects.toThrow(/link-local|metadata/i);
   });
 
-  it("拦截解析到 link-local 的主机名（DNS rebinding 型 SSRF）", async () => {
+  it("blocks hostnames that resolve to link-local (DNS-rebinding-style SSRF)", async () => {
     vi.spyOn(dns, "lookup").mockResolvedValue([
       { address: "169.254.169.254", family: 4 },
     ] as never);
@@ -293,7 +294,7 @@ describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 
     ).rejects.toThrow(/link-local/i);
   });
 
-  it("拒绝非 http(s) 协议", async () => {
+  it("rejects non-http(s) protocols", async () => {
     await expect(assertConfiguredEndpoint("file:///etc/passwd")).rejects.toThrow(
       /http/,
     );
@@ -302,13 +303,13 @@ describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 
     ).rejects.toThrow(/http/);
   });
 
-  it("拒绝 URL 内嵌凭据", async () => {
+  it("rejects credentials embedded in the URL", async () => {
     await expect(
       assertConfiguredEndpoint("http://user:pass@localhost:11434/"),
     ).rejects.toThrow(/Credential/i);
   });
 
-  it("拦截 IPv4-mapped IPv6 写法的元数据地址（::ffff:169.254.169.254）", async () => {
+  it("blocks the metadata address written as IPv4-mapped IPv6 (::ffff:169.254.169.254)", async () => {
     await expect(
       assertConfiguredEndpoint("http://[::ffff:169.254.169.254]/"),
     ).rejects.toThrow(/link-local|metadata/i);
@@ -317,26 +318,26 @@ describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 
     ).rejects.toThrow(/link-local|metadata/i);
   });
 
-  it("拦截 AWS IMDSv2 over IPv6 ULA（fd00:ec2::254）", async () => {
+  it("blocks AWS IMDSv2 over IPv6 ULA (fd00:ec2::254)", async () => {
     await expect(
       assertConfiguredEndpoint("http://[fd00:ec2::254]/latest/meta-data/"),
     ).rejects.toThrow(/link-local|metadata/i);
   });
 
-  it("拦截知名云元数据主机名", async () => {
+  it("blocks well-known cloud metadata hostnames", async () => {
     await expect(
       assertConfiguredEndpoint("http://metadata.google.internal/computeMetadata/v1/"),
     ).rejects.toThrow(/metadata/i);
   });
 
-  it("DNS 解析失败时 fail-closed", async () => {
+  it("fails closed when DNS resolution fails", async () => {
     vi.spyOn(dns, "lookup").mockRejectedValue(new Error("ENOTFOUND"));
     await expect(
       assertConfiguredEndpoint("http://broken.example/v1"),
     ).rejects.toThrow(/cannot resolve/i);
   });
 
-  it("禁止对公网主机使用明文 http（防止 API key 泄露）", async () => {
+  it("forbids plaintext http for public hosts (prevents API key leakage)", async () => {
     vi.spyOn(dns, "lookup").mockResolvedValue([
       { address: "93.184.216.34", family: 4 },
     ] as never);
@@ -345,7 +346,7 @@ describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 
     ).rejects.toThrow(/HTTP is only allowed/i);
   });
 
-  it("允许对本地/私网主机使用明文 http（本地 Ollama 合法用例）", async () => {
+  it("allows plaintext http for local/private hosts (legitimate local Ollama use case)", async () => {
     const spy = vi.spyOn(dns, "lookup");
     const u = await assertConfiguredEndpoint("http://localhost:11434");
     expect(u.hostname).toBe("localhost");

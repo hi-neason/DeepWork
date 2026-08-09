@@ -29,11 +29,11 @@ function describeAutomation(a: Automation, t: (key: string, opts?: Record<string
       return t("automations.desc.weekly", { days: names || t("automations.noDays"), time: cfg.time || "--:--" });
     }
     case "cron":
-      return t("automations.desc.cron", { expr: cfg.cron || a.schedule || "-" });
+      return t("automations.desc.cron", { expr: cfg.cron || "-" });
     case "once":
-      return t("automations.desc.once", { datetime: cfg.datetime || a.runAt || "-" });
+      return t("automations.desc.once", { datetime: cfg.datetime || "-" });
     default:
-      return a.schedule || "-";
+      return "-";
   }
 }
 
@@ -91,12 +91,11 @@ function formFromAutomation(a: Automation): FormState {
   const cfg = a.scheduleConfig || {};
   let onceDate = formatDate();
   let onceTime = "09:00";
-  if (cfg.datetime || a.runAt) {
-    const d = new Date(cfg.datetime || a.runAt || Date.now());
+  if (cfg.datetime) {
+    const d = new Date(cfg.datetime);
     onceDate = formatDate(d);
     onceTime = formatTime(d);
   }
-  const legacySchedule = a.schedule && a.schedule !== "once" ? a.schedule : "";
   return {
     title: a.title,
     workspaceDir: a.workspaceDir || "",
@@ -104,7 +103,7 @@ function formFromAutomation(a: Automation): FormState {
     scheduleType: a.scheduleType || "daily",
     time: cfg.time || "09:00",
     days: cfg.days ?? [1, 2, 3, 4, 5],
-    cron: cfg.cron || legacySchedule || "0 9 * * *",
+    cron: cfg.cron || "0 9 * * *",
     onceDate,
     onceTime,
     validFrom: a.validFrom || "",
@@ -120,7 +119,7 @@ function formFromAutomation(a: Automation): FormState {
 function buildScheduleConfig(f: FormState): AutomationScheduleConfig {
   // Anchor recurring schedules to the timezone in which they were authored,
   // so "every day at 09:00" stays at 09:00 even if the machine travels
-  // (M-存储①). One-shots store an absolute UTC instant and need no anchor.
+  // (M-storage①). One-shots store an absolute UTC instant and need no anchor.
   const timezone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
   switch (f.scheduleType) {

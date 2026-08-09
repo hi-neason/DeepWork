@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { approvals } from "./approvals";
 
-describe("security/approvals — 审批门", () => {
-  // 单例跨测试会累积 pending，每个用例结束统一清理。
+describe("security/approvals - approval gate", () => {
+  // The singleton accumulates pending requests across tests; clean them up at
+  // the end of each case.
   afterEach(() => approvals.rejectAll());
 
-  it("requestWithId + respond: 按 id 唤醒对应 Promise，决策透传", async () => {
+  it("requestWithId + respond: resolves the matching Promise by id and passes the decision through", async () => {
     const p = approvals.requestWithId("t1", {
       tool: "write_file",
       risk: "write",
@@ -19,7 +20,7 @@ describe("security/approvals — 审批门", () => {
     await expect(p).resolves.toBe("allow");
   });
 
-  it("emit 'request' 事件携带审批载荷（供 IPC 转发到渲染层弹窗）", async () => {
+  it("emits a 'request' event carrying the approval payload (for IPC forwarding to the renderer dialog)", async () => {
     const onReq = vi.fn();
     approvals.on("request", onReq);
     approvals.requestWithId("t2", {
@@ -33,11 +34,11 @@ describe("security/approvals — 审批门", () => {
     approvals.off("request", onReq);
   });
 
-  it("respond 未知 id 时静默忽略，不抛错", () => {
+  it("respond silently ignores an unknown id without throwing", () => {
     expect(() => approvals.respond("nope", "allow")).not.toThrow();
   });
 
-  it("rejectAll(): 拒掉所有 pending（无会话参数 = 测试清理用）", async () => {
+  it("rejectAll(): rejects all pending requests (no session argument = used for test cleanup)", async () => {
     const pA = approvals.requestWithId("A", {
       tool: "write_file",
       risk: "write",
@@ -47,14 +48,14 @@ describe("security/approvals — 审批门", () => {
     await expect(pA).resolves.toBe("deny");
   });
 
-  // H-A2 修复：cancel 一个会话时，只应拒掉该会话的 pending，
-  // 不该把并行会话 B 的审批也一并 deny。
-  it("rejectAll(sessionId) 只拒该会话的 pending，不误伤其他并行会话", async () => {
+  // H-A2 fix: when cancelling one session, only that session's pending requests
+  // should be rejected; the parallel session B's approvals must not be denied too.
+  it("rejectAll(sessionId) only rejects that session's pending requests without affecting other parallel sessions", async () => {
     const pA = approvals.requestWithId("ta", { tool: "write_file", risk: "write", argsPreview: "", sessionId: "A" });
     const pB = approvals.requestWithId("tb", { tool: "execute", risk: "exec", argsPreview: "", sessionId: "B" });
     approvals.rejectAll("A");
     await expect(pA).resolves.toBe("deny");
-    // B 的审批不受影响，仍 pending（未被 resolve）
+    // B's approval is unaffected and remains pending (not resolved)
     const settled = await Promise.race([
       pB.then(() => "settled"),
       new Promise((r) => setTimeout(() => r("pending"), 20)),
@@ -62,7 +63,7 @@ describe("security/approvals — 审批门", () => {
     expect(settled).toBe("pending");
   });
 
-  it("无 sessionId 的 pending 在任何 scoped rejectAll 下都会被拒", async () => {
+  it("a pending request without a sessionId is rejected by any scoped rejectAll", async () => {
     const p = approvals.requestWithId("tc", { tool: "execute", risk: "exec", argsPreview: "" });
     approvals.rejectAll("X");
     await expect(p).resolves.toBe("deny");

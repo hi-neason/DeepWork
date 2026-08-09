@@ -1,9 +1,13 @@
-// IPC 注册层的集成测试：聚焦"链路闭合"——渲染层的参数是否正确透传到主进程服务，
-// 以及事件转发是否携带 sessionId（避免串 session）。不验证各业务模块的内部逻辑
-// （那些在各自的单元测试里覆盖），只验证 registerIpc 这个接线是否正确。
+// Integration test for the IPC registration layer: focuses on "wiring closure" —
+// whether renderer arguments are correctly passed through to main-process
+// services, and whether event forwarding carries the sessionId (to avoid
+// cross-session mixing). It does not verify the internal logic of each business
+// module (those are covered by their own unit tests); it only verifies that the
+// registerIpc wiring is correct.
 //
-// 通过 mock electron / agentManager / scheduler 等，把 registerIpc 跑起来，
-// 再从捕获的 handler Map 中取出具体 handler 直接调用并断言。
+// By mocking electron / agentManager / scheduler, etc., registerIpc is set up,
+// and then concrete handlers are pulled from the captured handler Map and
+// invoked directly with assertions.
 
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 
@@ -11,7 +15,7 @@ vi.mock("better-sqlite3", () => import("../../test/mocks/better-sqlite3"));
 vi.mock("electron", () => import("../../test/mocks/electron"));
 import { __test_getHandlers } from "../../test/mocks/electron";
 
-// ---- 主进程服务 mock ----
+// ---- main-process service mocks ----
 const agent = vi.hoisted(() => {
   const runTurn = vi.fn(async function* () {
     yield { type: "message_delta", text: "hi" } as any;
@@ -157,18 +161,19 @@ function makeEvent() {
   return { event: { sender }, sent };
 }
 
-describe("ipc/register 链路闭合", () => {
+describe("ipc/register wiring closure", () => {
   beforeAll(() => {
     registerIpc(() => null as any);
   });
 
   afterEach(() => {
-    // 注意：registerIpc 只在 beforeAll 注册一次，handlers Map 不能清空，
-    // 否则后续测试取不到 handler。只清 mock 调用记录即可。
+    // Note: registerIpc is registered only once in beforeAll; the handlers Map
+    // must not be cleared, otherwise later tests cannot retrieve handlers.
+    // Only clear mock call records.
     vi.clearAllMocks();
   });
 
-  it("chat:send 把 mode 透传给 agentManager.runTurn（锁 C-T2 模式链路闭合）", async () => {
+  it("chat:send passes mode through to agentManager.runTurn (locks C-T2 mode wiring closure)", async () => {
     const handlers = __test_getHandlers();
     const send = handlers.get("chat:send")!;
     const { event, sent } = makeEvent();
@@ -180,10 +185,10 @@ describe("ipc/register 链路闭合", () => {
     const args = agent.runTurn.mock.calls[0] as unknown as any[];
     expect(args[0]).toBe("sess-1");
     expect(args[1]).toBe("do something");
-    expect(args[5]).toBe("auto"); // mode 透传
+    expect(args[5]).toBe("auto"); // mode passed through
   });
 
-  it("chat:send 的事件携带正确的 sessionId（不串 session）", async () => {
+  it("chat:send events carry the correct sessionId (no cross-session mixing)", async () => {
     const handlers = __test_getHandlers();
     const send = handlers.get("chat:send")!;
 
@@ -197,7 +202,7 @@ describe("ipc/register 链路闭合", () => {
     expect(a.sent[0].channel).toBe("chat:event");
   });
 
-  it("chat:send 在 runTurn 抛错时推送 turn_error 事件而非崩溃", async () => {
+  it("chat:send pushes a turn_error event instead of crashing when runTurn throws", async () => {
     const handlers = __test_getHandlers();
     const send = handlers.get("chat:send")!;
     agent.runTurn.mockImplementationOnce(async function* () {
@@ -212,14 +217,14 @@ describe("ipc/register 链路闭合", () => {
     expect(err!.event.message).toBe("boom");
   });
 
-  it("chat:cancel 调用 agentManager.cancel(sessionId)", () => {
+  it("chat:cancel calls agentManager.cancel(sessionId)", () => {
     const handlers = __test_getHandlers();
     const cancel = handlers.get("chat:cancel")!;
     cancel({}, "sess-9");
     expect(agent.cancel).toHaveBeenCalledWith("sess-9");
   });
 
-  it("chat:regenerate 调用 agentManager.regenerate 并转发事件", async () => {
+  it("chat:regenerate calls agentManager.regenerate and forwards events", async () => {
     const handlers = __test_getHandlers();
     const regen = handlers.get("chat:regenerate")!;
     const { event, sent } = makeEvent();
@@ -241,16 +246,17 @@ describe("ipc/register 链路闭合", () => {
     spy.mockRestore();
   });
 
-  it("automations:runNow 从 listAutomations 找到目标后调用 scheduler.runNow", async () => {
+  it("automations:runNow finds the target from listAutomations and then calls scheduler.runNow", async () => {
     const handlers = __test_getHandlers();
     const runNow = handlers.get("automations:runNow")!;
     await runNow({}, "a1");
     expect(sched.runNow).toHaveBeenCalled();
   });
 
-  // C-A3：timeline:read 在 IPC 边界先用 YYYY-MM-DD 正则校验 date，拒绝路径穿越
-  // 载荷，且不会把非法值透传给存储层。timeline:path 同理。
-  it("timeline:read 拒绝非法/穿越 date，不透传给 readTimelineDate（C-A3）", async () => {
+  // C-A3: timeline:read validates date with a YYYY-MM-DD regex at the IPC boundary,
+  // rejects path-traversal payloads, and does not pass invalid values through to the
+  // storage layer. timeline:path behaves the same way.
+  it("timeline:read rejects invalid/traversing date values and does not pass them to readTimelineDate (C-A3)", async () => {
     const handlers = __test_getHandlers();
     const read = handlers.get("timeline:read")!;
     const readSpy = vi.mocked(timelineMemory.readTimelineDate);
@@ -267,7 +273,7 @@ describe("ipc/register 链路闭合", () => {
     }
     readSpy.mockClear();
 
-    // 合法日期正常透传
+    // A valid date is passed through normally
     await read({}, "2026-08-08");
     expect(readSpy).toHaveBeenCalledWith("2026-08-08");
   });

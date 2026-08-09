@@ -1,20 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { resolveThreadIdForSanitize, sanitizeMessage } from "./sanitize";
 
-describe("agent/sanitize — resolveThreadIdForSanitize (C-A1 修复)", () => {
-  it("从 request.runtime.configurable.thread_id 读取（主路径，修复前此处返回 undefined）", () => {
+describe("agent/sanitize - resolveThreadIdForSanitize (C-A1 fix)", () => {
+  it("reads from request.runtime.configurable.thread_id (main path; before the fix this returned undefined)", () => {
     expect(
       resolveThreadIdForSanitize({ runtime: { configurable: { thread_id: "t2" } } }),
     ).toBe("t2");
   });
 
-  it("兼容回退 request.config.configurable.thread_id（旧 langchain 形态）", () => {
+  it("falls back compatibly to request.config.configurable.thread_id (legacy langchain form)", () => {
     expect(
       resolveThreadIdForSanitize({ config: { configurable: { thread_id: "t1" } } }),
     ).toBe("t1");
   });
 
-  it("runtime 优先于 config（两者并存时取 runtime）", () => {
+  it("runtime takes precedence over config (when both exist, runtime wins)", () => {
     expect(
       resolveThreadIdForSanitize({
         runtime: { configurable: { thread_id: "rt" } },
@@ -23,19 +23,19 @@ describe("agent/sanitize — resolveThreadIdForSanitize (C-A1 修复)", () => {
     ).toBe("rt");
   });
 
-  it("无 configurable 时返回 undefined", () => {
+  it("returns undefined when there is no configurable", () => {
     expect(resolveThreadIdForSanitize({})).toBeUndefined();
     expect(resolveThreadIdForSanitize(undefined)).toBeUndefined();
   });
 });
 
-describe("agent/sanitize — sanitizeMessage (C-A3 原型保护)", () => {
-  it("非数组 content 直接原样返回", () => {
+describe("agent/sanitize - sanitizeMessage (C-A3 prototype protection)", () => {
+  it("non-array content is returned as-is", () => {
     const msg = { getType: () => "human", content: "纯文本" };
     expect(sanitizeMessage(msg)).toBe(msg);
   });
 
-  it("无非法 block 时不改原型 (仍为同一构造器实例)", () => {
+  it("does not alter the prototype when there are no invalid blocks (still the same constructor instance)", () => {
     class FakeMsg {
       content: unknown;
       constructor(c: unknown) {
@@ -51,7 +51,7 @@ describe("agent/sanitize — sanitizeMessage (C-A3 原型保护)", () => {
     expect(out).toBeInstanceOf(FakeMsg);
   });
 
-  it("清洗数组 content 后保留 BaseMessage 原型 (C-A3 修复前会丢失 getType)", () => {
+  it("preserves the BaseMessage prototype after cleaning array content (before the C-A3 fix getType was lost)", () => {
     class FakeMsg {
       content: unknown;
       constructor(c: unknown) {
@@ -63,7 +63,7 @@ describe("agent/sanitize — sanitizeMessage (C-A3 原型保护)", () => {
     }
     const msg = new FakeMsg([
       { type: "text", text: "保留" },
-      { type: "input_json_delta", text: "" }, // 非法 block，应被剔除
+      { type: "input_json_delta", text: "" }, // invalid block, should be removed
     ]);
     const out = sanitizeMessage(msg);
     expect(out).toBeInstanceOf(FakeMsg);

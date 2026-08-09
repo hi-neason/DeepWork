@@ -13,8 +13,6 @@ interface AutoRow {
   id: string;
   title: string;
   instructions: string;
-  schedule: string;
-  run_at: string | null;
   enabled: number;
   created_at: number;
   updated_at: number | null;
@@ -54,38 +52,13 @@ function safeJsonArray(json: string | null): string[] | undefined {
   return undefined;
 }
 
-/** Migrate legacy schedule/run_at into scheduleType + scheduleConfig. */
-function migrateLegacySchedule(a: Automation): Automation {
-  if (a.scheduleType && a.scheduleType !== "cron") return a;
-  if (a.scheduleConfig && Object.keys(a.scheduleConfig).length > 0) return a;
-  if (a.runAt) {
-    return {
-      ...a,
-      scheduleType: "once",
-      scheduleConfig: { datetime: a.runAt },
-    };
-  }
-  if (a.schedule && a.schedule !== "once") {
-    return {
-      ...a,
-      scheduleType: "cron",
-      scheduleConfig: { cron: a.schedule },
-    };
-  }
-  return a;
-}
-
 function rowToAutomation(r: AutoRow): Automation {
-  const scheduleType = (r.schedule_type as ScheduleType) || "cron";
-  const scheduleConfig = parseScheduleConfig(r.schedule_config) || {};
-  const a: Automation = {
+  return {
     id: r.id,
     title: r.title,
     instructions: r.instructions,
-    schedule: r.schedule,
-    runAt: r.run_at ?? undefined,
-    scheduleType,
-    scheduleConfig,
+    scheduleType: (r.schedule_type as ScheduleType) || "daily",
+    scheduleConfig: parseScheduleConfig(r.schedule_config) || {},
     workspaceDir: r.workspace_dir ?? undefined,
     validFrom: r.valid_from ?? undefined,
     validUntil: r.valid_until ?? undefined,
@@ -99,7 +72,6 @@ function rowToAutomation(r: AutoRow): Automation {
     mcpServerIds: safeJsonArray(r.mcp_server_ids),
     model: r.model ?? undefined,
   };
-  return migrateLegacySchedule(a);
 }
 
 interface RunRow {
@@ -122,27 +94,6 @@ function rowToRun(r: RunRow): AutomationRun {
     error: r.error ?? undefined,
     sessionId: r.session_id ?? undefined,
   };
-}
-
-/** Best-effort migration of legacy rows. Called once at startup. */
-export function migrateLegacyAutomations(): void {
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM automations WHERE schedule_type IS NULL OR schedule_config IS NULL`,
-    )
-    .all() as AutoRow[];
-  const update = getDb().prepare(
-    `UPDATE automations SET schedule_type = ?, schedule_config = ?, updated_at = ? WHERE id = ?`,
-  );
-  for (const r of rows) {
-    const a = rowToAutomation(r);
-    update.run(
-      a.scheduleType,
-      JSON.stringify(a.scheduleConfig),
-      Date.now(),
-      r.id,
-    );
-  }
 }
 
 export function listAutomations(): Automation[] {
@@ -170,8 +121,6 @@ export function createAutomation(
     id,
     title: a.title,
     instructions: a.instructions,
-    schedule: a.schedule ?? (scheduleType === "cron" ? scheduleConfig.cron ?? "" : scheduleType),
-    run_at: a.runAt ?? (scheduleType === "once" ? scheduleConfig.datetime ?? null : null),
     // Honor the caller's enabled flag so a paused automation can be created
     // paused (the renderer sends enabled:false when the toggle is off).
     enabled: a.enabled ? 1 : 0,
@@ -193,17 +142,15 @@ export function createAutomation(
   getDb()
     .prepare(
       `INSERT INTO automations (
-        id, title, instructions, schedule, run_at, enabled, created_at, updated_at,
+        id, title, instructions, enabled, created_at, updated_at,
         workspace_dir, schedule_type, schedule_config, valid_from, valid_until,
         permission_mode, skills, mcp_server_ids, model, last_fired_slot
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       row.id,
       row.title,
       row.instructions,
-      row.schedule,
-      row.run_at,
       row.enabled,
       row.created_at,
       row.updated_at,
@@ -233,7 +180,7 @@ export function updateAutomation(id: string, patch: Partial<Automation>): void {
   getDb()
     .prepare(
       `UPDATE automations SET
-        title = ?, instructions = ?, schedule = ?, run_at = ?, enabled = ?, updated_at = ?,
+        title = ?, instructions = ?, enabled = ?, updated_at = ?,
         workspace_dir = ?, schedule_type = ?, schedule_config = ?, valid_from = ?, valid_until = ?,
         permission_mode = ?, skills = ?, mcp_server_ids = ?, model = ?
        WHERE id = ?`,
@@ -241,8 +188,6 @@ export function updateAutomation(id: string, patch: Partial<Automation>): void {
     .run(
       next.title,
       next.instructions,
-      next.schedule ?? (scheduleType === "cron" ? scheduleConfig.cron ?? "" : scheduleType),
-      next.runAt ?? (scheduleType === "once" ? scheduleConfig.datetime ?? null : null),
       next.enabled ? 1 : 0,
       next.updatedAt,
       next.workspaceDir ?? null,
@@ -278,7 +223,7 @@ export function markAutomationRun(
 /**
  * Persist the scheduled slot (epoch ms) that already fired for an automation,
  * so a scheduler restart inside the grace window cannot double-fire the same
- * recurring slot (M-存储②).
+ * recurring slot (M-storage②).
  */
 export function setLastFiredSlot(id: string, slot: number): void {
   getDb()
@@ -381,7 +326,7 @@ export function listDueAutomations(now: number): Automation[] {
   return rows
     .map(rowToAutomation)
     .filter((a) => {
-      const dt = a.scheduleConfig?.datetime || a.runAt;
+      const dt = a.scheduleConfig?.datetime;
       return dt && new Date(dt).getTime() <= now;
     });
 }

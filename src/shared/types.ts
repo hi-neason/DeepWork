@@ -154,10 +154,6 @@ export interface Automation {
   workspaceDir?: string;
   scheduleType: ScheduleType;
   scheduleConfig: AutomationScheduleConfig;
-  /** Legacy cron expression or "once". Kept for migration. */
-  schedule?: string;
-  /** Legacy ISO timestamp for one-shot tasks. Kept for migration. */
-  runAt?: string;
   /** ISO date (YYYY-MM-DD). Inclusive. */
   validFrom?: string;
   /** ISO date (YYYY-MM-DD). Inclusive. */
@@ -196,8 +192,6 @@ export interface Settings {
    *         should present a plan for approval.
    */
   permissionMode: PermissionMode;
-  /** Legacy field, migrated to permissionMode. */
-  approvalMode?: "manual" | "auto";
   /** Tools that should never require approval in this session */
   alwaysAllowTools: string[];
   /** Whether the first-run onboarding has completed. */
@@ -267,7 +261,8 @@ export interface Session {
    *  created by scheduled runs and accessed via run history. Defaults to
    *  "user" for rows created before the column existed. */
   source: SessionSource;
-  /** Group/folder this task belongs to (default group: "默认"). */
+  /** Group/folder this task belongs to (default group id: "Default"; the
+   *  display label is localized via the sidebar.defaultGroup i18n key). */
   group: string;
   /** Base workspace folder chosen for the task (groups sessions by name). */
   workspaceDir?: string;

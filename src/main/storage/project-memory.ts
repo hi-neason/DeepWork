@@ -75,7 +75,7 @@ function countNumbered(lines: string[], start: number, end: number): number {
  * Append distilled points to a project's memory file, grouped by date.
  *
  * Resulting layout:
- *   # DeepWork 项目记忆
+ *   # DeepWork project memory
  *   ## 2026-08-08
  *   1. xxxxxx
  *   2. xxxxxxx
@@ -95,7 +95,7 @@ export function appendProjectMemoryEntry(entry: ProjectMemoryAppend): void {
   if (fs.existsSync(file)) {
     lines = fs.readFileSync(file, "utf-8").split("\n");
   } else {
-    lines = [`# ${entry.project} 项目记忆`, ""];
+    lines = [`# ${entry.project} project memory`, ""];
   }
 
   const points = entry.points

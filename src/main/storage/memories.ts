@@ -56,7 +56,7 @@ function fromBlob(buf: Buffer | null): number[] | null {
   if (!buf) return null;
   // Copy into a fresh, 4-byte-aligned ArrayBuffer. Constructing a Float32Array
   // directly over a Buffer slice (buf.buffer, buf.byteOffset) can throw a
-  // RangeError when the offset isn't 4-aligned (M-存储③).
+  // RangeError when the offset isn't 4-aligned (M-storage③).
   const count = Math.floor(buf.length / 4);
   const aligned = new ArrayBuffer(count * 4);
   buf.copy(Buffer.from(aligned), 0, 0, count * 4);

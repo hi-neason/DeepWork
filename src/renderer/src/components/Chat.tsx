@@ -1046,9 +1046,9 @@ type Segment =
 /** Group consecutive visible tool calls into a single "steps" segment. */
 /**
  * Detects deepagents/internal action markers that leak into assistant content
- * (e.g. "create", "run", "search", "子", "规划"). These are short fragments
- * without punctuation that immediately precede a tool call. Normal replies,
- * even short ones like "好的", are kept because they are not raw action verbs.
+ * (e.g. "create", "run", "search"). These are short fragments without
+ * punctuation that immediately precede a tool call. Normal replies, even short
+ * acknowledgements, are kept because they are not raw action verbs.
  */
 const ACTION_MARKERS = new Set([
   // English markers commonly emitted by deepagents/tool-calling loops
@@ -1163,7 +1163,8 @@ export function buildSegments(chat: ChatState): Segment[] {
     if (last && last.kind === "activity") last.isLast = true;
   }
   // Mark the last thinking entry as live while the turn is still streaming and
-  // this is the tail group (so it shows "正在思考…" instead of a char count).
+  // this is the tail group (so it shows the "Thinking…" label instead of a
+  // char count).
   // Walk backward to find the tail thinking group rather than only checking the
   // final segment (which may be a trailing assistant message).
   if (chat.streaming) {
@@ -1186,8 +1187,9 @@ export function buildSegments(chat: ChatState): Segment[] {
  * content differ via the `variant` prop.
  *
  * Command: blue spinner while running, green when done, red on error; shows a
- * "等待 agent…" row between steps and inlines produced artifacts when finished.
- * Thinking: the dot is always blue; the last entry shows "正在思考…" while live.
+ * "waiting for agent…" row between steps and inlines produced artifacts when
+ * finished.
+ * Thinking: the dot is always blue; the last entry shows "Thinking…" while live.
  */
 function ActivityGroup({
   variant,
@@ -1276,7 +1278,7 @@ function ActivityGroup({
 /**
  * A single row inside an ActivityGroup. Same shell for both variants; the
  * content adapts: a command row shows verb/target/duration + expandable
- * args/output, while a thinking row shows the char count (or "正在思考…") +
+ * args/output, while a thinking row shows the char count (or "Thinking…") +
  * expandable reasoning text.
  */
 function ActivityRow({

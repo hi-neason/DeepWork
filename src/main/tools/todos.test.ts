@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { createTodosTool, getTodos, clearTodos } from "./todos";
 
-// emitTurnEvent 是 UI 推送副作用，这里隔离掉，只验证 todos 的解析与持久化。
+// emitTurnEvent is a UI-push side effect; isolate it here and only verify the
+// parsing and persistence of todos.
 vi.mock("../agent/turnEvents", () => ({ emitTurnEvent: vi.fn() }));
 
 describe("tools/todos", () => {
@@ -11,7 +12,7 @@ describe("tools/todos", () => {
     vi.clearAllMocks();
   });
 
-  it("createTodosTool 解析 schema、默认 pending 并通过 threadId 持久化", async () => {
+  it("createTodosTool parses the schema, defaults to pending, and persists via threadId", async () => {
     const tool = createTodosTool();
     const res = await tool.tool.invoke(
       { todos: [{ content: "a" }, { content: "b", status: "completed" }] },
@@ -24,11 +25,11 @@ describe("tools/todos", () => {
     expect(saved[1].status).toBe("completed");
   });
 
-  it("getTodos 对未知 thread 返回空数组", () => {
+  it("getTodos returns an empty array for an unknown thread", () => {
     expect(getTodos("unknown")).toEqual([]);
   });
 
-  it("clearTodos 清除该 thread 的 todos", async () => {
+  it("clearTodos clears the todos for that thread", async () => {
     const tool = createTodosTool();
     await tool.tool.invoke(
       { todos: [{ content: "x" }] },
@@ -39,7 +40,7 @@ describe("tools/todos", () => {
     expect(getTodos("t2")).toEqual([]);
   });
 
-  it("createTodosTool 拒绝非法 status（schema 校验应失败）", async () => {
+  it("createTodosTool rejects an invalid status (schema validation should fail)", async () => {
     const tool = createTodosTool();
     await expect(
       tool.tool.invoke(
