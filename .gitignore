@@ -62,3 +62,6 @@ Thumbs.db
 
 # WorkBuddy local memory / project data (not version-controlled)
 .workbuddy/
+
+# Design tool generated bundles (project.design, runtime manifests, .preflight, assets)
+*.design/
