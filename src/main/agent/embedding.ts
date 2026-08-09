@@ -1,6 +1,7 @@
 import type { EmbeddingConfig } from "../../shared/types";
 import { logger } from "../log/logger";
 import { getApiKey } from "../storage/settings";
+import { assertConfiguredEndpoint } from "../tools/webGuard";
 
 // If an embedding backend call fails (e.g. Ollama not running), disable it for
 // a cooldown window so we don't hammer the network on every turn.
@@ -35,6 +36,7 @@ export async function embedText(
 
 async function embedOllama(text: string, cfg: EmbeddingConfig): Promise<number[]> {
   const base = (cfg.baseUrl || "http://localhost:11434").replace(/\/$/, "");
+  await assertConfiguredEndpoint(base);
   const res = await fetch(base + "/api/embed", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -50,6 +52,9 @@ async function embedOllama(text: string, cfg: EmbeddingConfig): Promise<number[]
 async function embedOpenAI(text: string, cfg: EmbeddingConfig): Promise<number[]> {
   const key = getApiKey("openai") || process.env.OPENAI_API_KEY || "";
   const base = (cfg.baseUrl || "https://api.openai.com/v1").replace(/\/$/, "");
+  // Only validate user-supplied endpoints; the default public OpenAI host is
+  // always safe.
+  if (cfg.baseUrl) await assertConfiguredEndpoint(base);
   const res = await fetch(base + "/embeddings", {
     method: "POST",
     headers: {

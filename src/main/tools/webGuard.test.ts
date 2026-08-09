@@ -4,6 +4,7 @@ import {
   isPublicHost,
   assertPublicUrl,
   assertPublicUrlResolved,
+  assertConfiguredEndpoint,
   normalizeIPv4,
   htmlToText,
 } from "./webGuard";
@@ -243,5 +244,67 @@ describe("assertPublicUrlResolved - DNS 解析后重判（C-T1）", () => {
 
   it("拒绝 URL 内嵌凭据（绕过审计的常见手法）", () => {
     expect(() => assertPublicUrl("http://user:pw@example.com/")).toThrow();
+  });
+});
+
+describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 校验", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("放行 localhost / 127.0.0.1（本地 Ollama 合法用例）", async () => {
+    const u = await assertConfiguredEndpoint("http://localhost:11434");
+    expect(u.hostname).toBe("localhost");
+    const u2 = await assertConfiguredEndpoint("http://127.0.0.1:11434");
+    expect(u2.hostname).toBe("127.0.0.1");
+  });
+
+  it("放行私网地址（自托管网关合法用例）", async () => {
+    const u = await assertConfiguredEndpoint("http://192.168.1.10:8080");
+    expect(u.hostname).toBe("192.168.1.10");
+  });
+
+  it("放行公网 HTTPS 地址", async () => {
+    vi.spyOn(dns, "lookup").mockResolvedValue([
+      { address: "93.184.216.34", family: 4 },
+    ] as never);
+    const u = await assertConfiguredEndpoint("https://api.example.com/v1");
+    expect(u.hostname).toBe("api.example.com");
+  });
+
+  it("拦截 169.254.169.254 云元数据地址（SSRF 目标）", async () => {
+    await expect(
+      assertConfiguredEndpoint("http://169.254.169.254/latest/meta-data/"),
+    ).rejects.toThrow(/link-local|metadata/i);
+  });
+
+  it("拦截 169.254 段内其他地址", async () => {
+    await expect(
+      assertConfiguredEndpoint("http://169.254.0.1/"),
+    ).rejects.toThrow(/link-local|metadata/i);
+  });
+
+  it("拦截解析到 link-local 的主机名（DNS rebinding 型 SSRF）", async () => {
+    vi.spyOn(dns, "lookup").mockResolvedValue([
+      { address: "169.254.169.254", family: 4 },
+    ] as never);
+    await expect(
+      assertConfiguredEndpoint("http://evil.example/"),
+    ).rejects.toThrow(/link-local/i);
+  });
+
+  it("拒绝非 http(s) 协议", async () => {
+    await expect(assertConfiguredEndpoint("file:///etc/passwd")).rejects.toThrow(
+      /http/,
+    );
+    await expect(
+      assertConfiguredEndpoint("javascript:alert(1)"),
+    ).rejects.toThrow(/http/);
+  });
+
+  it("拒绝 URL 内嵌凭据", async () => {
+    await expect(
+      assertConfiguredEndpoint("http://user:pass@localhost:11434/"),
+    ).rejects.toThrow(/Credential/i);
   });
 });

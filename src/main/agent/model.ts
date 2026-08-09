@@ -8,6 +8,7 @@ import { PROVIDER_PRESETS } from "../../shared/providers";
 import type { ModelConfig, ProviderKind, VerifyResult } from "../../shared/types";
 import i18n from "../i18n";
 import { logger } from "../log/logger";
+import { assertConfiguredEndpoint } from "../tools/webGuard";
 
 /**
  * Resolve credentials/endpoint with this precedence (highest first):
@@ -108,6 +109,7 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
   try {
     if (cfg.provider === "ollama") {
       const base = (cfg.baseUrl || PROVIDER_PRESETS.ollama.baseUrl).replace(/\/$/, "");
+      await assertConfiguredEndpoint(base);
       const res = await fetch(base + "/api/tags", { method: "GET" });
       if (!res.ok) return { ok: false, message: i18n.t("errors.ollamaReturned", { status: res.status }) };
       const data = (await res.json()) as { models?: Array<{ name: string }> };
@@ -123,13 +125,18 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
       const key = authToken || getApiKey("anthropic") || process.env.ANTHROPIC_API_KEY;
       if (!key) return { ok: false, message: i18n.t("errors.noApiKey") };
       const base = cfg.baseUrl || process.env.ANTHROPIC_BASE_URL;
+      const baseUrl = base ? base.replace(/\/$/, "") : "https://api.anthropic.com";
+      // Validate custom endpoints against SSRF (link-local/metadata). The
+      // default public endpoint is always safe; only user-supplied bases need
+      // the check.
+      if (base) await assertConfiguredEndpoint(baseUrl);
       const headers: Record<string, string> = {
         "anthropic-version": "2023-06-01",
         ...(authToken
           ? { Authorization: `Bearer ${authToken}` }
           : { "x-api-key": key }),
       };
-      const url = (base ? base.replace(/\/$/, "") : "https://api.anthropic.com") + "/v1/models?limit=5";
+      const url = baseUrl + "/v1/models?limit=5";
       const res = await fetch(url, { headers });
       if (!res.ok) return { ok: false, message: i18n.t("errors.anthropicReturned", { status: res.status, detail: await res.text().catch(() => "") }) };
       const data = (await res.json()) as { data?: Array<{ id: string }> };
@@ -148,6 +155,7 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
     }
     const base = (cfg.baseUrl || preset.baseUrl).replace(/\/$/, "");
     if (!base) return { ok: false, message: i18n.t("errors.baseUrlRequired") };
+    await assertConfiguredEndpoint(base);
     const res = await fetch(base + "/models", {
       headers: key ? { Authorization: `Bearer ${key}` } : {},
     });

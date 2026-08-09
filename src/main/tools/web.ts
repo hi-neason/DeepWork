@@ -15,7 +15,7 @@ const MAX_REDIRECTS = 5;
  * default; users can plug in a richer search via MCP if needed.
  */
 export const webSearchTool = defineTool(
-  "read",
+  "external",
   async ({ query, max_results }) => {
     const limit = Math.min(Math.max(max_results ?? 8, 1), 20);
     const url = new URL("https://html.duckduckgo.com/html/");
@@ -76,7 +76,7 @@ export const webSearchTool = defineTool(
  * re-checking each destination.
  */
 export const webFetchTool = defineTool(
-  "read",
+  "external",
   async ({ url: rawUrl, max_chars }) => {
     // Resolve + range-check before the first hop, and again for every redirect
     // target below — a public entry URL must not be able to bounce us into the

@@ -13,6 +13,19 @@ const SUBDIRS = ["scripts", "references", "assets"] as const;
 /** Strict kebab-case: lowercase letters, digits, hyphens; must start/end alphanumeric. */
 const VALID_SLUG = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
 
+/**
+ * Guard every externally-supplied skill name before it is used as a path
+ * component. `isValidSlug` is the single source of truth for the on-disk
+ * directory name; without this, an IPC caller (or a compromised renderer via
+ * XSS) could pass `../../…` to delete/update/read outside SKILLS_DIR — path
+ * traversal leading to arbitrary file read/delete/write.
+ */
+function assertValidName(name: string): asserts name is string {
+  if (typeof name !== "string" || !isValidSlug(name)) {
+    throw new Error(`Invalid skill name: ${JSON.stringify(name)}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Path helpers
 // ---------------------------------------------------------------------------
@@ -271,6 +284,7 @@ export type SkillPatch = Partial<Pick<
 >>;
 
 export function updateSkill(name: string, patch: SkillPatch): Skill | null {
+  assertValidName(name);
   const current = parseSkill(name);
   if (!current) return null;
 
@@ -313,6 +327,7 @@ export function updateSkill(name: string, patch: SkillPatch): Skill | null {
 }
 
 export function deleteSkill(name: string): void {
+  assertValidName(name);
   const dir = path.join(skillsDir(), name);
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -321,6 +336,7 @@ export function deleteSkill(name: string): void {
 }
 
 export function renameSkill(oldName: string, newName: string): Skill | null {
+  assertValidName(oldName);
   const slug = slugify(newName);
   if (!isValidSlug(slug)) {
     throw new Error(`Invalid skill name: "${slug}".`);
@@ -394,6 +410,7 @@ export function importSkill(sourceDir: string, newName?: string): Skill {
  * Creates <targetDir>/<skill-name>/.
  */
 export function exportSkill(name: string, targetDir: string): string {
+  assertValidName(name);
   const srcDir = path.join(skillsDir(), name);
   if (!fs.existsSync(srcDir)) throw new Error(`Skill "${name}" not found.`);
   const dest = path.join(targetDir, name);

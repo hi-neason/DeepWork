@@ -36,10 +36,11 @@ describe("storage/timeline-memory", () => {
   });
 
   it("首次追加生成标题 + 项目分段 + 有序编号", () => {
-    timeline.appendTimelineEntry({ project: "DeepWork", points: ["做了 A", "做了 B"] });
-    const file = path.join(tlDir, "2026-08-08.md");
+    const date = "2026-08-08";
+    timeline.appendTimelineEntry({ date, project: "DeepWork", points: ["做了 A", "做了 B"] });
+    const file = path.join(tlDir, `${date}.md`);
     const content = fs.readFileSync(file, "utf-8");
-    expect(content).toContain("# 2026-08-08 时间线记忆");
+    expect(content).toContain(`# ${date} 时间线记忆`);
     expect(content).toContain("## DeepWork");
     expect(content).toContain("1. 做了 A");
     expect(content).toContain("2. 做了 B");

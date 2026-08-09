@@ -330,8 +330,8 @@ export class AgentManager {
     annotateRisk("write_file", "write");
     annotateRisk("edit_file", "write");
     annotateRisk("execute", "exec");
-    annotateRisk("web_search", "read");
-    annotateRisk("web_fetch", "read");
+    annotateRisk("web_search", "external");
+    annotateRisk("web_fetch", "external");
     annotateRisk("remember", "write");
     annotateRisk("forget", "write");
     annotateRisk("list_memories", "read");

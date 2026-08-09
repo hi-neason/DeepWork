@@ -194,6 +194,71 @@ export function assertPublicUrl(rawUrl: string): URL {
 }
 
 /**
+ * Validate a user-configured service endpoint (model base URL, embedding base
+ * URL). Unlike `assertPublicUrl`, loopback/private hosts ARE allowed — local
+ * Ollama and self-hosted gateways are legitimate — but link-local/cloud
+ * metadata addresses (169.254.169.254 and the 169.254.0.0/16 range) are
+ * blocked because they are the canonical SSRF target for credential theft from
+ * a compromised renderer. DNS is resolved so a public hostname that resolves
+ * to link-local can't bypass the literal check.
+ */
+export async function assertConfiguredEndpoint(rawUrl: string): Promise<URL> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid URL: ${rawUrl}`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`Only http/https URLs are allowed (got ${url.protocol})`);
+  }
+  if (url.username || url.password) {
+    throw new Error("Credentials in URLs are not allowed");
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  // Literal IP: allow loopback/private, block only link-local (169.254/16,
+  // fe80::/10) which is where cloud metadata endpoints live.
+  if (net.isIP(host) || normalizeIPv4(host) !== null) {
+    const ip = normalizeIPv4(host) ?? host;
+    if (isLinkLocalLiteral(ip)) {
+      throw new Error(`Blocked request to link-local/metadata host: ${host}`);
+    }
+    return url;
+  }
+  // Hostname: resolve and require that NO address is link-local. A hostname
+  // that resolves to both public and 169.254 is still an SSRF vector.
+  let records: { address: string }[];
+  try {
+    records = await dns.lookup(host, { all: true, verbatim: true });
+  } catch {
+    // Resolution failure falls through — let fetch produce its own error rather
+    // than blocking a hostname that may resolve via a different resolver.
+    return url;
+  }
+  for (const r of records) {
+    if (isLinkLocalLiteral(r.address)) {
+      throw new Error(
+        `Blocked request: ${host} resolves to link-local address ${r.address}`,
+      );
+    }
+  }
+  return url;
+}
+
+/** True for 169.254.0.0/16 (IPv4 link-local / cloud metadata) or fe80::/10. */
+function isLinkLocalLiteral(ip: string): boolean {
+  const quad = normalizeIPv4(ip);
+  if (quad) {
+    const p = quad.split(".").map(Number);
+    return p[0] === 169 && p[1] === 254;
+  }
+  const groups = expandIPv6(ip);
+  if (!groups) return false;
+  const first = groups[0];
+  return (first & 0xffc0) === 0xfe80; // fe80::/10
+}
+
+/**
  * Full guard: literal checks plus DNS resolution, requiring *every* resolved
  * address to be public. This is what closes the "public hostname that resolves
  * to 127.0.0.1 / 169.254.169.254" bypass. Call it for every redirect hop.
