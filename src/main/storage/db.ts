@@ -90,7 +90,8 @@ function migrate(d: Database.Database): void {
       workspace_dir TEXT,
       root_dir TEXT,
       terminal_cwd TEXT,
-      model TEXT
+      model TEXT,
+      source TEXT NOT NULL DEFAULT 'user'
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -165,6 +166,20 @@ function migrate(d: Database.Database): void {
   addColumn("sessions", "root_dir", "TEXT");
   addColumn("sessions", "terminal_cwd", "TEXT");
   addColumn("sessions", "model", "TEXT");
+  addColumn("sessions", "source", "TEXT NOT NULL DEFAULT 'user'");
+
+  // Backfill: sessions created by older builds for scheduled automations were
+  // titled with a ⏰ prefix and had no source marker. Reclassify them so they
+  // are hidden from the chat list like new automation runs.
+  try {
+    d.exec(
+      `UPDATE sessions SET source = 'automation' WHERE source = 'user' AND title LIKE '⏰ %'`,
+    );
+  } catch (err) {
+    migrationFailures.push(
+      `sessions.source backfill: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 
   // Automation subsystem columns (added for structured scheduling).
   addColumn("automations", "updated_at", "INTEGER");

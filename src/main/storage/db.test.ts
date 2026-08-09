@@ -57,7 +57,7 @@ describe("storage/db — 增量迁移与 schema", () => {
     );
   });
 
-  it("sessions 表补齐 workspace_dir / root_dir / terminal_cwd / model / group_name", () => {
+  it("sessions 表补齐 workspace_dir / root_dir / terminal_cwd / model / group_name / source", () => {
     const db = getDb();
     const cols = (db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).map(
       (c) => c.name,
@@ -71,6 +71,7 @@ describe("storage/db — 增量迁移与 schema", () => {
         "terminal_cwd",
         "model",
         "group_name",
+        "source",
       ]),
     );
   });

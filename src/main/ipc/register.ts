@@ -167,7 +167,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
 
   // ---- sessions ----
+  // listSessions() returns only user-started chats; automation-run transcripts
+  // are hidden from the sidebar and resolved on demand via sessions:get when
+  // opened from run history.
   handle("sessions:list", () => listSessions());
+  handle("sessions:get", (_e, id: string) => getSession(id));
   handle(
     "sessions:create",
     (_e, title?: string, workspaceDir?: string, model?: string) =>
@@ -200,6 +204,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       .prepare(
         `SELECT workspace_dir, MAX(updated_at) AS latest
          FROM sessions WHERE workspace_dir IS NOT NULL AND workspace_dir != ''
+         AND source != 'automation'
          GROUP BY workspace_dir ORDER BY latest DESC LIMIT 8`,
       )
       .all() as Array<{ workspace_dir: string }>;

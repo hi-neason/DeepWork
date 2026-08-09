@@ -30,6 +30,7 @@ import {
   AutomationScheduler,
 } from "./scheduler";
 import * as automations from "../storage/automations";
+import * as sessions from "../storage/sessions";
 
 function auto(partial: Partial<Automation>): Automation {
   return {
@@ -111,6 +112,14 @@ describe("automation/scheduler — tick/fire 集成（mock storage）", () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(automations.startRun).toHaveBeenCalled();
     expect(automations.finishRun).toHaveBeenCalledWith("run-1", "success");
+    // The run's transcript session is created as an automation source so it
+    // stays out of the chat sidebar list.
+    expect(sessions.createSession).toHaveBeenCalledWith(
+      expect.stringContaining("t"),
+      undefined,
+      undefined,
+      "automation",
+    );
   });
 
   it("未到期自动化不被触发", async () => {

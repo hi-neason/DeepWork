@@ -254,11 +254,19 @@ export interface SkillFile {
   kind: "script" | "reference" | "asset" | "other";
 }
 
+/** Origin of a session: a manually started chat, or one created by a scheduled
+ *  automation run (hidden from the chat list, shown in run history). */
+export type SessionSource = "user" | "automation";
+
 export interface Session {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+  /** Origin: "user" chats show in the sidebar, "automation" sessions are
+   *  created by scheduled runs and accessed via run history. Defaults to
+   *  "user" for rows created before the column existed. */
+  source: SessionSource;
   /** Group/folder this task belongs to (default group: "默认"). */
   group: string;
   /** Base workspace folder chosen for the task (groups sessions by name). */

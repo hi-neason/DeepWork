@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import type { Session } from "../../shared/types";
+import type { Session, SessionSource } from "../../shared/types";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
@@ -13,6 +13,14 @@ import { logger } from "../log/logger";
 
 export const DEFAULT_GROUP = "默认";
 
+/** Columns selected when loading a session row (terminal_cwd is derived). */
+const SESSION_COLUMNS =
+  "id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model, source";
+
+function toSessionSource(v: string | null): SessionSource {
+  return v === "automation" ? "automation" : "user";
+}
+
 interface SessionRow {
   id: string;
   title: string;
@@ -22,6 +30,7 @@ interface SessionRow {
   workspace_dir: string | null;
   root_dir: string | null;
   model: string | null;
+  source: string | null;
 }
 
 /** Group label derived from a workspace folder: its basename. */
@@ -37,6 +46,7 @@ function rowToSession(r: SessionRow): Session {
     title: r.title,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    source: toSessionSource(r.source),
     group: r.group_name || groupForWorkspace(r.workspace_dir),
     workspaceDir: r.workspace_dir ?? undefined,
     rootDir: r.root_dir ?? undefined,
@@ -56,22 +66,23 @@ function terminalCwdFor(id: string, workspaceDir?: string | null): string {
   return sessionRootDir(id);
 }
 
-export function listSessions(): Session[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model
-       FROM sessions ORDER BY updated_at DESC`,
-    )
-    .all() as SessionRow[];
+/**
+ * List sessions. By default returns only user-started chats so the sidebar
+ * doesn't show transcripts created by scheduled automations. Pass
+ * `includeAutomations: true` to list everything (used by the automation run
+ * history when it needs session metadata).
+ */
+export function listSessions(opts?: { includeAutomations?: boolean }): Session[] {
+  const sql = opts?.includeAutomations
+    ? `SELECT ${SESSION_COLUMNS} FROM sessions ORDER BY updated_at DESC`
+    : `SELECT ${SESSION_COLUMNS} FROM sessions WHERE source != 'automation' ORDER BY updated_at DESC`;
+  const rows = getDb().prepare(sql).all() as SessionRow[];
   return rows.map(rowToSession);
 }
 
 export function getSession(id: string): Session | null {
   const row = getDb()
-    .prepare(
-      `SELECT id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model
-       FROM sessions WHERE id = ?`,
-    )
+    .prepare(`SELECT ${SESSION_COLUMNS} FROM sessions WHERE id = ?`)
     .get(id) as SessionRow | undefined;
   return row ? rowToSession(row) : null;
 }
@@ -80,6 +91,7 @@ export function createSession(
   title = "New chat",
   workspaceDir?: string,
   model?: string,
+  source: SessionSource = "user",
 ): Session {
   const now = Date.now();
   const id = randomUUID();
@@ -102,6 +114,7 @@ export function createSession(
     title,
     createdAt: now,
     updatedAt: now,
+    source,
     group,
     workspaceDir: base,
     rootDir,
@@ -110,8 +123,8 @@ export function createSession(
   };
   getDb()
     .prepare(
-      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       s.id,
@@ -122,6 +135,7 @@ export function createSession(
       s.workspaceDir ?? null,
       rootDir,
       model ?? null,
+      source,
     );
   ensureGroup(group);
   logger.info("session", "created", {
@@ -130,6 +144,7 @@ export function createSession(
     group: s.group,
     workspaceDir: base,
     model: s.model,
+    source,
   });
   return s;
 }

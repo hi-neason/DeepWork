@@ -210,6 +210,10 @@ function reducer(state: ChatState, action: Action): ChatState {
 export function App(): React.ReactElement {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // A session not in the sidebar list (e.g. an automation-run transcript
+  // opened from run history). Resolved on demand so title/model/cwd work even
+  // though it's hidden from `sessions`.
+  const [extraSession, setExtraSession] = useState<Session | null>(null);
   const [chat, dispatch] = useReducer(reducer, initialChat);
   const [approval, setApproval] = useState<DeepWorkEvent | null>(null);
   const [view, setView] = useState<ViewKey>("chat");
@@ -295,7 +299,9 @@ export function App(): React.ReactElement {
   const showOnboarding =
     needsOnboarding && sessions.length === 0 && view === "chat";
 
-  const selectedSession = sessions.find((s) => s.id === sessionId);
+  const selectedSession =
+    sessions.find((s) => s.id === sessionId) ??
+    (extraSession?.id === sessionId ? extraSession : undefined);
   // Models shown in the picker: exactly the enabled, configured models.
   // Empty when none are configured (the picker shows an empty state).
   const enabledModels = useMemo(
@@ -433,6 +439,14 @@ export function App(): React.ReactElement {
     setView("chat");
     setTodos([]);
     dispatch({ type: "reset" });
+    // Automation-run transcripts are hidden from the sidebar list; resolve
+    // their metadata on demand so title/model/cwd are populated.
+    if (!sessions.some((s) => s.id === id)) {
+      const fetched = await window.deepwork.sessions.get(id);
+      setExtraSession(fetched);
+    } else {
+      setExtraSession(null);
+    }
     const [history, files] = await Promise.all([
       window.deepwork.chat.history(id),
       window.deepwork.artifacts.list(id),
@@ -446,6 +460,7 @@ export function App(): React.ReactElement {
     await window.deepwork.sessions.delete(id);
     if (sessionId === id) {
       setSessionId(null);
+      setExtraSession(null);
       dispatch({ type: "reset" });
     }
     await refreshSessions();
@@ -474,6 +489,7 @@ export function App(): React.ReactElement {
         );
         await refreshSessions();
         setSessionId(s.id);
+        setExtraSession(null);
         // Update the ref synchronously so the onAnyEvent listener already filters
         // for this session by the time chat.send starts emitting.
         sessionIdRef.current = s.id;

@@ -27,6 +27,8 @@ import type { ProviderPreset } from "../shared/providers";
 const api = {
   sessions: {
     list: (): Promise<Session[]> => ipcRenderer.invoke("sessions:list"),
+    get: (id: string): Promise<Session | null> =>
+      ipcRenderer.invoke("sessions:get", id),
     create: (
       title?: string,
       workspaceDir?: string,
