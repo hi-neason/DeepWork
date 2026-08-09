@@ -20,7 +20,7 @@ const VALID_SLUG = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
  * XSS) could pass `../../…` to delete/update/read outside SKILLS_DIR — path
  * traversal leading to arbitrary file read/delete/write.
  */
-function assertValidName(name: string): asserts name is string {
+function assertValidName(name: unknown): asserts name is string {
   if (typeof name !== "string" || !isValidSlug(name)) {
     throw new Error(`Invalid skill name: ${JSON.stringify(name)}`);
   }

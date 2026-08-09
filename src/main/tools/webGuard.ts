@@ -194,13 +194,34 @@ export function assertPublicUrl(rawUrl: string): URL {
 }
 
 /**
+ * Well-known cloud-metadata hostnames. These always resolve to link-local and
+ * are blocked by hostname as defense in depth so a transient DNS quirk can't
+ * let a request through.
+ */
+const METADATA_HOSTS = new Set([
+  "metadata.google.internal",
+  "metadata.goog",
+  "metadata.azure.com",
+  "metadata.azure.net",
+  "169.254.169.254.nip.io",
+]);
+
+/**
  * Validate a user-configured service endpoint (model base URL, embedding base
  * URL). Unlike `assertPublicUrl`, loopback/private hosts ARE allowed — local
  * Ollama and self-hosted gateways are legitimate — but link-local/cloud
- * metadata addresses (169.254.169.254 and the 169.254.0.0/16 range) are
- * blocked because they are the canonical SSRF target for credential theft from
- * a compromised renderer. DNS is resolved so a public hostname that resolves
- * to link-local can't bypass the literal check.
+ * metadata addresses (169.254.169.254 and the 169.254.0.0/16 range, fe80::/10,
+ * fd00:ec2::254) are blocked because they are the canonical SSRF target for
+ * credential theft from a compromised renderer. DNS is resolved so a public
+ * hostname that resolves to link-local can't bypass the literal check.
+ *
+ * Cleartext `http:` is only permitted for loopback/private targets; remote
+ * hosts carry API keys and must use HTTPS.
+ *
+ * NOTE: this only validates the initial URL. Callers that follow HTTP
+ * redirects MUST re-run this check (or an equivalent guard) on every redirect
+ * target, otherwise a malicious endpoint can bounce the request to a
+ * link-local/metadata host after validation.
  */
 export async function assertConfiguredEndpoint(rawUrl: string): Promise<URL> {
   let url: URL;
@@ -215,37 +236,80 @@ export async function assertConfiguredEndpoint(rawUrl: string): Promise<URL> {
   if (url.username || url.password) {
     throw new Error("Credentials in URLs are not allowed");
   }
-  const host = url.hostname.replace(/^\[|\]$/g, "");
-  // Literal IP: allow loopback/private, block only link-local (169.254/16,
-  // fe80::/10) which is where cloud metadata endpoints live.
-  if (net.isIP(host) || normalizeIPv4(host) !== null) {
-    const ip = normalizeIPv4(host) ?? host;
-    if (isLinkLocalLiteral(ip)) {
-      throw new Error(`Blocked request to link-local/metadata host: ${host}`);
-    }
-    return url;
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (METADATA_HOSTS.has(host)) {
+    throw new Error(`Blocked request to cloud-metadata host: ${host}`);
   }
-  // Hostname: resolve and require that NO address is link-local. A hostname
-  // that resolves to both public and 169.254 is still an SSRF vector.
-  let records: { address: string }[];
-  try {
-    records = await dns.lookup(host, { all: true, verbatim: true });
-  } catch {
-    // Resolution failure falls through — let fetch produce its own error rather
-    // than blocking a hostname that may resolve via a different resolver.
-    return url;
-  }
+
+  const records = await resolveHostRecords(host);
   for (const r of records) {
     if (isLinkLocalLiteral(r.address)) {
       throw new Error(
-        `Blocked request: ${host} resolves to link-local address ${r.address}`,
+        net.isIP(host) || normalizeIPv4(host) !== null
+          ? `Blocked request to link-local/metadata host: ${host}`
+          : `Blocked request: ${host} resolves to link-local address ${r.address}`,
+      );
+    }
+  }
+
+  // Cleartext is only acceptable for local/private endpoints; a remote http://
+  // endpoint would expose the bearer/API key sent with model requests.
+  if (url.protocol === "http:") {
+    const allLocal =
+      records.length > 0 && records.every((r) => isPrivateOrLoopback(r.address));
+    if (!allLocal) {
+      throw new Error(
+        `HTTP is only allowed for local/private endpoints (got ${host})`,
       );
     }
   }
   return url;
 }
 
-/** True for 169.254.0.0/16 (IPv4 link-local / cloud metadata) or fe80::/10. */
+/**
+ * Resolve a host to its addresses, handling IP literals synchronously and
+ * hostnames via DNS. DNS failures fail closed: if we cannot verify where a
+ * hostname resolves, we must not let a potentially link-local/metadata request
+ * proceed. Shared with `assertPublicUrlResolved` so the two guards can't
+ * diverge on notation/bypass handling.
+ */
+async function resolveHostRecords(host: string): Promise<{ address: string }[]> {
+  if (net.isIP(host) || normalizeIPv4(host) !== null) {
+    return [{ address: normalizeIPv4(host) ?? host }];
+  }
+  // localhost always maps to loopback; resolve it synchronously so a missing
+  // resolver can't block the legitimate local-Ollama case (and so the guard
+  // never depends on DNS for a well-known loopback name).
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    return [{ address: "127.0.0.1" }, { address: "::1" }];
+  }
+  let records: { address: string }[];
+  try {
+    records = await dns.lookup(host, { all: true, verbatim: true });
+  } catch (err) {
+    throw new Error(
+      `Blocked request: cannot resolve host ${host} (${(err as Error).message})`,
+    );
+  }
+  if (records.length === 0) {
+    throw new Error(`Blocked request: host ${host} has no addresses`);
+  }
+  return records;
+}
+
+/** True for a loopback or private (RFC1918 / ULA / CGNAT) address. */
+function isPrivateOrLoopback(ip: string): boolean {
+  // `isPublicIp` already folds IPv4-mapped IPv6 and classifies every
+  // non-public range (loopback, private, link-local, ULA, CGNAT, multicast).
+  return !isPublicIp(ip);
+}
+
+/**
+ * True for 169.254.0.0/16 (IPv4 link-local / cloud metadata), fe80::/10, or
+ * the AWS IMDSv2 IPv6 endpoint fd00:ec2::254. IPv4-mapped / compatible IPv6
+ * literals (`::ffff:169.254.169.254`) are folded to their embedded v4 form
+ * first, matching the classification in `isPublicIp`.
+ */
 function isLinkLocalLiteral(ip: string): boolean {
   const quad = normalizeIPv4(ip);
   if (quad) {
@@ -254,8 +318,34 @@ function isLinkLocalLiteral(ip: string): boolean {
   }
   const groups = expandIPv6(ip);
   if (!groups) return false;
+  // Fold IPv4-mapped / IPv4-compatible addresses (::ffff:a.b.c.d) back to v4.
+  const isZeroPrefix = groups.slice(0, 5).every((g) => g === 0);
+  if (isZeroPrefix && (groups[5] === 0xffff || groups[5] === 0)) {
+    const v4 = [
+      (groups[6] >> 8) & 0xff,
+      groups[6] & 0xff,
+      (groups[7] >> 8) & 0xff,
+      groups[7] & 0xff,
+    ].join(".");
+    const p = v4.split(".").map(Number);
+    return p[0] === 169 && p[1] === 254;
+  }
   const first = groups[0];
-  return (first & 0xffc0) === 0xfe80; // fe80::/10
+  if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  // AWS IMDSv2 over IPv6 ULA (outside fe80::/10).
+  if (
+    groups[0] === 0xfd00 &&
+    groups[1] === 0x0ec2 &&
+    groups[2] === 0 &&
+    groups[3] === 0 &&
+    groups[4] === 0 &&
+    groups[5] === 0 &&
+    groups[6] === 0 &&
+    groups[7] === 0x0254
+  ) {
+    return true; // fd00:ec2::254
+  }
+  return false;
 }
 
 /**
@@ -266,18 +356,7 @@ function isLinkLocalLiteral(ip: string): boolean {
 export async function assertPublicUrlResolved(rawUrl: string): Promise<URL> {
   const url = assertPublicUrl(rawUrl);
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  // Literals were already classified; no DNS involved.
-  if (net.isIP(host) || normalizeIPv4(host) !== null) return url;
-
-  let records: { address: string }[];
-  try {
-    records = await dns.lookup(host, { all: true, verbatim: true });
-  } catch {
-    throw new Error(`Blocked request: cannot resolve host ${host}`);
-  }
-  if (records.length === 0) {
-    throw new Error(`Blocked request: host ${host} has no addresses`);
-  }
+  const records = await resolveHostRecords(host);
   for (const r of records) {
     if (!isPublicIp(r.address)) {
       throw new Error(

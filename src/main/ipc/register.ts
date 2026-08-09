@@ -7,6 +7,8 @@ import { applyOpenAtLogin, setKeepAwake } from "../system";
 import { DEEPWORK_ROOT, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
 import { approvals } from "../security/approvals";
 import { verifyModelConfig } from "../agent/model";
+import { assertConfiguredEndpoint } from "../tools/webGuard";
+import type { Settings } from "../../shared/types";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
 import { scheduler } from "../automation/scheduler";
 import { terminalManager } from "../terminal/manager";
@@ -100,6 +102,28 @@ function asMemoryType(t: string | undefined): MemoryType | undefined {
   return t && (MEMORY_TYPES as readonly string[]).includes(t)
     ? (t as MemoryType)
     : undefined;
+}
+
+/**
+ * Validate every renderer-supplied service endpoint in a settings blob before
+ * it is persisted. A compromised renderer could otherwise save a baseUrl
+ * pointing at a link-local/cloud-metadata address and then trigger
+ * API-key-bearing requests to it through chat:send. Throws on the first
+ * offending URL.
+ */
+async function assertSettingsEndpoints(s: Settings): Promise<void> {
+  const endpoints: string[] = [];
+  if (typeof s?.model?.baseUrl === "string" && s.model.baseUrl) {
+    endpoints.push(s.model.baseUrl);
+  }
+  for (const m of s?.configuredModels ?? []) {
+    if (typeof m?.baseUrl === "string" && m.baseUrl) endpoints.push(m.baseUrl);
+  }
+  const embBase = s?.memory?.embedding?.baseUrl;
+  if (typeof embBase === "string" && embBase) endpoints.push(embBase);
+  for (const url of endpoints) {
+    await assertConfiguredEndpoint(url);
+  }
 }
 
 export function registerIpc(getWin: () => BrowserWindow | null): void {
@@ -221,7 +245,14 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- settings / keys ----
   handle("settings:get", () => loadSettings());
-  handle("settings:save", (_e, s) => saveSettings(s));
+  handle("settings:save", async (_e, s) => {
+    // Validate every renderer-supplied endpoint before it is persisted and can
+    // drive credentialed model/embedding requests. The SSRF guard is enforced
+    // here (not only in models:verify) so a compromised renderer cannot save a
+    // link-local/metadata baseUrl and reach it via chat:send.
+    await assertSettingsEndpoints(s as Settings);
+    saveSettings(s as Settings);
+  });
   handle("settings:getKey", (_e, provider: ProviderKind) => getApiKey(provider));
   handle("settings:setKey", (_e, provider: ProviderKind, key: string) =>
     setApiKey(provider, key),

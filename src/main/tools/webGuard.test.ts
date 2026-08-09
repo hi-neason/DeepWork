@@ -307,4 +307,48 @@ describe("assertConfiguredEndpoint — 用户配置的模型/embedding base URL 
       assertConfiguredEndpoint("http://user:pass@localhost:11434/"),
     ).rejects.toThrow(/Credential/i);
   });
+
+  it("拦截 IPv4-mapped IPv6 写法的元数据地址（::ffff:169.254.169.254）", async () => {
+    await expect(
+      assertConfiguredEndpoint("http://[::ffff:169.254.169.254]/"),
+    ).rejects.toThrow(/link-local|metadata/i);
+    await expect(
+      assertConfiguredEndpoint("http://[::ffff:a9fe:a9fe]/"),
+    ).rejects.toThrow(/link-local|metadata/i);
+  });
+
+  it("拦截 AWS IMDSv2 over IPv6 ULA（fd00:ec2::254）", async () => {
+    await expect(
+      assertConfiguredEndpoint("http://[fd00:ec2::254]/latest/meta-data/"),
+    ).rejects.toThrow(/link-local|metadata/i);
+  });
+
+  it("拦截知名云元数据主机名", async () => {
+    await expect(
+      assertConfiguredEndpoint("http://metadata.google.internal/computeMetadata/v1/"),
+    ).rejects.toThrow(/metadata/i);
+  });
+
+  it("DNS 解析失败时 fail-closed", async () => {
+    vi.spyOn(dns, "lookup").mockRejectedValue(new Error("ENOTFOUND"));
+    await expect(
+      assertConfiguredEndpoint("http://broken.example/v1"),
+    ).rejects.toThrow(/cannot resolve/i);
+  });
+
+  it("禁止对公网主机使用明文 http（防止 API key 泄露）", async () => {
+    vi.spyOn(dns, "lookup").mockResolvedValue([
+      { address: "93.184.216.34", family: 4 },
+    ] as never);
+    await expect(
+      assertConfiguredEndpoint("http://api.example.com/v1"),
+    ).rejects.toThrow(/HTTP is only allowed/i);
+  });
+
+  it("允许对本地/私网主机使用明文 http（本地 Ollama 合法用例）", async () => {
+    const spy = vi.spyOn(dns, "lookup");
+    const u = await assertConfiguredEndpoint("http://localhost:11434");
+    expect(u.hostname).toBe("localhost");
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

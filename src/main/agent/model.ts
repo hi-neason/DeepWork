@@ -155,7 +155,10 @@ export async function verifyModelConfig(cfg: ModelConfig): Promise<VerifyResult>
     }
     const base = (cfg.baseUrl || preset.baseUrl).replace(/\/$/, "");
     if (!base) return { ok: false, message: i18n.t("errors.baseUrlRequired") };
-    await assertConfiguredEndpoint(base);
+    // Only user-supplied endpoints need the SSRF check; the trusted built-in
+    // preset hosts are always safe (consistent with the Anthropic branch and
+    // embedding.ts — avoids a DNS lookup on every verify).
+    if (cfg.baseUrl) await assertConfiguredEndpoint(base);
     const res = await fetch(base + "/models", {
       headers: key ? { Authorization: `Bearer ${key}` } : {},
     });
