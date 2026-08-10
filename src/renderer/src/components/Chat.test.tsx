@@ -178,6 +178,20 @@ describe("Chat component (render layer)", () => {
     expect(screen.getByRole("dialog", { name: "image-1.png" })).toBeTruthy();
   });
 
+  it("renumbers existing screenshots when another same-name image is pasted later", () => {
+    const { container } = render(<Chat {...makeProps()} />);
+    const ta = container.querySelector("textarea")!;
+
+    fireEvent.paste(ta, { clipboardData: { files: [new File(["a"], "image.png", { type: "image/png" })] } });
+    expect(screen.getByText("image.png")).toBeTruthy();
+
+    fireEvent.paste(ta, { clipboardData: { files: [new File(["b"], "image.png", { type: "image/png" })] } });
+
+    expect(screen.queryByText("image.png")).toBeNull();
+    expect(screen.getByText("image-1.png")).toBeTruthy();
+    expect(screen.getByText("image-2.png")).toBeTruthy();
+  });
+
   // C2 fix: render with <Trans> so the tool name appears as plain text instead of [object Object].
   it("chat.needApproval renders the tool name instead of [object Object]", () => {
     const props = makeProps({

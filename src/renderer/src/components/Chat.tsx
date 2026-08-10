@@ -39,6 +39,7 @@ interface RecentFolder {
 
 interface ComposerAttachment {
   id: string;
+  sourceFile: File;
   file: File;
   previewUrl?: string;
 }
@@ -328,27 +329,10 @@ export function Chat({
   const addAttachments = (files: File[]): void => {
     if (files.length === 0) return;
     setAttachments((prev) => {
-      const imageTotals = new Map<string, number>();
-      for (const file of files) {
-        if (!file.type.startsWith("image/")) continue;
-        const { base, ext } = splitFileName(file.name || "image.png");
-        const key = `${base.toLowerCase()}.${ext.toLowerCase()}`;
-        imageTotals.set(key, (imageTotals.get(key) ?? 0) + 1);
+      for (const att of prev) {
+        if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
       }
-      const imageBaseCounts = new Map<string, number>();
-      const nextItems = files.map((file) => {
-        const { base, ext } = splitFileName(file.name || "image.png");
-        const key = `${base.toLowerCase()}.${ext.toLowerCase()}`;
-        const renamed = file.type.startsWith("image/") && (imageTotals.get(key) ?? 0) > 1
-          ? withSequentialImageName(file, 0, imageBaseCounts)
-          : file;
-        return {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          file: renamed,
-          ...(renamed.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(renamed) } : {}),
-        };
-      });
-      return [...prev, ...nextItems];
+      return makeComposerAttachments([...prev.map((att) => att.sourceFile), ...files]);
     });
   };
 
@@ -1060,17 +1044,39 @@ function ImagePreviewOverlay({
   );
 }
 
-function withSequentialImageName(
-  file: File,
-  offset: number,
-  counts: Map<string, number>,
-): File {
+function makeComposerAttachments(files: File[]): ComposerAttachment[] {
+  const imageTotals = new Map<string, number>();
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) continue;
+    const key = imageNameKey(file);
+    imageTotals.set(key, (imageTotals.get(key) ?? 0) + 1);
+  }
+  const imageCounts = new Map<string, number>();
+  return files.map((file) => {
+    const renamed = file.type.startsWith("image/") && (imageTotals.get(imageNameKey(file)) ?? 0) > 1
+      ? withSequentialImageName(file, imageCounts)
+      : file;
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sourceFile: file,
+      file: renamed,
+      ...(renamed.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(renamed) } : {}),
+    };
+  });
+}
+
+function withSequentialImageName(file: File, counts: Map<string, number>): File {
   const { base, ext } = splitFileName(file.name || "image.png");
-  const key = `${base.toLowerCase()}.${ext.toLowerCase()}`;
-  const next = (counts.get(key) ?? offset) + 1;
+  const key = imageNameKey(file);
+  const next = (counts.get(key) ?? 0) + 1;
   counts.set(key, next);
   const renamed = `${base}-${next}.${ext || "png"}`;
   return new File([file], renamed, { type: file.type, lastModified: file.lastModified });
+}
+
+function imageNameKey(file: File): string {
+  const { base, ext } = splitFileName(file.name || "image.png");
+  return `${base.toLowerCase()}.${ext.toLowerCase()}`;
 }
 
 function splitFileName(name: string): { base: string; ext: string } {
