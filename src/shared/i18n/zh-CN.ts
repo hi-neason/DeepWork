@@ -172,6 +172,16 @@ const zhCN = {
     agentNotInitialized: "Agent 尚未初始化",
     nothingToRegenerate: "没有可重新生成的内容。",
   },
+  mcpTrust: {
+    title: "批准 MCP 配置",
+    allow: "允许此配置",
+    stdioMessage: "允许 MCP 服务“{{label}}”运行本地命令吗？",
+    sseMessage: "允许 MCP 服务“{{label}}”连接到此端点吗？",
+    warning:
+      "本地命令将以当前系统用户权限运行。请仅批准你信任的配置；任何执行相关变更都需要重新批准。",
+    denied: "MCP 配置未获批准，因此没有保存。",
+    required: "MCP 配置需要用户批准后才能运行。",
+  },
   chat: {
     noModel: "未选择模型",
     chooseFolderOptional: "选择文件夹（可选）",

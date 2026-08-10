@@ -13,6 +13,13 @@ import type { Settings } from "../../shared/types";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
 import { scheduler } from "../automation/scheduler";
 import { terminalManager } from "../terminal/manager";
+import i18n from "../i18n";
+import {
+  loadMcpTrustGrants,
+  safeMcpApprovalDetail,
+  saveMcpTrustGrants,
+  serversRequiringApproval,
+} from "../security/mcpTrust";
 import {
   artifactActionArgsSchema,
   automationCreateArgsSchema,
@@ -285,6 +292,35 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     // here (not only in models:verify) so a compromised renderer cannot save a
     // link-local/metadata baseUrl and reach it via chat:send.
     await assertSettingsEndpoints(settings);
+    const grants = loadMcpTrustGrants();
+    const pending = serversRequiringApproval(settings.mcpServers, grants);
+    const approved = new Set<string>();
+    for (const server of pending) {
+      const options = {
+        type: "warning" as const,
+        buttons: [i18n.t("common.cancel"), i18n.t("mcpTrust.allow")],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+        title: i18n.t("mcpTrust.title"),
+        message: i18n.t(
+          server.transport === "stdio" ? "mcpTrust.stdioMessage" : "mcpTrust.sseMessage",
+          { label: server.label || server.id },
+        ),
+        detail: `${safeMcpApprovalDetail(server)}\n\n${i18n.t("mcpTrust.warning")}`,
+      };
+      const win = getWin();
+      const result = win
+        ? await dialog.showMessageBox(win, options)
+        : await dialog.showMessageBox(options);
+      if (result.response !== 1) {
+        throw new Error(i18n.t("mcpTrust.denied"));
+      }
+      approved.add(server.id);
+    }
+    // Persist grants before settings: a failed settings write is harmless,
+    // while settings without their grant could be rebuilt into an unapproved process.
+    saveMcpTrustGrants(settings.mcpServers, approved, grants);
     saveSettings(settings);
   });
   handle("settings:getKey", (_e, provider: ProviderKind) => getApiKey(provider));

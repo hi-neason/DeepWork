@@ -174,6 +174,16 @@ const enUS = {
     agentNotInitialized: "Agent not initialized",
     nothingToRegenerate: "Nothing to regenerate.",
   },
+  mcpTrust: {
+    title: "Approve MCP configuration",
+    allow: "Allow configuration",
+    stdioMessage: "Allow MCP server \"{{label}}\" to run a local command?",
+    sseMessage: "Allow MCP server \"{{label}}\" to connect to this endpoint?",
+    warning:
+      "Local commands run with your user account permissions. Approve only configurations you trust. Any execution-related change will require approval again.",
+    denied: "MCP configuration was not approved and was not saved.",
+    required: "MCP configuration requires user approval before it can run.",
+  },
   chat: {
     noModel: "No model selected",
     chooseFolderOptional: "Choose a folder (optional)",

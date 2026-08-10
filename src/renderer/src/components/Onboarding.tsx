@@ -64,10 +64,17 @@ export function Onboarding({ settings, onDone }: Props): React.ReactElement {
       },
       onboarded: true,
     };
-    await window.deepwork.settings.save(updated);
-    if (needsKey) await window.deepwork.settings.setKey(provider, key.trim());
-    await window.deepwork.settings.rebuildAgent();
-    onDone();
+    try {
+      await window.deepwork.settings.save(updated);
+      if (needsKey) await window.deepwork.settings.setKey(provider, key.trim());
+      await window.deepwork.settings.rebuildAgent();
+      onDone();
+    } catch (err) {
+      setResult({
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   const pickWorkspace = async (): Promise<void> => {

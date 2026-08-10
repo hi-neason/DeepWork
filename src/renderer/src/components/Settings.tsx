@@ -68,12 +68,19 @@ export function Settings({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       void (async () => {
-        await window.deepwork.settings.save(settings);
-        await window.deepwork.settings.applySystem();
-        await window.deepwork.settings.rebuildAgent();
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1200);
-        onSavedRef.current?.();
+        try {
+          await window.deepwork.settings.save(settings);
+          await window.deepwork.settings.applySystem();
+          await window.deepwork.settings.rebuildAgent();
+          setSaved(true);
+          setTimeout(() => setSaved(false), 1200);
+          onSavedRef.current?.();
+        } catch (err) {
+          // Native MCP approval already explains a denial. Restore the
+          // persisted settings so an unapproved configuration is not shown as active.
+          console.error("settings save failed", err);
+          setSettings(await window.deepwork.settings.get());
+        }
       })();
     }, SAVE_DEBOUNCE_MS);
     return () => {

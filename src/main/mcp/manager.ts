@@ -3,6 +3,8 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 import type { McpServerConfig, McpServerStatus } from "../../shared/types";
 import { annotateRisk, isReservedToolName } from "../tools/registry";
 import { logger } from "../log/logger";
+import { isMcpServerTrusted, loadMcpTrustGrants } from "../security/mcpTrust";
+import i18n from "../i18n";
 
 export type { McpServerStatus };
 
@@ -51,8 +53,27 @@ export class McpManager {
 
   async buildTools(servers: McpServerConfig[]): Promise<StructuredToolInterface[]> {
     await this.close();
-    const enabled = servers.filter((s) => s.enabled);
     this.lastStatus = new Map();
+    const configuredEnabled = servers.filter((s) => s.enabled);
+    const grants = loadMcpTrustGrants();
+    const enabled: McpServerConfig[] = [];
+    for (const server of configuredEnabled) {
+      if (isMcpServerTrusted(server, grants)) {
+        enabled.push(server);
+      } else {
+        this.lastStatus.set(server.id, {
+          id: server.id,
+          label: server.label || server.id,
+          ok: false,
+          error: i18n.t("mcpTrust.required"),
+        });
+        logger.warn("mcp", "server_untrusted", {
+          id: server.id,
+          label: server.label,
+          transport: server.transport,
+        });
+      }
+    }
     logger.info("mcp", "build_start", { servers: enabled.length });
     if (enabled.length === 0) return [];
 

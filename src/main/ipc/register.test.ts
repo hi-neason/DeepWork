@@ -16,7 +16,7 @@ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 
 vi.mock("better-sqlite3", () => import("../../test/mocks/better-sqlite3"));
 vi.mock("electron", () => import("../../test/mocks/electron"));
-import { __test_getHandlers, shell } from "../../test/mocks/electron";
+import { __test_getHandlers, dialog, shell } from "../../test/mocks/electron";
 
 // ---- main-process service mocks ----
 const agent = vi.hoisted(() => {
@@ -67,6 +67,16 @@ const term = vi.hoisted(() => ({
   kill: vi.fn(),
 }));
 vi.mock("../terminal/manager", () => ({ terminalManager: term }));
+
+const mcpTrust = vi.hoisted(() => ({
+  loadMcpTrustGrants: vi.fn(() => ({} as Record<string, string>)),
+  safeMcpApprovalDetail: vi.fn((server: { id: string; command?: string; env?: Record<string, string> }) =>
+    `ID: ${server.id}\nCommand: ${server.command ?? ""}\nEnvironment variables: ${Object.keys(server.env ?? {}).join(", ")}`,
+  ),
+  saveMcpTrustGrants: vi.fn(),
+  serversRequiringApproval: vi.fn(() => [] as any[]),
+}));
+vi.mock("../security/mcpTrust", () => mcpTrust);
 
 vi.mock("../system", () => ({
   applyOpenAtLogin: vi.fn(),
@@ -175,6 +185,37 @@ function makeEvent() {
       sent.push({ channel, sessionId, event }),
   };
   return { event: { sender }, sent };
+}
+
+function validSettings(mcpServers: any[] = []) {
+  return {
+    model: { provider: "anthropic", model: "claude", workspaceDir: "" },
+    configuredModels: [],
+    mcpServers,
+    permissionMode: "manual",
+    alwaysAllowTools: [],
+    onboarded: true,
+    trayEnabled: true,
+    autoUpdate: true,
+    openAtLogin: false,
+    keepAwake: true,
+    theme: "dark",
+    language: "en-US",
+    fontScale: 1,
+    telemetry: false,
+    showReasoning: true,
+    funMode: false,
+    logEnabled: false,
+    memory: {
+      autoExtract: false,
+      embedding: { provider: "none", model: "" },
+      topK: 10,
+      threshold: 0.45,
+    },
+    memories: [],
+    includeAgentsMd: true,
+    includeClaudeMd: true,
+  };
 }
 
 describe("ipc/register wiring closure", () => {
@@ -400,6 +441,56 @@ describe("ipc/register wiring closure", () => {
     const save = __test_getHandlers().get("settings:save")!;
     await expect(save({}, { permissionMode: "root" })).rejects.toThrow();
     expect(settingsStorage.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("does not persist settings or grants when native MCP approval is denied", async () => {
+    const server = {
+      id: "local",
+      label: "Local MCP",
+      transport: "stdio" as const,
+      command: "node",
+      args: ["server.js"],
+      env: { API_TOKEN: "top-secret" },
+      enabled: true,
+    };
+    mcpTrust.serversRequiringApproval.mockReturnValueOnce([server]);
+    vi.spyOn(dialog, "showMessageBox").mockResolvedValueOnce({ response: 0 } as any);
+    const save = __test_getHandlers().get("settings:save")!;
+
+    await expect(save({}, validSettings([server]))).rejects.toThrow(/not approved/i);
+
+    expect(settingsStorage.saveSettings).not.toHaveBeenCalled();
+    expect(mcpTrust.saveMcpTrustGrants).not.toHaveBeenCalled();
+  });
+
+  it("persists an approved fingerprint before saving settings without exposing env values", async () => {
+    const server = {
+      id: "local",
+      label: "Local MCP",
+      transport: "stdio" as const,
+      command: "node",
+      args: ["server.js"],
+      env: { API_TOKEN: "top-secret" },
+      enabled: true,
+    };
+    const settings = validSettings([server]);
+    mcpTrust.serversRequiringApproval.mockReturnValueOnce([server]);
+    const prompt = vi.spyOn(dialog, "showMessageBox").mockResolvedValueOnce({ response: 1 } as any);
+    const save = __test_getHandlers().get("settings:save")!;
+
+    await save({}, settings);
+
+    const call = prompt.mock.calls[0];
+    const options = call[call.length - 1] as unknown as { detail: string };
+    expect(options.detail).toContain("API_TOKEN");
+    expect(options.detail).not.toContain("top-secret");
+    expect(mcpTrust.saveMcpTrustGrants).toHaveBeenCalledWith(
+      settings.mcpServers,
+      new Set(["local"]),
+      {},
+    );
+    expect(mcpTrust.saveMcpTrustGrants.mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(settingsStorage.saveSettings).mock.invocationCallOrder[0]);
   });
 
   it("bounds project-memory identifiers before filesystem access", async () => {
