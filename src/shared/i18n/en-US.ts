@@ -174,6 +174,13 @@ const enUS = {
     agentNotInitialized: "Agent not initialized",
     nothingToRegenerate: "Nothing to regenerate.",
     turnMaxDuration: "The agent reached its maximum run time and was stopped.",
+    model: {
+      authentication: "The model rejected authentication. Check the API key and endpoint.",
+      rate_limit: "The model provider is rate-limiting requests. Please try again shortly.",
+      network: "The model provider could not be reached. Check your connection and endpoint.",
+      context_limit: "This task exceeds the model's context limit. Start a new task or reduce the supplied context.",
+      unknown: "The model request failed. Check the logs for technical details and try again.",
+    },
   },
   mcpTrust: {
     title: "Approve MCP configuration",

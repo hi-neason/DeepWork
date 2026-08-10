@@ -10,6 +10,20 @@ import i18n from "../i18n";
 import { logger } from "../log/logger";
 import { assertConfiguredEndpoint } from "../tools/webGuard";
 
+export type ModelErrorKind = "authentication" | "rate_limit" | "network" | "context_limit" | "unknown";
+
+/** Classify provider failures without exposing request bodies or credentials. */
+export function classifyModelError(error: unknown): ModelErrorKind {
+  const value = error as { status?: unknown; statusCode?: unknown; message?: unknown; code?: unknown };
+  const status = typeof value?.status === "number" ? value.status : value?.statusCode;
+  const text = `${value?.message ?? ""} ${value?.code ?? ""}`.toLowerCase();
+  if (status === 401 || status === 403 || /api.?key|auth|unauthori[sz]ed|forbidden/.test(text)) return "authentication";
+  if (status === 429 || /rate.?limit|too many requests/.test(text)) return "rate_limit";
+  if (/context.{0,20}(length|limit)|maximum.{0,20}token|too many tokens/.test(text)) return "context_limit";
+  if (/network|fetch failed|econn|enotfound|timeout|timed out/.test(text)) return "network";
+  return "unknown";
+}
+
 /**
  * Resolve credentials/endpoint with this precedence (highest first):
  *   1. values the user entered in DeepWork settings (stored encrypted)

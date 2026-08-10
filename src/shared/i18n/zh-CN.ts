@@ -172,6 +172,13 @@ const zhCN = {
     agentNotInitialized: "Agent 尚未初始化",
     nothingToRegenerate: "没有可重新生成的内容。",
     turnMaxDuration: "Agent 已达到最长运行时间，已停止。",
+    model: {
+      authentication: "模型认证失败，请检查 API Key 和端点。",
+      rate_limit: "模型服务商正在限流，请稍后重试。",
+      network: "无法连接模型服务商，请检查网络和端点。",
+      context_limit: "此任务超过模型上下文限制，请新建任务或减少提供的上下文。",
+      unknown: "模型请求失败，请查看日志中的技术详情后重试。",
+    },
   },
   mcpTrust: {
     title: "批准 MCP 配置",

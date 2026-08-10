@@ -17,7 +17,7 @@ import i18n from "../i18n";
 import type { DeepAgent } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import { createChatModel } from "./model";
+import { classifyModelError, createChatModel } from "./model";
 import { listSessionArtifacts } from "./artifacts";
 import { SessionRuntime } from "./sessionRuntime";
 import { TurnRuntime } from "./turnRuntime";
@@ -1161,10 +1161,8 @@ export class AgentManager {
           },
           sessionId,
         );
-        yield {
-          type: "turn_error",
-          message: err instanceof Error ? err.message : String(err),
-        };
+        const kind = classifyModelError(err);
+        yield { type: "turn_error", message: i18n.t(`errors.model.${kind}`) };
       }
     } finally {
       // H-A4: if the consumer abandoned the generator before `consumed` settled
