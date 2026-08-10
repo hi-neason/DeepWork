@@ -86,10 +86,12 @@ const zhCN = {
       editHint: "直接编辑这个 Markdown 文件。建议按四个区块组织：个人背景 / 工作思路 / 近期关注 / 近期动态（自动抽取的内容会追加到「近期动态」）。",
       saved: "已保存",
       tabs: {
+        structured: "结构化记忆",
         user: "个人记忆",
         timeline: "时间线记忆",
         project: "项目记忆",
       },
+      structured: { empty: "暂无结构化记忆。", invalidate: "标记失效", restore: "恢复" },
       timeline: {
         empty: "暂无时间线记录。每轮对话结束后，当天的关键要点会自动沉淀到这里。",
         dateEmpty: "选择左侧日期查看当天的对话记忆。",

@@ -88,10 +88,12 @@ const enUS = {
       editHint: "Edit this Markdown file directly. Organize it into four blocks: Personal Background / Work Style / Recent Focus / Recent Updates (auto-extracted content is appended to \"Recent Updates\").",
       saved: "Saved",
       tabs: {
+        structured: "Structured",
         user: "Personal Memory",
         timeline: "Timeline Memory",
         project: "Project Memory",
       },
+      structured: { empty: "No structured memories yet.", invalidate: "Mark invalid", restore: "Restore" },
       timeline: {
         empty: "No timeline records yet. After each conversation, the day's key points are automatically captured here.",
         dateEmpty: "Select a date on the left to view that day's conversation memory.",

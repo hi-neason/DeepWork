@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-type MemSubTab = "user" | "timeline" | "project";
+type MemSubTab = "user" | "structured" | "timeline" | "project";
 
 export function MemoryTab(): React.ReactElement {
   const { t } = useTranslation();
@@ -13,6 +13,12 @@ export function MemoryTab(): React.ReactElement {
       <p className="section-desc">{t("settings.memory.desc")}</p>
 
       <div className="mem-tabs">
+        <button
+          className={`mem-tab ${sub === "structured" ? "active" : ""}`}
+          onClick={() => setSub("structured")}
+        >
+          {t("settings.memory.tabs.structured")}
+        </button>
         <button
           className={`mem-tab ${sub === "user" ? "active" : ""}`}
           onClick={() => setSub("user")}
@@ -35,6 +41,8 @@ export function MemoryTab(): React.ReactElement {
 
       {sub === "user" ? (
         <UserMemoryEditor />
+      ) : sub === "structured" ? (
+        <StructuredMemoryViewer />
       ) : sub === "timeline" ? (
         <TimelineViewer />
       ) : (
@@ -42,6 +50,26 @@ export function MemoryTab(): React.ReactElement {
       )}
     </div>
   );
+}
+
+function StructuredMemoryViewer(): React.ReactElement {
+  const { t } = useTranslation();
+  const [items, setItems] = useState<Array<{ id: string; content: string; type?: string; source?: string; status?: string }>>([]);
+  const load = useCallback(async () => setItems(await window.deepwork.memories.list(true)), []);
+  useEffect(() => { void load(); }, [load]);
+  const toggle = async (id: string, status?: string) => {
+    if (status === "invalid") await window.deepwork.memories.restore(id);
+    else await window.deepwork.memories.invalidate(id);
+    await load();
+  };
+  return <div className="setting-card">
+    {items.length === 0 ? <p className="setting-hint">{t("settings.memory.structured.empty")}</p> :
+      <div className="mem-structured-list">{items.map((item) => <div className="mem-structured-item" key={item.id}>
+        <div>{item.content}</div>
+        <small>{item.type ?? "fact"}{item.source ? ` · ${item.source}` : ""}</small>
+        <button className="btn small" onClick={() => void toggle(item.id, item.status)}>{t(item.status === "invalid" ? "settings.memory.structured.restore" : "settings.memory.structured.invalidate")}</button>
+      </div>)}</div>}
+  </div>;
 }
 
 function UserMemoryEditor(): React.ReactElement {
