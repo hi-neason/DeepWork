@@ -207,7 +207,7 @@ export function ModelsTab({
         >
           <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog">
             <h3>{t("settings.models.confirmDeleteTitle")}</h3>
-            <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 4 }}>
+            <p style={{ color: "var(--text-dim)", fontSize: "0.8125rem", marginTop: 4 }}>
               {t("settings.models.confirmDeleteBody", {
                 name: shortId(pendingDelete.id),
               })}

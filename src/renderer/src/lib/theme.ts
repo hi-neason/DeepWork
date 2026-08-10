@@ -4,12 +4,11 @@ import type { Settings } from "../../../shared/types";
  * Apply the selected theme and font scale to <html>. Theme "auto" follows the
  * OS prefers-color-scheme; light/dark force a data-theme attribute.
  *
- * Font scaling uses CSS `zoom` rather than overriding the root `font-size`
- * (rem baseline): the app's stylesheet sets font sizes in px everywhere, so
- * changing the rem baseline had no visible effect. `zoom` scales px values
- * too, so the 0.9–1.3 slider actually resizes the UI. It is well-supported in
- * Chromium/Electron. We still set the root font-size as a rem baseline for
- * any future rem-based sizing.
+ * Font scaling changes the root `font-size` (the rem baseline). All
+ * user-facing font sizes in the stylesheet are expressed in rem (relative to
+ * a 16px baseline), so adjusting this value scales text without affecting
+ * layout dimensions (padding/widths stay in px). The 0.9–1.3 slider maps to
+ * 14.4px–20.8px root size.
  */
 export function applyAppearance(settings: Settings): void {
   const root = document.documentElement;
@@ -17,8 +16,7 @@ export function applyAppearance(settings: Settings): void {
   const dark = settings.theme === "dark" || (settings.theme === "auto" && systemDark);
   root.setAttribute("data-theme", dark ? "dark" : "light");
   const scale = Math.min(1.3, Math.max(0.9, settings.fontScale ?? 1));
-  root.style.fontSize = `${Math.round(scale * 16)}px`;
-  root.style.zoom = String(scale);
+  root.style.fontSize = `${Math.round(scale * 16 * 100) / 100}px`;
   root.lang = settings.language ?? "zh-CN";
 }
 
