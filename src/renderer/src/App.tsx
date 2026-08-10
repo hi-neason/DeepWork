@@ -2,15 +2,15 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import type {
   ArtifactFile,
   DeepWorkEvent,
-  HistoryItem,
   PermissionMode,
   Session,
   Settings as AppSettings,
   SettingsTab,
   TodoItem,
-  TurnStats,
   UpdateStatus,
 } from "../../shared/types";
+import { chatReducer, initialChatState } from "./state/chatState";
+export type { ChatState, TimelineEntry } from "./state/chatState";
 import { Sidebar, type ViewKey } from "./components/Sidebar";
 import { Chat } from "./components/Chat";
 import { Settings } from "./components/Settings";
@@ -23,197 +23,6 @@ import { applyAppearance, watchSystemTheme } from "./lib/theme";
 import { useTurnWatchdog } from "./lib/useTurnWatchdog";
 import i18n from "./i18n";
 
-type ToolRecord = {
-  id: string;
-  name: string;
-  argsPreview: string;
-  outputPreview?: string;
-  isError?: boolean;
-  status: "running" | "done";
-  durationMs?: number;
-};
-
-export type TimelineEntry =
-  | { kind: "msg"; role: "user" | "assistant"; content: string; stats?: TurnStats }
-  | { kind: "reasoning"; text: string; phase?: "tool" | "final" }
-  | { kind: "tool"; id: string };
-
-export type ChatState = {
-  timeline: TimelineEntry[];
-  tools: Record<string, ToolRecord>;
-  /** Wall-clock time each tool call started, used to compute tool latency. */
-  toolStart: Record<string, number>;
-  streaming: boolean;
-  error?: string;
-};
-
-const initialChat: ChatState = { timeline: [], tools: {}, toolStart: {}, streaming: false };
-
-type Action =
-  | { type: "user"; text: string }
-  | { type: "event"; event: DeepWorkEvent }
-  | { type: "history"; timeline: HistoryItem[] }
-  | { type: "reset_to_user" }
-  | { type: "reset" }
-  | { type: "set_error"; message: string };
-
-function reducer(state: ChatState, action: Action): ChatState {
-  if (action.type === "reset") return { ...initialChat };
-  if (action.type === "reset_to_user") {
-    const timeline = [...state.timeline];
-    while (timeline.length > 0) {
-      const last = timeline[timeline.length - 1];
-      if (last.kind === "msg" && last.role === "user") break;
-      timeline.pop();
-    }
-    return { ...state, timeline, tools: {}, streaming: true, error: undefined };
-  }
-  if (action.type === "history") {
-    const timeline: TimelineEntry[] = [];
-    const tools: Record<string, ToolRecord> = {};
-    for (const item of action.timeline) {
-      if (item.kind === "msg" && item.role && item.content) {
-        // Legacy history stored reasoning on the assistant message itself.
-        // Render it as a preceding reasoning block for chronological parity.
-        if (item.role === "assistant" && item.reasoning) {
-          timeline.push({ kind: "reasoning", text: item.reasoning, phase: "final" });
-        }
-        timeline.push({ kind: "msg", role: item.role, content: item.content, stats: item.stats });
-      } else if (item.kind === "reasoning" && item.text) {
-        timeline.push({ kind: "reasoning", text: item.text, phase: item.phase ?? "final" });
-      } else if (item.kind === "tool" && item.id) {
-        timeline.push({ kind: "tool", id: item.id });
-        if (item.name) {
-          tools[item.id] = {
-            id: item.id,
-            name: item.name,
-            argsPreview: item.argsPreview ?? "",
-            outputPreview: item.outputPreview,
-            isError: item.isError,
-            status: item.status ?? "done",
-          };
-        }
-      }
-    }
-    return { timeline, tools, toolStart: {}, streaming: false };
-  }
-  if (action.type === "user") {
-    return {
-      ...state,
-      timeline: [...state.timeline, { kind: "msg", role: "user", content: action.text }],
-      streaming: true,
-      error: undefined,
-    };
-  }
-  if (action.type === "set_error") {
-    return { ...state, streaming: false, error: action.message };
-  }
-  const e = action.event;
-  switch (e.type) {
-    case "turn_state":
-      return {
-        ...state,
-        streaming: e.status.state === "running" ||
-          e.status.state === "waiting_approval" ||
-          e.status.state === "cancelling",
-      };
-    case "message_delta": {
-      const timeline = [...state.timeline];
-      for (let i = timeline.length - 1; i >= 0; i--) {
-        const item = timeline[i];
-        if (item.kind === "msg" && item.role === "assistant") {
-          timeline[i] = { ...item, content: item.content + e.text };
-          return { ...state, timeline };
-        }
-        if (item.kind === "msg" && item.role === "user") break;
-      }
-      timeline.push({ kind: "msg", role: "assistant", content: e.text });
-      return { ...state, timeline };
-    }
-    case "reasoning_phase_started": {
-      return {
-        ...state,
-        timeline: [...state.timeline, { kind: "reasoning", text: "", phase: "tool" }],
-      };
-    }
-    case "reasoning_delta": {
-      const timeline = [...state.timeline];
-      for (let i = timeline.length - 1; i >= 0; i--) {
-        const item = timeline[i];
-        if (item.kind === "reasoning") {
-          timeline[i] = { ...item, text: item.text + e.text };
-          return { ...state, timeline };
-        }
-      }
-      return state;
-    }
-    case "reasoning_phase_finished": {
-      const timeline = [...state.timeline];
-      for (let i = timeline.length - 1; i >= 0; i--) {
-        const item = timeline[i];
-        if (item.kind === "reasoning") {
-          if (!item.text) {
-            // Non-reasoning models can open an empty phase; drop it.
-            timeline.splice(i, 1);
-          } else {
-            timeline[i] = { ...item, phase: e.phase };
-          }
-          return { ...state, timeline };
-        }
-      }
-      return state;
-    }
-    case "tool_call_started": {
-      const tools = {
-        ...state.tools,
-        [e.id]: { id: e.id, name: e.name, argsPreview: e.argsPreview, status: "running" as const },
-      };
-      const timeline = state.tools[e.id]
-        ? state.timeline
-        : [...state.timeline, { kind: "tool" as const, id: e.id }];
-      return { ...state, tools, timeline, toolStart: { ...state.toolStart, [e.id]: Date.now() } };
-    }
-    case "tool_call_finished": {
-      const existing = state.tools[e.id];
-      const startedAt = state.toolStart[e.id];
-      const durationMs = startedAt ? Date.now() - startedAt : undefined;
-      const tools = {
-        ...state.tools,
-        [e.id]: {
-          id: e.id,
-          name: e.name,
-          argsPreview: existing?.argsPreview ?? "",
-          outputPreview: e.outputPreview,
-          isError: e.isError,
-          status: "done" as const,
-          ...(durationMs !== undefined ? { durationMs } : {}),
-        },
-      };
-      return { ...state, tools };
-    }
-    case "turn_stats": {
-      // Attach telemetry to the most recent assistant message in the timeline.
-      const timeline = [...state.timeline];
-      for (let i = timeline.length - 1; i >= 0; i--) {
-        const item = timeline[i];
-        if (item.kind === "msg" && item.role === "assistant") {
-          timeline[i] = { ...item, stats: e };
-          break;
-        }
-      }
-      return { ...state, timeline };
-    }
-    case "turn_completed":
-      return { ...state, streaming: false };
-    case "turn_aborted":
-      return { ...state, streaming: false };
-    case "turn_error":
-      return { ...state, streaming: false, error: e.message };
-    default:
-      return state;
-  }
-}
-
 export function App(): React.ReactElement {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -221,7 +30,7 @@ export function App(): React.ReactElement {
   // opened from run history). Resolved on demand so title/model/cwd work even
   // though it's hidden from `sessions`.
   const [extraSession, setExtraSession] = useState<Session | null>(null);
-  const [chat, dispatch] = useReducer(reducer, initialChat);
+  const [chat, dispatch] = useReducer(chatReducer, initialChatState);
   const [approval, setApproval] = useState<DeepWorkEvent | null>(null);
   const [view, setView] = useState<ViewKey>("chat");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
