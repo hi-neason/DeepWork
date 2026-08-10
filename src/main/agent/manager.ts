@@ -21,6 +21,7 @@ import { classifyModelError, createChatModel } from "./model";
 import { listSessionArtifacts } from "./artifacts";
 import { SessionRuntime } from "./sessionRuntime";
 import { TurnRuntime } from "./turnRuntime";
+import { projectHistory } from "./history";
 import { createApprovalMiddleware } from "./middleware";
 import { createSanitizeMiddleware, setThreadRoot } from "./sanitize";
 import { createContextMiddleware } from "./context";
@@ -1392,63 +1393,7 @@ export class AgentManager {
     const config = { configurable: { thread_id: sessionId } };
     const state: any = await (agent as any).getState(config);
     const messages: any[] = state?.values?.messages ?? [];
-
-    const timeline: HistoryItem[] = [];
-    const toolResults = new Map<string, string>();
-    let lastTodos: TodoItem[] = [];
-    for (const m of messages) {
-      const role = m._getType?.() ?? m.getType?.();
-      if (role === "human") {
-        const content = stringContent(m.content);
-        if (content) timeline.push({ kind: "msg", role: "user", content });
-      } else if (role === "ai" || role === "AIMessageChunk") {
-        const text = stringContent(m.content);
-        // Restore reasoning/thinking for reasoning models. Each LLM invocation
-        // is persisted as a separate AIMessage with its own reasoning_content,
-        // even when the message content is empty (tool-call planning messages).
-        // Preserve them as standalone reasoning timeline entries so they survive
-        // reload and interleave correctly with tool calls.
-        const reasoning = extractReasoning(m.content, m.additional_kwargs);
-        if (reasoning) {
-          timeline.push({
-            kind: "reasoning",
-            text: reasoning.slice(0, 8000),
-            phase: m.tool_calls?.length ? "tool" : "final",
-          });
-        }
-        if (text) {
-          timeline.push({
-            kind: "msg",
-            role: "assistant",
-            content: text,
-          });
-        }
-        for (const tc of m.tool_calls ?? []) {
-          if (!tc?.id) continue;
-          if (tc.name === "write_todos") {
-            const parsed = parseTodos(tc.args);
-            if (parsed) lastTodos = parsed;
-          }
-          timeline.push({
-            kind: "tool",
-            id: tc.id,
-            name: tc.name,
-            argsPreview: preview(tc.args),
-            status: "done" as const,
-            outputPreview: toolResults.get(tc.id),
-          });
-        }
-      } else if (role === "tool") {
-        if (m.tool_call_id) toolResults.set(m.tool_call_id, preview(m.content));
-      }
-    }
-    for (const item of timeline) {
-      if (item.kind === "tool" && item.id && !item.outputPreview) {
-        const out = toolResults.get(item.id);
-        if (out) item.outputPreview = out;
-      }
-    }
-    return { timeline, todos: lastTodos };
+    return projectHistory(messages, (message) => extractReasoning(message.content, message.additional_kwargs));
   }
 }
 
