@@ -3,6 +3,24 @@ import path from "node:path";
 
 export type LogLevel = "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR";
 
+const LEVEL_WEIGHT: Record<LogLevel, number> = {
+  TRACE: 10,
+  DEBUG: 20,
+  INFO: 30,
+  WARN: 40,
+  ERROR: 50,
+};
+
+// File logging keeps every level; the console is threshold-gated so noisy
+// high-frequency channels (e.g. per-IPC "handled" debug lines) don't flood the
+// dev terminal. Override with DEEPWORK_CONSOLE_LOG_LEVEL=DEBUG|TRACE|...
+const DEFAULT_CONSOLE_LEVEL: LogLevel = "INFO";
+function resolveConsoleLevel(): LogLevel {
+  const raw = (process.env.DEEPWORK_CONSOLE_LOG_LEVEL ?? "").trim().toUpperCase();
+  return raw in LEVEL_WEIGHT ? (raw as LogLevel) : DEFAULT_CONSOLE_LEVEL;
+}
+let consoleLevel: LogLevel = resolveConsoleLevel();
+
 let cachedEnabled = false;
 let cachedWorkspace = "";
 const ensuredDirs = new Set<string>();
@@ -103,11 +121,13 @@ export function log(
     ...(sanitize(meta) ?? {}),
   };
   const line = JSON.stringify(entry) + "\n";
-  const cons = (console as unknown as Record<string, (...a: unknown[]) => void>)[
-    level.toLowerCase()
-  ] ?? console.log;
   try {
-    cons(`[${scope}]`, message, meta ?? "");
+    if (LEVEL_WEIGHT[level] >= LEVEL_WEIGHT[consoleLevel]) {
+      const cons = (console as unknown as Record<string, (...a: unknown[]) => void>)[
+        level.toLowerCase()
+      ] ?? console.log;
+      cons(`[${scope}]`, message, meta ?? "");
+    }
   } catch {
     /* ignore */
   }
