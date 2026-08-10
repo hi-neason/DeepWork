@@ -351,7 +351,7 @@ export function AutomationsView(): React.ReactElement {
                 <input type="checkbox" checked={a.enabled} onChange={() => toggle(a)} />
                 <span>{a.title}</span>
               </label>
-              {!a.enabled && <span className="auto-paused-badge">{t("automations.pausedBadge")}</span>}
+              {!a.enabled && <span className="auto-paused-badge">{t(a.autoPaused ? "automations.autoPausedBadge" : "automations.pausedBadge")}</span>}
               <div className="auto-actions">
                 <button
                   className="btn small"
@@ -384,6 +384,11 @@ export function AutomationsView(): React.ReactElement {
               {a.lastStatus && (
                 <span className={`auto-status ${statusClass(a.lastStatus)}`}>
                   {t("automations.last", { status: t(`automations.status.${a.lastStatus}`) })}
+                </span>
+              )}
+              {(a.consecutiveFailures ?? 0) > 0 && (
+                <span className="auto-status error" title={a.autoPaused ? t("automations.autoPausedReason") : undefined}>
+                  {t("automations.failureCount", { count: a.consecutiveFailures })}
                 </span>
               )}
             </div>
