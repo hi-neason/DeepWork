@@ -146,12 +146,12 @@ export function listMemoriesByScope(
   return rows.map(toItem);
 }
 
-export function listAllMemories(): MemoryItem[] {
+export function listAllMemories(includeInvalid = false): MemoryItem[] {
   const rows = getDb()
     .prepare(
       `SELECT id, content, scope, scope_key, created_at, embedding, type, importance, status, invalid_at, source
        FROM memories
-       WHERE scope = 'global' AND (status IS NULL OR status = 'active')
+       WHERE scope = 'global' ${includeInvalid ? "" : "AND (status IS NULL OR status = 'active')"}
        ORDER BY created_at ASC`,
     )
     .all() as MemoryRow[];
@@ -223,6 +223,11 @@ export function invalidateMemory(id: string): void {
   getDb()
     .prepare("UPDATE memories SET status = 'invalid', invalid_at = ? WHERE id = ?")
     .run(Date.now(), id);
+}
+
+/** Restore a soft-invalidated memory without changing its content or source. */
+export function restoreMemory(id: string): void {
+  getDb().prepare("UPDATE memories SET status = 'active', invalid_at = NULL WHERE id = ?").run(id);
 }
 
 export function removeMemory(id: string): void {

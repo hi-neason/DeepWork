@@ -67,7 +67,7 @@ import {
   getApiKey,
   setApiKey,
 } from "../storage/settings";
-import { listAllMemories, listMemoriesByScope, addMemory, removeMemory, searchMemories, editMemory } from "../storage/memories";
+import { listAllMemories, listMemoriesByScope, addMemory, removeMemory, searchMemories, editMemory, invalidateMemory, restoreMemory } from "../storage/memories";
 import {
   readUserMemory,
   saveUserMemory,
@@ -442,7 +442,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
 
   // ---- memories ----
-  handle("memories:list", () => listAllMemories());
+  handle("memories:list", (_e, includeInvalid?: boolean) => listAllMemories(includeInvalid === true));
   handle("memories:listByScope", (_e, scopeKey: string, type?: string) =>
     listMemoriesByScope(scopeKey, asMemoryType(type)),
   );
@@ -454,6 +454,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
   handle("memories:edit", (_e, id: string, content: string) => editMemory(id, content));
   handle("memories:remove", (_e, id: string) => removeMemory(id));
+  handle("memories:invalidate", (_e, id: string) => invalidateMemory(id));
+  handle("memories:restore", (_e, id: string) => restoreMemory(id));
 
   // ---- user memory (MD file) ----
   handle("userMemory:read", () => {

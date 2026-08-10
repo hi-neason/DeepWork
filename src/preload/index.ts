@@ -160,7 +160,7 @@ const api = {
       ipcRenderer.invoke("approval:respond", id, decision),
   },
   memories: {
-    list: (): Promise<MemoryItem[]> => ipcRenderer.invoke("memories:list"),
+    list: (includeInvalid?: boolean): Promise<MemoryItem[]> => ipcRenderer.invoke("memories:list", includeInvalid),
     listByScope: (scopeKey: string, type?: MemoryType): Promise<MemoryItem[]> =>
       ipcRenderer.invoke("memories:listByScope", scopeKey, type),
     search: (scopeKey: string, query: string, topK?: number): Promise<MemoryItem[]> =>
@@ -170,6 +170,8 @@ const api = {
     edit: (id: string, content: string): Promise<void> =>
       ipcRenderer.invoke("memories:edit", id, content),
     remove: (id: string): Promise<void> => ipcRenderer.invoke("memories:remove", id),
+    invalidate: (id: string): Promise<void> => ipcRenderer.invoke("memories:invalidate", id),
+    restore: (id: string): Promise<void> => ipcRenderer.invoke("memories:restore", id),
   },
   userMemory: {
     read: (): Promise<Record<string, string>> => ipcRenderer.invoke("userMemory:read"),
