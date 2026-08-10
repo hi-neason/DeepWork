@@ -60,4 +60,16 @@ describe("McpManager trust enforcement", () => {
       },
     });
   });
+
+  it("reports a bounded discovery timeout and closes the client", async () => {
+    trust.isMcpServerTrusted.mockReturnValueOnce(true);
+    client.getTools.mockReturnValueOnce(new Promise(() => undefined));
+    const manager = new McpManager(5);
+
+    expect(await manager.buildTools([server])).toEqual([]);
+    expect(manager.getLastStatus()).toEqual([
+      expect.objectContaining({ id: "local", ok: false, error: expect.stringContaining("timed out") }),
+    ]);
+    expect(client.close).toHaveBeenCalled();
+  });
 });

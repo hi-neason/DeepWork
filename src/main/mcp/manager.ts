@@ -8,6 +8,18 @@ import i18n from "../i18n";
 
 export type { McpServerStatus };
 
+export const MCP_TOOLS_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    operation.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
 /**
  * Manages MCP client connections for enabled servers. A fresh client + tool set
  * is built whenever the agent is (re)created; MCP tools are all treated as
@@ -17,6 +29,8 @@ export class McpManager {
   private client: MultiServerMCPClient | null = null;
   /** Outcome of the most recent buildTools run, keyed by server id. */
   private lastStatus = new Map<string, McpServerStatus>();
+
+  constructor(private readonly toolsTimeoutMs = MCP_TOOLS_TIMEOUT_MS) {}
 
   /** Per-server outcomes from the last build (for the Connectors UI). */
   getLastStatus(): McpServerStatus[] {
@@ -112,10 +126,11 @@ export class McpManager {
     try {
       this.client = new MultiServerMCPClient(config);
       try {
-        tools = await this.client.getTools();
+        tools = await withTimeout(this.client.getTools(), this.toolsTimeoutMs, "MCP tool discovery");
       } catch (err) {
         buildError = err instanceof Error ? err.message : String(err);
         logger.error("mcp", "build_failed", { error: buildError });
+        await this.close();
         tools = [];
       }
     } catch (err) {
