@@ -1,20 +1,20 @@
-# DeepWork E2E 测试（Electron + Playwright）
+# DeepWork E2E Tests (Electron + Playwright)
 
-本目录用于**关键 IPC 链路**的端到端测试，例如 `chat:send → chat:event`、
-设置读写、记忆/时间线读写等跨进程行为。
+This directory covers critical cross-process IPC paths, such as session
+creation, settings persistence, and chat event delivery.
 
-## 运行前提
+## Prerequisites
 
-1. 构建应用：`pnpm dist`（产出可启动的打包产物）。
-2. 安装浏览器（首次）：`pnpm exec playwright install`。
-3. 执行：`pnpm test:e2e`。
+1. Build the app: `pnpm build`.
+2. Install Playwright dependencies if needed: `pnpm exec playwright install`.
+3. Run: `pnpm test:e2e`.
 
-## 用例骨架
+## Test setup
 
 ```ts
 import { test, expect, _electron as electron } from "@playwright/test";
 
-test("chat:send 能收到 chat:event 流式事件", async () => {
+test("chat:send receives streamed chat:event messages", async () => {
   const app = await electron.launch({ args: ["."] });
   const page = await app.firstWindow();
   // 监听渲染进程事件并断言
@@ -22,9 +22,13 @@ test("chat:send 能收到 chat:event 流式事件", async () => {
 });
 ```
 
-## 覆盖范围（后续阶段补齐）
+Each test launches Electron against a fresh temporary HOME directory, so it
+never reads or writes the developer's actual DeepWork data.
 
-- [ ] `chat:send` → `chat:event` 完整流转（含 tool_call / approval_requested）
-- [ ] `chat:cancel` 仅取消当前会话
-- [ ] 设置项持久化（reload 后仍在）
-- [ ] 用户记忆 / 时间线读写
+## Coverage
+
+- [x] Renderer → preload → validated session IPC create/list/delete flow
+- [ ] `chat:send` → `chat:event` event delivery (requires a deterministic test model)
+- [ ] `chat:cancel` affects only the active session
+- [ ] Settings persistence after reload
+- [ ] User memory and timeline operations
