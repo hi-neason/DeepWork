@@ -12,7 +12,7 @@ const providerSchema = z.enum([
   "anthropic", "openai", "ollama", "deepseek", "qwen",
   "minimax", "kimi", "openrouter", "custom",
 ]);
-const permissionModeSchema = z.enum(["manual", "auto", "plan"]);
+const permissionModeSchema = z.enum(["manual", "auto", "auto-write", "auto-exec", "plan"]);
 const urlStringSchema = z.union([z.literal(""), z.string().url().max(4096)]);
 const boundedString = (max: number) => z.string().max(max).refine(
   (value) => !value.includes("\0"),

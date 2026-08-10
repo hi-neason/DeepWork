@@ -425,9 +425,11 @@ const enUS = {
     instructionsLabel: "Prompt",
     instructionsPlaceholder: "Summarize unread GitHub notifications and prepare a short standup note.",
     permissionLabel: "Run mode",
-    permissionHint: "Auto is recommended: non-GUI tools run without prompting.",
+    permissionHint: "Choose the narrowest automatic mode needed. GUI actions always require approval.",
     mode: {
       auto: "Auto",
+      "auto-write": "Auto write",
+      "auto-exec": "Auto execute",
       manual: "Manual approval",
       plan: "Plan only",
     },

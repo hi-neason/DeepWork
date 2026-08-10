@@ -78,9 +78,14 @@ export function evaluateApprovalDecision(ctx: ApprovalContext): ApprovalVerdict 
       return { action: "block", blockReason: "unattended-highrisk" };
     }
   }
-  // Interactive `auto` mode still requires per-use approval for GUI tools;
-  // write/exec/external below that tier can auto-run (and honor always-allow).
-  const autoAllowed = mode === "auto" && !GUI_TOOLS.has(toolName);
+  // GUI tools always ask. New automatic modes grant the minimum useful risk
+  // tier; the historical broad `auto` value remains readable for users with
+  // saved settings from earlier versions.
+  const autoAllowed =
+    !GUI_TOOLS.has(toolName) &&
+    (mode === "auto" ||
+      (mode === "auto-write" && risk === "write") ||
+      (mode === "auto-exec" && (risk === "write" || risk === "exec")));
   const mustAsk =
     !autoAllowed &&
     needsApproval(risk, toolName) &&

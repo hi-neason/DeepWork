@@ -150,7 +150,7 @@ export function Chat({
 
   const activeModel = sessionModel ?? pendingModel ?? enabledModels[0]?.id;
   // Effective permission mode for this send (pending override → global default).
-  const currentMode: PermissionMode = pendingMode ?? defaultMode ?? "auto";
+  const currentMode: PermissionMode = pendingMode ?? defaultMode ?? "auto-write";
   const activeModelLabel = useMemo(() => {
     if (!activeModel) return t("chat.noModel");
     const m = enabledModels.find((x) => x.id === activeModel);
@@ -800,7 +800,7 @@ export function Chat({
                 </button>
                 {showModeMenu && (
                   <div className="mode-menu">
-                    {(["auto", "manual", "plan"] as PermissionMode[]).map((m) => (
+                    {(["manual", "auto-write", "auto-exec", "plan"] as PermissionMode[]).map((m) => (
                       <div
                         key={m}
                         className={`mode-menu-item ${currentMode === m ? "active" : ""}`}

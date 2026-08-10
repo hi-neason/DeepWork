@@ -11,7 +11,12 @@ export type ProviderKind =
   | "openrouter"
   | "custom";
 
-export type PermissionMode = "manual" | "auto" | "plan";
+/**
+ * `auto` is retained for existing saved settings. New UI choices use the
+ * narrower modes so users can distinguish automatic file writes from shell
+ * execution. It preserves its historical broad behavior for compatibility.
+ */
+export type PermissionMode = "manual" | "auto" | "auto-write" | "auto-exec" | "plan";
 
 /** A model entry configured for a provider (enabled => shown in picker). */
 export interface ConfiguredModel {
@@ -163,9 +168,7 @@ export interface Automation {
   updatedAt: number;
   lastRunAt?: number;
   lastStatus?: AutomationStatus;
-  /** Permission mode used when the automation runs unattended.
-   *  "auto" is recommended so non-GUI tools execute without blocking.
-   */
+  /** Permission mode used when the automation runs unattended. */
   permissionMode?: PermissionMode;
   /** Skill names to enable for this automation. */
   skills?: string[];
@@ -187,7 +190,9 @@ export interface Settings {
   mcpServers: McpServerConfig[];
   /**
    * "manual" (default): ask before write/exec/external tools; GUI tools always ask.
-   * "auto": auto-approve write/exec/external tools; GUI tools still require per-use approval.
+   * "auto-write": auto-approve file writes only; exec/external tools still ask.
+   * "auto-exec": auto-approve writes and shell execution; external tools still ask.
+   * "auto": legacy broad auto-approval, retained for existing settings only.
    * "plan": read-only planning mode — write/exec/GUI tools are blocked and the agent
    *         should present a plan for approval.
    */

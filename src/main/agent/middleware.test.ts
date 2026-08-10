@@ -85,6 +85,42 @@ describe("agent/middleware - evaluateApprovalDecision (5 gates)", () => {
     ).toEqual({ action: "allow" });
   });
 
+  it("auto-write allows writes but asks before shell execution", () => {
+    expect(
+      evaluateApprovalDecision({ ...base, mode: "auto-write", unattended: false }),
+    ).toEqual({ action: "allow" });
+    expect(
+      evaluateApprovalDecision({
+        toolName: "execute",
+        risk: "exec",
+        mode: "auto-write",
+        unattended: false,
+        alwaysAllowed: false,
+      }),
+    ).toEqual({ action: "ask" });
+  });
+
+  it("auto-exec allows writes and shell execution but asks before external tools", () => {
+    expect(
+      evaluateApprovalDecision({
+        toolName: "execute",
+        risk: "exec",
+        mode: "auto-exec",
+        unattended: false,
+        alwaysAllowed: false,
+      }),
+    ).toEqual({ action: "allow" });
+    expect(
+      evaluateApprovalDecision({
+        toolName: "mcp_weather",
+        risk: "external",
+        mode: "auto-exec",
+        unattended: false,
+        alwaysAllowed: false,
+      }),
+    ).toEqual({ action: "ask" });
+  });
+
   it("manual + file write + not always_allow -> ASK", () => {
     expect(
       evaluateApprovalDecision({ ...base, mode: "manual", unattended: false }),

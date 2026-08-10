@@ -417,9 +417,11 @@ const zhCN = {
     instructionsLabel: "提示词",
     instructionsPlaceholder: "总结未读的 GitHub 通知，并准备一段简短的站会记录。",
     permissionLabel: "运行模式",
-    permissionHint: "建议设为 Auto：非 GUI 工具会自动执行，无需人工审批。",
+    permissionHint: "选择满足需求的最小自动权限。GUI 操作始终需要审批。",
     mode: {
       auto: "Auto",
+      "auto-write": "自动写入",
+      "auto-exec": "自动执行",
       manual: "手动审批",
       plan: "仅规划",
     },

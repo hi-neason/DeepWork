@@ -79,7 +79,7 @@ function emptyForm(): FormState {
     onceTime: formatTime(),
     validFrom: "",
     validUntil: "",
-    permissionMode: "auto",
+    permissionMode: "auto-write",
     skills: [],
     mcpServerIds: [],
     model: "",
@@ -108,7 +108,7 @@ function formFromAutomation(a: Automation): FormState {
     onceTime,
     validFrom: a.validFrom || "",
     validUntil: a.validUntil || "",
-    permissionMode: a.permissionMode || "auto",
+    permissionMode: a.permissionMode || "auto-write",
     skills: a.skills || [],
     mcpServerIds: a.mcpServerIds || [],
     model: a.model || "",
@@ -580,7 +580,7 @@ export function AutomationsView(): React.ReactElement {
                   </div>
 
                   <div className="auto-mode-seg">
-                    {(["auto", "manual", "plan"] as PermissionMode[]).map((m) => (
+                    {(["manual", "auto-write", "auto-exec", "plan"] as PermissionMode[]).map((m) => (
                       <button
                         key={m}
                         type="button"

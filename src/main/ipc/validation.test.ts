@@ -134,6 +134,8 @@ describe("IPC validation", () => {
     };
     expect(settingsSchema.parse(settings)).toEqual(settings);
     expect(() => settingsSchema.parse({ ...settings, permissionMode: "root" })).toThrow();
+    expect(settingsSchema.parse({ ...settings, permissionMode: "auto-write" }).permissionMode).toBe("auto-write");
+    expect(settingsSchema.parse({ ...settings, permissionMode: "auto-exec" }).permissionMode).toBe("auto-exec");
     expect(() => settingsSchema.parse({
       ...settings,
       mcpServers: [{ id: "m1", label: "Local", transport: "stdio", enabled: true }],
