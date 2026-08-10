@@ -332,10 +332,10 @@ export function AutomationsView(): React.ReactElement {
   return (
     <div className="settings-section">
       <div className="auto-list-header">
-        <div>
-          <h2>{t("automations.title")}</h2>
-          <p className="auto-intro">{t("automations.intro")}</p>
-        </div>
+        <h2>{t("automations.title")}</h2>
+        <p className="auto-intro">{t("automations.intro")}</p>
+      </div>
+      <div className="auto-toolbar">
         <button className="btn primary" onClick={openCreate}>
           {t("automations.new")}
         </button>

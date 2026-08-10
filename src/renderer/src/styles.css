@@ -1759,16 +1759,20 @@ body,
 
 /* ---- automations ---- */
 .auto-list-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 18px;
+  display: block;
+  margin-bottom: 16px;
 }
 .auto-list-header h2 { margin: 0; }
 .auto-intro {
   color: var(--text-dim);
   font-size: 0.8125rem;
   margin: 4px 0 0;
+}
+.auto-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 .auto-empty { color: var(--text-dim); }
 .auto-list { display: flex; flex-direction: column; gap: 12px; }
