@@ -1,4 +1,4 @@
-import type { DeepWorkEvent, HistoryItem, TurnStats } from "../../../shared/types";
+import type { Attachment, DeepWorkEvent, HistoryItem, TurnStats } from "../../../shared/types";
 
 type ToolRecord = {
   id: string;
@@ -11,7 +11,7 @@ type ToolRecord = {
 };
 
 export type TimelineEntry =
-  | { kind: "msg"; role: "user" | "assistant"; content: string; stats?: TurnStats }
+  | { kind: "msg"; role: "user" | "assistant"; content: string; attachments?: Attachment[]; stats?: TurnStats }
   | { kind: "reasoning"; text: string; phase?: "tool" | "final" }
   | { kind: "tool"; id: string };
 
@@ -31,7 +31,7 @@ export const initialChatState: ChatState = {
 };
 
 export type ChatAction =
-  | { type: "user"; text: string }
+  | { type: "user"; text: string; attachments?: Attachment[] }
   | { type: "event"; event: DeepWorkEvent }
   | { type: "history"; timeline: HistoryItem[] }
   | { type: "reset_to_user" }
@@ -77,9 +77,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     return { timeline, tools, toolStart: {}, streaming: false };
   }
   if (action.type === "user") {
+    const userEntry: TimelineEntry = {
+      kind: "msg",
+      role: "user",
+      content: action.text,
+      ...(action.attachments && action.attachments.length > 0 ? { attachments: action.attachments } : {}),
+    };
     return {
       ...state,
-      timeline: [...state.timeline, { kind: "msg", role: "user", content: action.text }],
+      timeline: [...state.timeline, userEntry],
       streaming: true,
       error: undefined,
     };

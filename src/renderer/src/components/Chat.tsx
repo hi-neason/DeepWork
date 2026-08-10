@@ -16,6 +16,7 @@ function DeepWorkLabel() {
 import type { ChatState } from "../App";
 import type {
   ArtifactFile,
+  Attachment,
   ConfiguredModel,
   DeepWorkEvent,
   PermissionMode,
@@ -558,9 +559,14 @@ export function Chat({
                   return (
                     <div key={seg.id} ref={(el) => { segmentRefs.current[i] = el; }} className={`msg ${seg.role}`}>
                       <div className="role">{seg.role === "user" ? t("chat.roleUser") : <DeepWorkLabel />}</div>
-                      <div className="bubble">
-                        {isAssistant ? <Markdown content={seg.content} /> : seg.content}
-                      </div>
+                      {(seg.content || isAssistant) && (
+                        <div className="bubble">
+                          {isAssistant ? <Markdown content={seg.content} /> : seg.content}
+                        </div>
+                      )}
+                      {!isAssistant && seg.attachments && seg.attachments.length > 0 && (
+                        <MessageAttachments attachments={seg.attachments} />
+                      )}
                       {isAssistant && (
                         <div className="msg-actions">
                           <button title={t("common.copy")} onClick={() => copy(seg.content)}>
@@ -917,6 +923,36 @@ function ThinkingIndicator({ chat }: { chat: ChatState }): React.ReactElement | 
   );
 }
 
+function MessageAttachments({ attachments }: { attachments: Attachment[] }): React.ReactElement {
+  return (
+    <div className="message-attachments">
+      {attachments.map((att) => (
+        <div key={att.id} className={`message-attachment ${att.kind}`}>
+          {att.kind === "image" ? (
+            <img src={att.dataUrl} alt={att.name} />
+          ) : (
+            <span className="message-attachment-icon">{att.kind === "pdf" ? "PDF" : "TXT"}</span>
+          )}
+          <span className="message-attachment-name" title={att.name}>{att.name}</span>
+          <span className="message-attachment-size">{formatBytes(att.size)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+
 /** Tools whose calls we don't render as cards (planning/housekeeping). */
 const HIDDEN_TOOLS = new Set(["write_todos", "Task"]);
 
@@ -1035,6 +1071,7 @@ type Segment =
       kind: "msg";
       role: "user" | "assistant";
       content: string;
+      attachments?: Attachment[];
       stats?: TurnStats;
     }
   | {
@@ -1149,6 +1186,7 @@ export function buildSegments(chat: ChatState): Segment[] {
         kind: "msg",
         role: item.role,
         content: item.content,
+        attachments: item.attachments,
         stats: item.stats,
       });
     } else if (item.kind === "reasoning") {

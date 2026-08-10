@@ -298,10 +298,10 @@ export function App(): React.ReactElement {
         await window.deepwork.sessions.setModel(sid, modelId);
         await refreshSessions();
       }
-      dispatch({ type: "user", text });
       const atts = attachments && attachments.length > 0
         ? await Promise.all(attachments.map(fileToAttachment))
         : undefined;
+      dispatch({ type: "user", text, attachments: atts });
       await window.deepwork.chat.send(sid, text, atts, workspaceDir, modelId, mode);
       // Guarantee the right panel reflects produced files even if a streamed
       // event was missed during the new-session handoff.

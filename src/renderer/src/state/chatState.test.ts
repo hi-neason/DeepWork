@@ -27,6 +27,29 @@ describe("chatReducer", () => {
     ]);
   });
 
+  it("keeps user attachments on the optimistic timeline entry", () => {
+    const attachment = {
+      id: "a1",
+      name: "diagram.png",
+      mimeType: "image/png",
+      size: 1234,
+      dataUrl: "data:image/png;base64,abc",
+      kind: "image" as const,
+    };
+    const state = chatReducer(initialChatState, {
+      type: "user",
+      text: "please inspect this",
+      attachments: [attachment],
+    });
+
+    expect(state.timeline[0]).toMatchObject({
+      kind: "msg",
+      role: "user",
+      content: "please inspect this",
+      attachments: [attachment],
+    });
+  });
+
   it("records a tool call once and attaches its completion result", () => {
     const started = chatReducer(initialChatState, {
       type: "event",

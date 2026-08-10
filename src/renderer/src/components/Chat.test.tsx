@@ -106,6 +106,33 @@ describe("Chat component (render layer)", () => {
     expect(onSend.mock.calls[0][4]).toBeUndefined();
   });
 
+  it("renders attachments that belong to a user message", () => {
+    render(<Chat {...makeProps({
+      chat: {
+        timeline: [{
+          kind: "msg",
+          role: "user",
+          content: "see attached",
+          attachments: [{
+            id: "att-1",
+            name: "screen.png",
+            mimeType: "image/png",
+            size: 2048,
+            dataUrl: "data:image/png;base64,abc",
+            kind: "image",
+          }],
+        }],
+        tools: {},
+        toolStart: {},
+        streaming: false,
+      },
+    })} />);
+
+    expect(screen.getByText("see attached")).toBeTruthy();
+    expect(screen.getByText("screen.png")).toBeTruthy();
+    expect(screen.getByAltText("screen.png")).toBeTruthy();
+  });
+
   // C2 fix: render with <Trans> so the tool name appears as plain text instead of [object Object].
   it("chat.needApproval renders the tool name instead of [object Object]", () => {
     const props = makeProps({
