@@ -21,6 +21,7 @@ import { TerminalErrorBoundary } from "./components/TerminalErrorBoundary";
 import { fileToAttachment } from "./lib/attachments";
 import { applyAppearance, watchSystemTheme } from "./lib/theme";
 import { useTurnWatchdog } from "./lib/useTurnWatchdog";
+import { useChatEvents } from "./hooks/useChatEvents";
 import i18n from "./i18n";
 
 export function App(): React.ReactElement {
@@ -167,34 +168,7 @@ export function App(): React.ReactElement {
   // Subscribe to ALL chat events once, on mount. We filter to the active
   // session inside the callback using the ref. This is race-free for new
   // sessions because the listener already exists before chat.send is called.
-  useEffect(() => {
-    return window.deepwork.chat.onAnyEvent((sid, event) => {
-      if (sid !== sessionIdRef.current) return;
-      // Any event (including a terminal one) proves the turn is alive; the
-      // effect cleanup disarms the timer when streaming flips to false.
-      pokeWatchdog();
-      if (event.type === "approval_requested") {
-        setApproval(event);
-      }
-      if (
-        event.type === "turn_state" &&
-        !["running", "waiting_approval", "cancelling"].includes(event.status.state)
-      ) {
-        setApproval(null);
-      }
-      if (event.type === "session_renamed") {
-        void refreshSessions();
-      }
-      if (event.type === "todos_updated") {
-        setTodos(event.todos);
-      }
-      if (event.type === "artifacts_updated") {
-        // Server sends the complete current list for this session.
-        setArtifacts(event.artifacts);
-      }
-      dispatch({ type: "event", event });
-    });
-  }, [refreshSessions, pokeWatchdog]);
+  useChatEvents({ sessionIdRef, dispatch, poke: pokeWatchdog, refreshSessions, setApproval, setTodos, setArtifacts });
 
   const refreshArtifacts = useCallback(async (): Promise<void> => {
     if (!sessionId) return;
