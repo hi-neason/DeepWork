@@ -12,6 +12,7 @@ import { AboutTab } from "./settings/AboutTab";
 import { Connectors } from "./Connectors";
 import { AutomationsView } from "./AutomationsView";
 import { SkillsView } from "./SkillsView";
+import { applyAppearance } from "../lib/theme";
 
 interface Props {
   onClose: () => void;
@@ -79,6 +80,12 @@ export function Settings({
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [settings]);
+
+  // Apply theme/font-scale live as the user tweaks the controls (e.g. dragging
+  // the font-size slider), rather than waiting for App to re-read settings.
+  useEffect(() => {
+    if (settings) applyAppearance(settings);
+  }, [settings?.theme, settings?.fontScale, settings?.language]);
 
   if (!settings) return <div className="settings-shell">{t("common.loading")}</div>;
 
