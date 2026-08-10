@@ -32,3 +32,28 @@ test("renderer reaches validated session IPC handlers", async () => {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("settings survive an Electron restart", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-e2e-"));
+  const options = { args: [".", `--user-data-dir=${path.join(home, "electron")}`], env: { ...process.env, HOME: home } };
+  let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    app = await electron.launch(options);
+    let page = await app.firstWindow();
+    const saved = await page.evaluate(async () => {
+      const settings = await window.deepwork.settings.get();
+      const next = { ...settings, language: "en-US" as const, fontScale: 1.1 };
+      await window.deepwork.settings.save(next);
+      return next;
+    });
+    await app.close();
+    app = await electron.launch(options);
+    page = await app.firstWindow();
+    const restored = await page.evaluate(async () => window.deepwork.settings.get());
+    expect(restored.language).toBe(saved.language);
+    expect(restored.fontScale).toBe(saved.fontScale);
+  } finally {
+    await app?.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
