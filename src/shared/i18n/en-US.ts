@@ -173,6 +173,7 @@ const enUS = {
     anthropicKeyVerified: "Anthropic key verified",
     agentNotInitialized: "Agent not initialized",
     nothingToRegenerate: "Nothing to regenerate.",
+    turnMaxDuration: "The agent reached its maximum run time and was stopped.",
   },
   mcpTrust: {
     title: "Approve MCP configuration",

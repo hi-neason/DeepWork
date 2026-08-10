@@ -171,6 +171,7 @@ const zhCN = {
     anthropicKeyVerified: "Anthropic Key 已验证",
     agentNotInitialized: "Agent 尚未初始化",
     nothingToRegenerate: "没有可重新生成的内容。",
+    turnMaxDuration: "Agent 已达到最长运行时间，已停止。",
   },
   mcpTrust: {
     title: "批准 MCP 配置",

@@ -37,6 +37,7 @@ const agent = vi.hoisted(() => {
     rebuildSkills: vi.fn(),
     rebuild: vi.fn(),
     getMcpStatus: vi.fn(() => []),
+    getTurnStatus: vi.fn((): { state: string; turnId?: string; startedAt?: number } => ({ state: "idle" })),
     listArtifacts: vi.fn((_sessionId?: string): Array<{
       name: string;
       relativePath: string;
@@ -279,6 +280,20 @@ describe("ipc/register wiring closure", () => {
     const cancel = handlers.get("chat:cancel")!;
     cancel({}, "sess-9");
     expect(agent.cancel).toHaveBeenCalledWith("sess-9");
+  });
+
+  it("chat:status returns the authoritative main-process turn snapshot", async () => {
+    agent.getTurnStatus.mockReturnValueOnce({
+      state: "waiting_approval",
+      turnId: "turn-1",
+      startedAt: 42,
+    });
+    const status = __test_getHandlers().get("chat:status")!;
+    await expect(status({}, "sess-9")).resolves.toEqual({
+      state: "waiting_approval",
+      turnId: "turn-1",
+      startedAt: 42,
+    });
   });
 
   it("chat:regenerate calls agentManager.regenerate and forwards events", async () => {

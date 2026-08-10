@@ -109,6 +109,7 @@ import type {
   ModelInfo,
   PermissionMode,
   ProviderKind,
+  TurnStatus,
   VerifyResult,
 } from "../../shared/types";
 
@@ -370,6 +371,9 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     agentManager.setSessionModel(sessionId, s?.model);
     return agentManager.getHistory(sessionId);
   });
+  handleValidated("chat:status", terminalIdArgsSchema, (_e, [sessionId]): TurnStatus =>
+    agentManager.getTurnStatus(sessionId),
+  );
 
   handleValidated(
     "chat:send",

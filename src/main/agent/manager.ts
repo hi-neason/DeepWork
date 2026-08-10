@@ -36,6 +36,7 @@ import type {
   HistoryItem,
   PermissionMode,
   TodoItem,
+  TurnStatus,
 } from "../../shared/types";
 import { screenshotTool } from "../tools/gui";
 import {
@@ -66,6 +67,9 @@ const GUI_TOOLS = [
   keyboardTypeTool.tool,
   keyboardPressTool.tool,
 ];
+
+/** Hard upper bound for a model/tool stream, independent of UI liveness. */
+export const TURN_MAX_DURATION_MS = 15 * 60 * 1000;
 
 /** Pull concatenated text from a message content that may be a string or an array of blocks. */
 function extractText(content: unknown): string {
@@ -619,6 +623,11 @@ export class AgentManager {
     return this.runtime.getModel(sessionId) ?? this.modelKey(loadSettings().model);
   }
 
+  /** Snapshot used by the renderer after session switches or reconnects. */
+  getTurnStatus(sessionId: string): TurnStatus {
+    return this.turns.status(sessionId);
+  }
+
   /** Run a turn from a new user message. */
   async *runTurn(
     sessionId: string,
@@ -664,6 +673,12 @@ export class AgentManager {
       modelId,
       userText,
     );
+    if (result.failed) return;
+    if (result.aborted) {
+      logger.info("agent", "turn_aborted", { session: sessionId }, sessionId);
+      yield { type: "turn_aborted" };
+      return;
+    }
     // Surface per-turn telemetry to the renderer (model / tokens / latency).
     yield {
       type: "turn_stats",
@@ -681,7 +696,7 @@ export class AgentManager {
     // Background timeline capture (non-blocking, always on): distill this
     // turn's key points into today's timeline memory file.
     this.maybeAppendTimeline(sessionId, userText, result.replyText, ws);
-    // Unlock the input immediately after the turn finishes.
+    // Unlock the input immediately after a successful turn finishes.
     yield { type: "turn_completed" };
     logger.info(
       "agent",
@@ -695,11 +710,6 @@ export class AgentManager {
       },
       sessionId,
     );
-    if (result.aborted) {
-      logger.info("agent", "turn_aborted", { session: sessionId }, sessionId);
-      yield { type: "turn_aborted" };
-      return;
-    }
     // Surface any artifacts produced in the workspace during this session.
     const artifacts = this.listArtifacts(sessionId);
     if (artifacts.length) yield { type: "artifacts_updated", artifacts };
@@ -888,6 +898,7 @@ export class AgentManager {
     {
       replyText: string;
       aborted: boolean;
+      failed: boolean;
       tokens: { inputTokens: number; outputTokens: number; totalTokens: number };
       llmCalls: number;
       durationMs: number;
@@ -943,6 +954,10 @@ export class AgentManager {
     let reasoningText = "";
     const tStreamStart = Date.now();
     let firstTokenMs: number | undefined;
+    const emitTurnState = (): void => {
+      queue.push({ type: "turn_state", status: this.turns.status(sessionId) });
+    };
+    emitTurnState();
     const scanArtifacts = (): void => {
       try {
         const files = this.listArtifacts(sessionId);
@@ -953,6 +968,11 @@ export class AgentManager {
     };
     const onEvent = (e: DeepWorkEvent) => {
       queue.push(e);
+      if (e.type === "approval_requested") {
+        if (this.turns.setState(sessionId, turnId, "waiting_approval")) emitTurnState();
+      } else if (e.type === "tool_call_started" || e.type === "tool_call_finished") {
+        if (this.turns.setState(sessionId, turnId, "running")) emitTurnState();
+      }
       if (e.type === "reasoning_delta") {
         reasoningChars += e.text?.length ?? 0;
       } else if (e.type === "tool_call_finished") {
@@ -985,6 +1005,14 @@ export class AgentManager {
     let lastAdditionalKeys: string[] = [];
     let lastContentTypes: string[] = [];
     let settled = false;
+    let failed = false;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      if (this.turns.setState(sessionId, turnId, "cancelling")) emitTurnState();
+      ac.abort();
+      waiter?.();
+    }, TURN_MAX_DURATION_MS);
     const consumed = (async () => {
       const t0 = Date.now();
       let firstToken = false;
@@ -1111,8 +1139,14 @@ export class AgentManager {
       touchSession(sessionId);
     } catch (err) {
       if (ac.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
-        aborted = true;
+        if (timedOut) {
+          failed = true;
+          yield { type: "turn_error", message: i18n.t("errors.turnMaxDuration") };
+        } else {
+          aborted = true;
+        }
       } else {
+        failed = true;
         logger.error(
           "agent",
           "turn_error",
@@ -1134,13 +1168,19 @@ export class AgentManager {
       // for-await loop), abort the underlying LLM/tool stream instead of letting
       // it keep running unattended.
       if (!settled) ac.abort();
-      this.turns.finish(sessionId, turnId, settled ? "completed" : "error");
+      clearTimeout(timeout);
+      this.turns.finish(
+        sessionId,
+        turnId,
+        settled ? "completed" : aborted ? "cancelled" : "error",
+      );
       emitter.removeListener("event", onEvent);
       unregisterTurnEmitter(turnId, sessionId);
     }
     return {
       replyText,
       aborted,
+      failed,
       tokens: {
         inputTokens: logHandler.totals.inputTokens,
         outputTokens: logHandler.totals.outputTokens,

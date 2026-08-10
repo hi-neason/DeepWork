@@ -110,6 +110,13 @@ function reducer(state: ChatState, action: Action): ChatState {
   }
   const e = action.event;
   switch (e.type) {
+    case "turn_state":
+      return {
+        ...state,
+        streaming: e.status.state === "running" ||
+          e.status.state === "waiting_approval" ||
+          e.status.state === "cancelling",
+      };
     case "message_delta": {
       const timeline = [...state.timeline];
       for (let i = timeline.length - 1; i >= 0; i--) {
@@ -360,6 +367,12 @@ export function App(): React.ReactElement {
       if (event.type === "approval_requested") {
         setApproval(event);
       }
+      if (
+        event.type === "turn_state" &&
+        !["running", "waiting_approval", "cancelling"].includes(event.status.state)
+      ) {
+        setApproval(null);
+      }
       if (event.type === "session_renamed") {
         void refreshSessions();
       }
@@ -447,11 +460,13 @@ export function App(): React.ReactElement {
     } else {
       setExtraSession(null);
     }
-    const [history, files] = await Promise.all([
+    const [history, files, status] = await Promise.all([
       window.deepwork.chat.history(id),
       window.deepwork.artifacts.list(id),
+      window.deepwork.chat.status(id),
     ]);
     dispatch({ type: "history", timeline: history.timeline });
+    dispatch({ type: "event", event: { type: "turn_state", status } });
     setTodos(history.todos ?? []);
     setArtifacts(files);
   };

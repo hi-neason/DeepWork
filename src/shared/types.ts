@@ -301,6 +301,22 @@ export type SessionSort = "recent" | "title" | "created";
 
 export type RiskLevel = "read" | "write" | "exec" | "external";
 
+/** Authoritative lifecycle state for a session's active agent turn. */
+export type TurnState =
+  | "idle"
+  | "running"
+  | "waiting_approval"
+  | "cancelling"
+  | "completed"
+  | "cancelled"
+  | "error";
+
+export interface TurnStatus {
+  state: TurnState;
+  turnId?: string;
+  startedAt?: number;
+}
+
 /** Per-turn model/telemetry stats surfaced to the user under each reply. */
 export interface TurnStats {
   model: string;
@@ -314,6 +330,7 @@ export interface TurnStats {
 }
 
 export type DeepWorkEvent =
+  | { type: "turn_state"; status: TurnStatus }
   | { type: "message_delta"; text: string }
   | { type: "reasoning_delta"; text: string }
   | { type: "reasoning_phase_started" }

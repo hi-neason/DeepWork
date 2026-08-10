@@ -11,6 +11,11 @@ describe("TurnRuntime", () => {
     expect(a.controller.signal.aborted).toBe(true);
     expect(b.controller.signal.aborted).toBe(false);
     expect(runtime.state("a")).toBe("cancelling");
+    expect(runtime.status("a")).toEqual(expect.objectContaining({
+      state: "cancelling",
+      turnId: a.turnId,
+      startedAt: expect.any(Number),
+    }));
   });
 
   it("does not let a stale turn clear a newer active turn", () => {

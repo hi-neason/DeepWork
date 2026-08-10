@@ -19,6 +19,7 @@ import type {
   Settings,
   Skill,
   TodoItem,
+  TurnStatus,
   UpdateStatus,
   VerifyResult,
 } from "../shared/types";
@@ -111,6 +112,8 @@ const api = {
       sessionId: string,
     ): Promise<{ timeline: HistoryItem[]; todos: TodoItem[] }> =>
       ipcRenderer.invoke("chat:history", sessionId),
+    status: (sessionId: string): Promise<TurnStatus> =>
+      ipcRenderer.invoke("chat:status", sessionId),
     send: (
       sessionId: string,
       text: string,
