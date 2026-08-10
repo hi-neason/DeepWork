@@ -1,5 +1,4 @@
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import {
   createDeepAgent,
@@ -21,6 +20,7 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 import { createChatModel } from "./model";
 import { listSessionArtifacts } from "./artifacts";
 import { SessionRuntime } from "./sessionRuntime";
+import { TurnRuntime } from "./turnRuntime";
 import { createApprovalMiddleware } from "./middleware";
 import { createSanitizeMiddleware, setThreadRoot } from "./sanitize";
 import { createContextMiddleware } from "./context";
@@ -241,15 +241,8 @@ export class AgentManager {
   } | null = null;
   /** The active skills middleware instance (rebuilt on skill changes). */
   private skillsMiddleware: ReturnType<typeof createSkillsMiddleware> | null = null;
-  /**
-   * Abort controllers keyed by turnId (H-A1). Two turns on the same session can
-   * briefly overlap when a new turn starts before the previous stream is fully
-   * drained; keying by sessionId let the new turn overwrite the old controller,
-   * leaving the old turn un-cancellable.
-   */
-  private aborters = new Map<string, AbortController>();
-  /** threadId/sessionId → turnId of the turn currently owning the live stream. */
-  private turnByThread = new Map<string, string>();
+  /** Active turn identity, cancellation, and lifecycle ownership. */
+  private turns = new TurnRuntime();
   /** Cache of one LocalShellBackend per workspace root. */
   private backends = new Map<string, LocalShellBackend>();
 
@@ -540,11 +533,7 @@ export class AgentManager {
   /** Request cancellation of an in-flight turn for a session. */
   cancel(sessionId: string): void {
     logger.info("agent", "turn_cancel", { session: sessionId }, sessionId);
-    const turnId = this.turnByThread.get(sessionId);
-    if (turnId) {
-      const ac = this.aborters.get(turnId);
-      if (ac) ac.abort();
-    }
+    this.turns.cancel(sessionId);
     // Only reject approvals belonging to this session — cancelling A must not
     // deny session B's pending tool approvals (H-A2 fix).
     approvals.rejectAll(sessionId);
@@ -621,7 +610,7 @@ export class AgentManager {
   forgetSession(sessionId: string): void {
     // Abort any in-flight turn first, then clear its bookkeeping.
     this.cancel(sessionId);
-    this.turnByThread.delete(sessionId);
+    this.turns.forget(sessionId);
     this.runtime.forget(sessionId);
   }
 
@@ -933,9 +922,8 @@ export class AgentManager {
     // This turn owns the session's live event stream until it finishes. If a
     // previous turn on the same session is still draining, its emitter is
     // displaced but its aborter (keyed by turnId) is left intact.
-    const turnId = randomUUID();
+    const { turnId, controller: ac } = this.turns.start(sessionId);
     registerTurnEmitter(turnId, sessionId, emitter);
-    this.turnByThread.set(sessionId, turnId);
 
     // Generate the session title on its own independent Promise, fully
     // detached from the turn's event stream. When it finishes it pushes a
@@ -979,8 +967,6 @@ export class AgentManager {
     emitter.on("event", onEvent);
 
     const logHandler = new LoggingCallbackHandler(sessionId, emitter);
-    const ac = new AbortController();
-    this.aborters.set(turnId, ac);
     const config = {
       configurable: { thread_id: sessionId },
       recursionLimit: 50,
@@ -1148,7 +1134,7 @@ export class AgentManager {
       // for-await loop), abort the underlying LLM/tool stream instead of letting
       // it keep running unattended.
       if (!settled) ac.abort();
-      this.aborters.delete(turnId);
+      this.turns.finish(sessionId, turnId, settled ? "completed" : "error");
       emitter.removeListener("event", onEvent);
       unregisterTurnEmitter(turnId, sessionId);
     }
