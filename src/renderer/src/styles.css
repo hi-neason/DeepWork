@@ -1678,12 +1678,44 @@ body,
 /* ---- attachments ---- */
 .attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 8px; }
 .att-chip {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "preview name remove"
+    "preview size remove";
+  align-items: center;
+  gap: 4px 8px;
   background: var(--bg-elev2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 4px 8px; font-size: 0.75rem; max-width: 240px;
+  border-radius: 8px; padding: 5px 8px 5px 5px; font-size: 0.75rem; max-width: 240px;
 }
-.att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.att-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; }
+.att-preview {
+  grid-area: preview;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: var(--bg-soft);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+.att-preview:hover { outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); }
+.att-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.att-icon {
+  grid-area: preview;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--bg-soft);
+  color: var(--text-dim);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+.att-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-size { grid-area: size; color: var(--text-dim); font-size: 0.6875rem; }
+.att-remove { grid-area: remove; background: none; border: none; color: var(--text-dim); cursor: pointer; }
 .att-remove:hover { color: var(--danger); }
 .cap-chip.clickable { cursor: pointer; border: none; font-family: inherit; font-size: 0.875rem; }
 .cap-chip.clickable:disabled { opacity: 0.4; cursor: not-allowed; }

@@ -60,6 +60,8 @@ function makeProps(overrides: Record<string, any> = {}) {
 beforeEach(() => {
   // jsdom does not implement scrollTo
   Element.prototype.scrollTo = vi.fn();
+  URL.createObjectURL = vi.fn((file: Blob) => `blob:${(file as File).name}`);
+  URL.revokeObjectURL = vi.fn();
   (window as any).deepwork = {
     skills: { list: vi.fn(() => Promise.resolve([])) },
     sessions: { recentFolders: vi.fn(() => Promise.resolve([])) },
@@ -160,6 +162,20 @@ describe("Chat component (render layer)", () => {
     expect(screen.getByRole("dialog", { name: "screen.png" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "screen.png" })).toBeNull();
+  });
+
+  it("numbers duplicate pasted screenshots and previews them before sending", () => {
+    const { container } = render(<Chat {...makeProps()} />);
+    const ta = container.querySelector("textarea")!;
+    const first = new File(["a"], "image.png", { type: "image/png" });
+    const second = new File(["b"], "image.png", { type: "image/png" });
+
+    fireEvent.paste(ta, { clipboardData: { files: [first, second] } });
+
+    expect(screen.getByText("image-1.png")).toBeTruthy();
+    expect(screen.getByText("image-2.png")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "image-1.png" }));
+    expect(screen.getByRole("dialog", { name: "image-1.png" })).toBeTruthy();
   });
 
   // C2 fix: render with <Trans> so the tool name appears as plain text instead of [object Object].

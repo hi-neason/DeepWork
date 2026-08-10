@@ -37,6 +37,12 @@ interface RecentFolder {
   name: string;
 }
 
+interface ComposerAttachment {
+  id: string;
+  file: File;
+  previewUrl?: string;
+}
+
 interface Props {
   sessionId: string | null;
   sessionTitle?: string;
@@ -104,7 +110,7 @@ export function Chat({
   onJumpToArtifact,
 }: Props): React.ReactElement {
   const [input, setInput] = useState("");
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [showFolderMenu, setShowFolderMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [recent, setRecent] = useState<RecentFolder[]>([]);
@@ -120,6 +126,7 @@ export function Chat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const segmentRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const attachmentsRef = useRef<ComposerAttachment[]>([]);
   const historyWrapRef = useRef<HTMLDivElement>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -196,6 +203,16 @@ export function Chat({
   }, [chat, todos]);
 
   useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  useEffect(() => () => {
+    for (const att of attachmentsRef.current) {
+      if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+    }
+  }, []);
+
+  useEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
     ta.style.height = "auto";
@@ -248,11 +265,19 @@ export function Chat({
     return () => document.removeEventListener("mousedown", onClick);
   }, [showModeMenu]);
 
+  const clearComposerAttachments = (): void => {
+    for (const att of attachments) {
+      if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+    }
+    setAttachments([]);
+  };
+
   const submit = (): void => {
     const text = input.trim();
     if ((!text && attachments.length === 0) || chat.streaming) return;
+    const files = attachments.map((att) => att.file);
     setInput("");
-    setAttachments([]);
+    clearComposerAttachments();
     setSlashOpen(false);
     // Wrap in Promise.resolve so a synchronous throw or rejected promise from
     // onSend doesn't surface as an unhandled rejection. The parent (App) owns
@@ -260,7 +285,7 @@ export function Chat({
     // liveness watchdog additionally resets streaming if no terminal event
     // ever arrives (H fix).
     Promise.resolve(
-      onSend(text, attachments, activeWorkspace, activeModel, pendingMode),
+      onSend(text, files, activeWorkspace, activeModel, pendingMode),
     ).catch(() => {
       /* already handled by parent */
     });
@@ -300,16 +325,43 @@ export function Chat({
     setShowFolderMenu(false);
   };
 
+  const addAttachments = (files: File[]): void => {
+    if (files.length === 0) return;
+    setAttachments((prev) => {
+      const imageTotals = new Map<string, number>();
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        const { base, ext } = splitFileName(file.name || "image.png");
+        const key = `${base.toLowerCase()}.${ext.toLowerCase()}`;
+        imageTotals.set(key, (imageTotals.get(key) ?? 0) + 1);
+      }
+      const imageBaseCounts = new Map<string, number>();
+      const nextItems = files.map((file) => {
+        const { base, ext } = splitFileName(file.name || "image.png");
+        const key = `${base.toLowerCase()}.${ext.toLowerCase()}`;
+        const renamed = file.type.startsWith("image/") && (imageTotals.get(key) ?? 0) > 1
+          ? withSequentialImageName(file, 0, imageBaseCounts)
+          : file;
+        return {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: renamed,
+          ...(renamed.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(renamed) } : {}),
+        };
+      });
+      return [...prev, ...nextItems];
+    });
+  };
+
   const onPickFiles = (files: FileList | null): void => {
     if (!files) return;
-    setAttachments((prev) => [...prev, ...Array.from(files)]);
+    addAttachments(Array.from(files));
   };
 
   const paste = (e: React.ClipboardEvent): void => {
     const files = Array.from(e.clipboardData.files).filter((f) =>
       f.type.startsWith("image/") || f.type === "application/pdf" || f.type.startsWith("text/"),
     );
-    if (files.length) setAttachments((prev) => [...prev, ...files]);
+    if (files.length) addAttachments(files);
   };
 
   const copy = (content: string): void => {
@@ -630,13 +682,29 @@ export function Chat({
         )}
         {attachments.length > 0 && (
           <div className="attachments">
-            {attachments.map((f, i) => (
-              <div key={i} className="att-chip" title={f.name}>
-                {f.type.startsWith("image/") ? "🖼" : f.type === "application/pdf" ? "📄" : "📎"}{" "}
-                <span className="att-name">{f.name}</span>
+            {attachments.map((att, i) => (
+              <div key={att.id} className={`att-chip ${att.previewUrl ? "image" : ""}`} title={att.file.name}>
+                {att.previewUrl ? (
+                  <button
+                    type="button"
+                    className="att-preview"
+                    aria-label={att.file.name}
+                    onClick={() => setPreviewImage(composerImageToAttachment(att))}
+                  >
+                    <img src={att.previewUrl} alt={att.file.name} />
+                  </button>
+                ) : (
+                  <span className="att-icon">{att.file.type === "application/pdf" ? "PDF" : "FILE"}</span>
+                )}
+                <span className="att-name">{att.file.name}</span>
+                <span className="att-size">{formatBytes(att.file.size)}</span>
                 <button
                   className="att-remove"
-                  onClick={() => setAttachments(attachments.filter((_, idx) => idx !== i))}
+                  onClick={() => {
+                    if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+                    setAttachments(attachments.filter((_, idx) => idx !== i));
+                    if (previewImage?.id === att.id) setPreviewImage(null);
+                  }}
                 >
                   ✕
                 </button>
@@ -990,6 +1058,36 @@ function ImagePreviewOverlay({
       </div>
     </div>
   );
+}
+
+function withSequentialImageName(
+  file: File,
+  offset: number,
+  counts: Map<string, number>,
+): File {
+  const { base, ext } = splitFileName(file.name || "image.png");
+  const key = `${base.toLowerCase()}.${ext.toLowerCase()}`;
+  const next = (counts.get(key) ?? offset) + 1;
+  counts.set(key, next);
+  const renamed = `${base}-${next}.${ext || "png"}`;
+  return new File([file], renamed, { type: file.type, lastModified: file.lastModified });
+}
+
+function splitFileName(name: string): { base: string; ext: string } {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0 || dot === name.length - 1) return { base: name || "image", ext: "png" };
+  return { base: name.slice(0, dot), ext: name.slice(dot + 1) };
+}
+
+function composerImageToAttachment(att: ComposerAttachment): Attachment {
+  return {
+    id: att.id,
+    name: att.file.name,
+    mimeType: att.file.type || "image/png",
+    size: att.file.size,
+    dataUrl: att.previewUrl ?? "",
+    kind: "image",
+  };
 }
 
 function formatBytes(bytes: number): string {
