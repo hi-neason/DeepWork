@@ -594,6 +594,13 @@ export function Chat({
       <div className="chat" ref={scrollRef}>
         {!sessionId ? (
           <div className="empty">
+            <div className="empty-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L18 3.06l-2.94-2.94a1.21 1.21 0 0 0-1.72 0l-1.28 1.28a1.2 1.2 0 0 0 0 1.72L14.06 6l-9.7 9.7a1 1 0 0 0-.29.71V19a1 1 0 0 0 1 1h2.59a1 1 0 0 0 .71-.29L18 11.36l2.92 2.92a1.2 1.2 0 0 0 1.72 0Z"/>
+                <path d="M14 6l-4 4"/>
+                <path d="m5 20 4-4"/>
+              </svg>
+            </div>
             <h2>DeepWork</h2>
             <p>{t("chat.emptyDesc")}</p>
             {funMode && <CommitRunner />}
