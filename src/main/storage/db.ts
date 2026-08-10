@@ -118,7 +118,9 @@ function migrate(d: Database.Database): void {
       skills TEXT,
       mcp_server_ids TEXT,
       model TEXT,
-      last_fired_slot INTEGER
+      last_fired_slot INTEGER,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      auto_paused INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS automation_runs (
@@ -138,6 +140,17 @@ function migrate(d: Database.Database): void {
       created_at INTEGER NOT NULL
     );
   `);
+  // Pre-release builds can still have an earlier local schema. Keep these
+  // additions idempotent so failure safeguards take effect without data loss.
+  ensureColumn(d, "automations", "consecutive_failures", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(d, "automations", "auto_paused", "INTEGER NOT NULL DEFAULT 0");
+}
+
+function ensureColumn(d: Database.Database, table: string, column: string, definition: string): void {
+  const columns = d.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((entry) => entry.name === column)) {
+    d.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 export function audit(entry: {

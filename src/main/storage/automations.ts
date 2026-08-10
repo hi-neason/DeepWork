@@ -28,6 +28,8 @@ interface AutoRow {
   mcp_server_ids: string | null;
   model: string | null;
   last_fired_slot: number | null;
+  consecutive_failures: number | null;
+  auto_paused: number | null;
 }
 
 function parseScheduleConfig(json: string | null): AutomationScheduleConfig | undefined {
@@ -67,6 +69,8 @@ function rowToAutomation(r: AutoRow): Automation {
     updatedAt: r.updated_at ?? r.created_at,
     lastRunAt: r.last_run_at ?? undefined,
     lastStatus: (r.last_status as AutomationStatus) ?? undefined,
+    consecutiveFailures: r.consecutive_failures ?? 0,
+    autoPaused: r.auto_paused === 1,
     permissionMode: (r.permission_mode as Automation["permissionMode"]) ?? undefined,
     skills: safeJsonArray(r.skills),
     mcpServerIds: safeJsonArray(r.mcp_server_ids),
@@ -138,14 +142,16 @@ export function createAutomation(
     mcp_server_ids: a.mcpServerIds ? JSON.stringify(a.mcpServerIds) : null,
     model: a.model ?? null,
     last_fired_slot: null,
+    consecutive_failures: 0,
+    auto_paused: 0,
   };
   getDb()
     .prepare(
       `INSERT INTO automations (
         id, title, instructions, enabled, created_at, updated_at,
         workspace_dir, schedule_type, schedule_config, valid_from, valid_until,
-        permission_mode, skills, mcp_server_ids, model, last_fired_slot
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        permission_mode, skills, mcp_server_ids, model, last_fired_slot, consecutive_failures, auto_paused
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       row.id,
@@ -164,6 +170,8 @@ export function createAutomation(
       row.mcp_server_ids,
       row.model,
       row.last_fired_slot,
+      row.consecutive_failures,
+      row.auto_paused,
     );
   return rowToAutomation(row);
 }
@@ -218,6 +226,25 @@ export function markAutomationRun(
       `UPDATE automations SET last_run_at = ?, last_status = ?, updated_at = ? WHERE id = ?`,
     )
     .run(runAt, status, Date.now(), id);
+}
+
+export const AUTOMATION_FAILURE_PAUSE_THRESHOLD = 3;
+
+/** Record an outcome and disable an automation after repeated failures. */
+export function recordAutomationOutcome(id: string, status: AutomationStatus): {
+  consecutiveFailures: number;
+  autoPaused: boolean;
+} {
+  const existing = getAutomation(id);
+  if (!existing) return { consecutiveFailures: 0, autoPaused: false };
+  const consecutiveFailures = status === "success" ? 0 : (existing.consecutiveFailures ?? 0) + 1;
+  const autoPaused = status !== "success" && consecutiveFailures >= AUTOMATION_FAILURE_PAUSE_THRESHOLD;
+  getDb()
+    .prepare(
+      `UPDATE automations SET consecutive_failures = ?, auto_paused = ?, enabled = ?, updated_at = ? WHERE id = ?`,
+    )
+    .run(consecutiveFailures, autoPaused ? 1 : 0, autoPaused ? 0 : (existing.enabled ? 1 : 0), Date.now(), id);
+  return { consecutiveFailures, autoPaused };
 }
 
 /**

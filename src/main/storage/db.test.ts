@@ -93,6 +93,8 @@ describe("storage/db - schema", () => {
         "mcp_server_ids",
         "model",
         "updated_at",
+        "consecutive_failures",
+        "auto_paused",
       ]),
     );
   });

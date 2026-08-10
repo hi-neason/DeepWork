@@ -4,6 +4,7 @@ import {
   listAutomations,
   listDueAutomations,
   markAutomationRun,
+  recordAutomationOutcome,
   startRun,
   finishRun,
   updateAutomation,
@@ -250,6 +251,9 @@ export class AutomationScheduler extends EventEmitter {
   /** Guards against overlapping ticks when one outlives the 30s interval. */
   private ticking = false;
 
+  /** One retry absorbs transient model/network failures without creating a loop. */
+  private static readonly MAX_RUN_ATTEMPTS = 2;
+
   init(handlers: SchedulerHandlers): void {
     this.handlers = handlers;
   }
@@ -409,15 +413,29 @@ export class AutomationScheduler extends EventEmitter {
       runId: run.id,
     });
     try {
-      await this.handlers.runAutomationTurn(
-        session.id,
-        a.instructions,
-        (event) => this.emit("run:event", { automationId: a.id, sessionId: session.id, event }),
-        a.model,
-        a.permissionMode,
-      );
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= AutomationScheduler.MAX_RUN_ATTEMPTS; attempt++) {
+        try {
+          await this.handlers.runAutomationTurn(
+            session.id,
+            a.instructions,
+            (event) => this.emit("run:event", { automationId: a.id, sessionId: session.id, event }),
+            a.model,
+            a.permissionMode,
+          );
+          lastError = undefined;
+          break;
+        } catch (err) {
+          lastError = err;
+          if (attempt < AutomationScheduler.MAX_RUN_ATTEMPTS) {
+            logger.warn("automation", "run retry", { automationId: a.id, runId: run.id, attempt });
+          }
+        }
+      }
+      if (lastError) throw lastError;
       finishRun(run.id, "success");
       markAutomationRun(a.id, "success", Date.now());
+      recordAutomationOutcome(a.id, "success");
       this.emit("run:finished", { automation: a, run, sessionId: session.id });
       logger.info("automation", "run finished", {
         automationId: a.id,
@@ -430,6 +448,7 @@ export class AutomationScheduler extends EventEmitter {
       const message = err instanceof Error ? err.message : String(err);
       finishRun(run.id, "error", message);
       markAutomationRun(a.id, "error", Date.now());
+      const outcome = recordAutomationOutcome(a.id, "error");
       this.emit("run:error", { automation: a, run, error: message, sessionId: session.id });
       logger.error("automation", "run failed", {
         automationId: a.id,
@@ -437,6 +456,8 @@ export class AutomationScheduler extends EventEmitter {
         sessionId: session.id,
         runId: run.id,
         error: message,
+        consecutiveFailures: outcome.consecutiveFailures,
+        autoPaused: outcome.autoPaused,
       });
     } finally {
       this.running.delete(a.id);

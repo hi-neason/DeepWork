@@ -10,6 +10,7 @@ vi.mock("../storage/automations", () => ({
   getAutomation: vi.fn(),
   updateAutomation: vi.fn(),
   markAutomationRun: vi.fn(),
+  recordAutomationOutcome: vi.fn(() => ({ consecutiveFailures: 0, autoPaused: false })),
   startRun: vi.fn(() => ({ id: "run-1" })),
   finishRun: vi.fn(),
   setLastFiredSlot: vi.fn(),
@@ -120,6 +121,30 @@ describe("automation/scheduler - tick/fire integration (mock storage)", () => {
       undefined,
       "automation",
     );
+  });
+
+  it("retries one transient automation failure before marking the run successful", async () => {
+    const a = auto({ scheduleType: "daily", scheduleConfig: { time: "09:00" } });
+    vi.mocked(automations.getAutomation).mockReturnValue(a);
+    handler.mockRejectedValueOnce(new Error("temporary network failure")).mockResolvedValueOnce(undefined);
+
+    await s.runNow(a);
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(automations.finishRun).toHaveBeenCalledWith("run-1", "success");
+    expect(automations.recordAutomationOutcome).toHaveBeenCalledWith("a1", "success");
+  });
+
+  it("records a failed outcome after bounded retries", async () => {
+    const a = auto({ scheduleType: "daily", scheduleConfig: { time: "09:00" } });
+    vi.mocked(automations.getAutomation).mockReturnValue(a);
+    handler.mockRejectedValue(new Error("offline"));
+
+    await s.runNow(a);
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(automations.finishRun).toHaveBeenCalledWith("run-1", "error", "offline");
+    expect(automations.recordAutomationOutcome).toHaveBeenCalledWith("a1", "error");
   });
 
   it("an automation that is not due is not triggered", async () => {

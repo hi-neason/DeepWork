@@ -168,6 +168,10 @@ export interface Automation {
   updatedAt: number;
   lastRunAt?: number;
   lastStatus?: AutomationStatus;
+  /** Consecutive failed runs; reset after a successful run. */
+  consecutiveFailures?: number;
+  /** Set when safety controls pause an automation after repeated failures. */
+  autoPaused?: boolean;
   /** Permission mode used when the automation runs unattended. */
   permissionMode?: PermissionMode;
   /** Skill names to enable for this automation. */
