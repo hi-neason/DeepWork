@@ -1,5 +1,4 @@
 import path from "node:path";
-import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import {
@@ -20,6 +19,7 @@ import type { DeepAgent } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { createChatModel } from "./model";
+import { listSessionArtifacts } from "./artifacts";
 import { createApprovalMiddleware } from "./middleware";
 import { createSanitizeMiddleware, setThreadRoot } from "./sanitize";
 import { createContextMiddleware } from "./context";
@@ -1374,88 +1374,7 @@ export class AgentManager {
 
   /** List all files in the session's output folder (the artifacts panel). */
   listArtifacts(sessionId: string): ArtifactFile[] {
-    const s = getSession(sessionId);
-    if (s && hasPickedWorkspace(s.workspaceDir)) {
-      // Picked a project: the agent writes to the project root (its cwd), so
-      // we must scan there — not just the isolated .deepwork/sessions drawer.
-      // We scan the project root but skip source-tree noise.
-      return this.scanArtifacts(path.resolve(s.workspaceDir!), true);
-    }
-    // Default isolated session: artifacts live in the per-session drawer.
-    const root = sessionArtifactsDir(sessionId, s?.workspaceDir);
-    if (!root) {
-      const settings = loadSettings();
-      const fallback = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
-      if (!fallback) return [];
-      return this.scanArtifacts(fallback, false);
-    }
-    return this.scanArtifacts(root, false);
-  }
-
-  private scanArtifacts(root: string, isProjectRoot = false): ArtifactFile[] {
-    const out: ArtifactFile[] = [];
-    // Directories to always skip.
-    const skipDirs = new Set([
-      "node_modules", ".git", ".venv", "dist", "build", "out",
-      "__pycache__", ".next", ".nuxt", ".angular", "target", ".deepwork",
-      // Source / config dirs that are not user-facing deliverables.
-      ...(isProjectRoot
-        ? ["src", "lib", "app", "components", "hooks", "utils", "types",
-            "pages", "views", "routes", "store", "tests", "__tests__",
-            "test", "spec", "docs", ".idea", ".vscode", ".DS_Store"]
-        : []),
-    ]);
-    // Internal / transient files that are not user-facing artifacts.
-    const skipFiles = new Set([
-      "deepwork.log", "package.json", "tsconfig.json", "vite.config.*",
-      "tailwind.config*", "postcss.config*", "next.config*",
-      ".gitignore", ".eslintrc*", ".prettierrc*", "README*", "LICENSE*",
-      "go.mod", "go.sum", "Cargo.toml", "pom.xml", "build.gradle",
-      // Model call trace dumps (raw request/response text).
-    ]);
-    const skipExt = new Set(["log", ...(isProjectRoot
-      ? ["ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "vue",
-         "svelte", "css", "scss", "less", "json", "yaml", "yml", "toml",
-         "lock", "mod", "sum"]
-      : [])]);
-    const isInternal = (name: string): boolean => {
-      if (skipFiles.has(name)) return true;
-      if (name.startsWith("call_") && name.endsWith(".txt")) return true;
-      return false;
-    };
-    const walk = (dir: string, depth: number): void => {
-      if (depth > 3 || out.length > 300) return;
-      let entries: fs.Dirent[];
-      try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const e of entries) {
-        if (skipDirs.has(e.name) || e.name.startsWith(".")) continue;
-        const full = path.join(dir, e.name);
-        if (e.isDirectory()) {
-          walk(full, depth + 1);
-        } else if (e.isFile() && !isInternal(e.name) && !skipExt.has(path.extname(e.name).replace(".", ""))) {
-          let st: fs.Stats;
-          try {
-            st = fs.statSync(full);
-          } catch {
-            continue;
-          }
-          out.push({
-            name: e.name,
-            relativePath: path.relative(root, full),
-            absolutePath: full,
-            size: st.size,
-            modifiedAt: st.mtimeMs,
-            ext: path.extname(e.name).replace(".", "").toLowerCase(),
-          });
-        }
-      }
-    };
-    walk(root, 0);
-    return out.sort((a, b) => b.modifiedAt - a.modifiedAt).slice(0, 100);
+    return listSessionArtifacts(sessionId);
   }
 
   /**
