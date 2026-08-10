@@ -1744,6 +1744,7 @@ body,
   font-size: 12px; line-height: 1.5; resize: vertical;
 }
 .mcp-footer { display: flex; gap: 8px; margin-top: 12px; }
+.mcp-empty-hint { margin: 10px 0 0; padding: 0; font-size: 13px; }
 .mcp-import {
   margin-top: 14px; padding: 14px;
   border: 1px dashed var(--border); border-radius: 10px;

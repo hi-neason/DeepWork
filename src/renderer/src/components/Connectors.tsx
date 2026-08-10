@@ -234,8 +234,6 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
       <p className="section-desc">{t("connectors.mcpHint")}</p>
 
       <div className="mcp-list">
-        {servers.length === 0 && <p className="artifacts-empty">{t("connectors.empty")}</p>}
-
         {servers.map((m) => {
           const expanded = editingId === m.id;
           const st = statuses[m.id];
@@ -327,6 +325,10 @@ export function Connectors({ settings, onChange }: Props): React.ReactElement {
           {t("connectors.importTitle")}
         </button>
       </div>
+
+      {servers.length === 0 && (
+        <p className="artifacts-empty mcp-empty-hint">{t("connectors.empty")}</p>
+      )}
 
       {showImport && (
         <div className="mcp-import">
