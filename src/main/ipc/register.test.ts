@@ -111,16 +111,19 @@ vi.mock("../storage/project-memory", () => ({
   readProjectMemory: vi.fn(() => ""),
   projectMemoryPath: vi.fn(() => "/tmp/dw/p.md"),
 }));
+import * as projectMemory from "../storage/project-memory";
 vi.mock("../storage/automations", () => ({
   listAutomations: vi.fn(() => [{ id: "a1" }]),
   listAutomationsWithRuns: vi.fn(() => []),
   createAutomation: vi.fn(),
+  getAutomation: vi.fn(() => null),
   updateAutomation: vi.fn(),
   deleteAutomation: vi.fn(),
   listRuns: vi.fn(() => []),
   deleteRun: vi.fn(),
   deleteRuns: vi.fn(),
 }));
+import * as automationStorage from "../storage/automations";
 vi.mock("../storage/skills/store", () => ({
   listSkills: vi.fn(() => []),
   createSkill: vi.fn(),
@@ -136,6 +139,7 @@ vi.mock("../storage/settings", () => ({
   getApiKey: vi.fn(() => null),
   setApiKey: vi.fn(),
 }));
+import * as settingsStorage from "../storage/settings";
 vi.mock("../storage/memories", () => ({
   listAllMemories: vi.fn(() => []),
   listMemoriesByScope: vi.fn(() => []),
@@ -190,7 +194,7 @@ describe("ipc/register wiring closure", () => {
     const send = handlers.get("chat:send")!;
     const { event, sent } = makeEvent();
 
-    await send(event, "sess-1", "do something", undefined, "/ws", "claude-x", "auto");
+    await send(event, "sess-1", "do something", undefined, process.cwd(), "claude-x", "auto");
 
     // runTurn(sessionId, text, attachments, root, modelId, mode)
     expect(agent.runTurn).toHaveBeenCalledTimes(1);
@@ -363,5 +367,44 @@ describe("ipc/register wiring closure", () => {
       fs.rmSync(root, { recursive: true, force: true });
       fs.rmSync(outside, { recursive: true, force: true });
     }
+  });
+
+  it("rejects untrusted workspace paths before session storage is called", async () => {
+    const setWorkspace = __test_getHandlers().get("sessions:setWorkspace")!;
+    await expect(setWorkspace({}, "sess-1", "../../outside")).rejects.toThrow(/Workspace/);
+    expect(sessions.setSessionWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed attachments before starting an agent turn", async () => {
+    const send = __test_getHandlers().get("chat:send")!;
+    const { event } = makeEvent();
+    await expect(send(event, "sess-1", "inspect", [{
+      id: "a1",
+      name: "payload.html",
+      mimeType: "text/html",
+      size: 10,
+      dataUrl: "data:text/html;base64,AA==",
+      kind: "image",
+    }])).rejects.toThrow(/MIME/);
+    expect(agent.runTurn).not.toHaveBeenCalled();
+  });
+
+  it("rejects forged automation fields before reading or updating storage", async () => {
+    const update = __test_getHandlers().get("automations:update")!;
+    await expect(update({}, "a1", { createdAt: 0, enabled: false })).rejects.toThrow();
+    expect(automationStorage.getAutomation).not.toHaveBeenCalled();
+    expect(automationStorage.updateAutomation).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed settings before persistence", async () => {
+    const save = __test_getHandlers().get("settings:save")!;
+    await expect(save({}, { permissionMode: "root" })).rejects.toThrow();
+    expect(settingsStorage.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("bounds project-memory identifiers before filesystem access", async () => {
+    const read = __test_getHandlers().get("projectMemory:read")!;
+    await expect(read({}, "x".repeat(256))).rejects.toThrow();
+    expect(projectMemory.readProjectMemory).not.toHaveBeenCalled();
   });
 });

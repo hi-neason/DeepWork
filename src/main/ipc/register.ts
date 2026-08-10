@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow, dialog, shell, app } from "electron";
+import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent, dialog, shell, app } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import type { z } from "zod";
@@ -15,7 +15,15 @@ import { scheduler } from "../automation/scheduler";
 import { terminalManager } from "../terminal/manager";
 import {
   artifactActionArgsSchema,
+  automationCreateArgsSchema,
+  automationCreateSchema,
+  automationUpdateArgsSchema,
   assertExistingFileWithin,
+  chatSendArgsSchema,
+  projectMemoryArgsSchema,
+  sessionCreateArgsSchema,
+  sessionWorkspaceArgsSchema,
+  settingsArgsSchema,
   terminalIdArgsSchema,
   terminalInputArgsSchema,
   terminalResizeArgsSchema,
@@ -75,6 +83,7 @@ import {
 } from "../storage/project-memory";
 import {
   listAutomations,
+  getAutomation,
   listAutomationsWithRuns,
   createAutomation,
   updateAutomation,
@@ -130,6 +139,9 @@ async function assertSettingsEndpoints(s: Settings): Promise<void> {
   }
   const embBase = s?.memory?.embedding?.baseUrl;
   if (typeof embBase === "string" && embBase) endpoints.push(embBase);
+  for (const server of s?.mcpServers ?? []) {
+    if (server.transport === "sse" && server.url) endpoints.push(server.url);
+  }
   for (const url of endpoints) {
     await assertConfiguredEndpoint(url);
   }
@@ -169,10 +181,10 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   const handleValidated = <S extends z.ZodType<unknown>>(
     channel: string,
     schema: S,
-    listener: (event: unknown, args: z.infer<S>) => unknown,
+    listener: (event: IpcMainInvokeEvent, args: z.infer<S>) => unknown,
   ): void => {
     handle(channel, (event: unknown, ...args: unknown[]) =>
-      listener(event, schema.parse(args) as z.infer<S>),
+      listener(event as IpcMainInvokeEvent, schema.parse(args) as z.infer<S>),
     );
   };
 
@@ -192,10 +204,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   // opened from run history.
   handle("sessions:list", () => listSessions());
   handleValidated("sessions:get", terminalIdArgsSchema, (_e, [id]) => getSession(id));
-  handle(
-    "sessions:create",
-    (_e, title?: string, workspaceDir?: string, model?: string) =>
-      createSession(title, workspaceDir, model),
+  handleValidated("sessions:create", sessionCreateArgsSchema, (_e, [title, workspaceDir, model]) =>
+    createSession(title, workspaceDir, model),
   );
   handle("sessions:rename", (_e, id: string, title: string) =>
     renameSession(id, title),
@@ -210,9 +220,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     setSessionGroup(id, group),
   );
   handle("sessions:groups", () => listGroups());
-  handle(
-    "sessions:setWorkspace",
-    (_e, id: string, workspaceDir: string) => setSessionWorkspace(id, workspaceDir),
+  handleValidated("sessions:setWorkspace", sessionWorkspaceArgsSchema, (_e, [id, workspaceDir]) =>
+    setSessionWorkspace(id, workspaceDir),
   );
   handle("sessions:setModel", (_e, id: string, model: string) => {
     setSessionModel(id, model);
@@ -270,13 +279,13 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- settings / keys ----
   handle("settings:get", () => loadSettings());
-  handle("settings:save", async (_e, s) => {
+  handleValidated("settings:save", settingsArgsSchema, async (_e, [settings]) => {
     // Validate every renderer-supplied endpoint before it is persisted and can
     // drive credentialed model/embedding requests. The SSRF guard is enforced
     // here (not only in models:verify) so a compromised renderer cannot save a
     // link-local/metadata baseUrl and reach it via chat:send.
-    await assertSettingsEndpoints(s as Settings);
-    saveSettings(s as Settings);
+    await assertSettingsEndpoints(settings);
+    saveSettings(settings);
   });
   handle("settings:getKey", (_e, provider: ProviderKind) => getApiKey(provider));
   handle("settings:setKey", (_e, provider: ProviderKind, key: string) =>
@@ -326,17 +335,10 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     return agentManager.getHistory(sessionId);
   });
 
-  handle(
+  handleValidated(
     "chat:send",
-    async (
-      event,
-      sessionId: string,
-      text: string,
-      attachments?: Attachment[],
-      workspaceDir?: string,
-      modelId?: string,
-      mode?: PermissionMode,
-    ) => {
+    chatSendArgsSchema,
+    async (event, [sessionId, text, attachments, workspaceDir, modelId, mode]) => {
       const sender = event.sender;
       const push = (e: DeepWorkEvent) => {
         if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
@@ -447,8 +449,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   // ---- project memory (per-project markdown) ----
   handle("projectMemory:list", () => listProjects());
-  handle("projectMemory:read", (_e, project: string) => readProjectMemory(project));
-  handle("projectMemory:path", (_e, project: string) => projectMemoryPath(project));
+  handleValidated("projectMemory:read", projectMemoryArgsSchema, (_e, [project]) => readProjectMemory(project));
+  handleValidated("projectMemory:path", projectMemoryArgsSchema, (_e, [project]) => projectMemoryPath(project));
 
   // ---- artifacts ----
   handle("artifacts:list", (_e, sessionId: string) =>
@@ -476,12 +478,17 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
 
   handle("automations:list", () => listAutomations());
   handle("automations:listWithRuns", () => listAutomationsWithRuns());
-  handle(
-    "automations:create",
-    (_e, a: Omit<Automation, "id" | "createdAt" | "updatedAt">) => createAutomation(a),
+  handleValidated("automations:create", automationCreateArgsSchema, (_e, [automation]) =>
+    createAutomation(automation),
   );
-  handle("automations:update", (_e, id: string, patch: Partial<Automation>) =>
-    updateAutomation(id, patch),
+  handleValidated("automations:update", automationUpdateArgsSchema, (_e, [id, patch]) =>
+    {
+      const existing = getAutomation(id);
+      if (!existing) return;
+      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt,
+        lastRunAt: _lastRunAt, lastStatus: _lastStatus, ...mutable } = existing;
+      updateAutomation(id, automationCreateSchema.parse({ ...mutable, ...patch }));
+    },
   );
   handle("automations:delete", (_e, id: string) => deleteAutomation(id));
   handle("automations:runs", (_e, id: string) => listRuns(id));
