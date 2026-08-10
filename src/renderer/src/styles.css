@@ -449,13 +449,25 @@ body,
 .message-attachment.image {
   max-width: 260px;
 }
-.message-attachment img {
+.message-attachment-preview {
   grid-area: preview;
   width: 44px;
   height: 44px;
+  padding: 0;
+  border: none;
   border-radius: 6px;
-  object-fit: cover;
   background: var(--bg-soft);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+.message-attachment-preview:hover {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+}
+.message-attachment img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  display: block;
 }
 .message-attachment-icon {
   grid-area: preview;
@@ -479,6 +491,58 @@ body,
   grid-area: size;
   color: var(--text-dim);
   font-size: 0.6875rem;
+}
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+}
+.image-preview-dialog {
+  position: relative;
+  max-width: min(92vw, 1100px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.image-preview-dialog img {
+  max-width: min(92vw, 1100px);
+  max-height: calc(92vh - 54px);
+  border-radius: 8px;
+  object-fit: contain;
+  background: #111;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+.image-preview-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(20, 20, 24, 0.92);
+  color: #fff;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.image-preview-caption {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.8125rem;
+}
+.image-preview-caption span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .msg.assistant .bubble {
   max-width: min(85%, 780px);

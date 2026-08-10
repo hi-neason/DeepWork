@@ -128,6 +128,7 @@ export function Chat({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
+  const [previewImage, setPreviewImage] = useState<Attachment | null>(null);
 
   // Slash command: type "/" at start of input to search/insert skills.
   const [slashOpen, setSlashOpen] = useState(false);
@@ -223,6 +224,15 @@ export function Chat({
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [showHistory, showSearch]);
+
+  useEffect(() => {
+    if (!previewImage) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setPreviewImage(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewImage]);
 
   // Close the permission-mode dropdown on outside click.
   useEffect(() => {
@@ -565,7 +575,7 @@ export function Chat({
                         </div>
                       )}
                       {!isAssistant && seg.attachments && seg.attachments.length > 0 && (
-                        <MessageAttachments attachments={seg.attachments} />
+                        <MessageAttachments attachments={seg.attachments} onPreviewImage={setPreviewImage} />
                       )}
                       {isAssistant && (
                         <div className="msg-actions">
@@ -607,6 +617,9 @@ export function Chat({
               {chat.error}
             </div>
           </div>
+        )}
+        {previewImage && (
+          <ImagePreviewOverlay image={previewImage} onClose={() => setPreviewImage(null)} />
         )}
       </div>
       <div className="composer">
@@ -923,13 +936,26 @@ function ThinkingIndicator({ chat }: { chat: ChatState }): React.ReactElement | 
   );
 }
 
-function MessageAttachments({ attachments }: { attachments: Attachment[] }): React.ReactElement {
+function MessageAttachments({
+  attachments,
+  onPreviewImage,
+}: {
+  attachments: Attachment[];
+  onPreviewImage: (attachment: Attachment) => void;
+}): React.ReactElement {
   return (
     <div className="message-attachments">
       {attachments.map((att) => (
         <div key={att.id} className={`message-attachment ${att.kind}`}>
           {att.kind === "image" ? (
-            <img src={att.dataUrl} alt={att.name} />
+            <button
+              type="button"
+              className="message-attachment-preview"
+              onClick={() => onPreviewImage(att)}
+              aria-label={att.name}
+            >
+              <img src={att.dataUrl} alt={att.name} />
+            </button>
           ) : (
             <span className="message-attachment-icon">{att.kind === "pdf" ? "PDF" : "TXT"}</span>
           )}
@@ -937,6 +963,29 @@ function MessageAttachments({ attachments }: { attachments: Attachment[] }): Rea
           <span className="message-attachment-size">{formatBytes(att.size)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ImagePreviewOverlay({
+  image,
+  onClose,
+}: {
+  image: Attachment;
+  onClose: () => void;
+}): React.ReactElement {
+  return (
+    <div className="image-preview-overlay" role="dialog" aria-modal="true" aria-label={image.name} onClick={onClose}>
+      <div className="image-preview-dialog" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="image-preview-close" onClick={onClose} aria-label="×">
+          ×
+        </button>
+        <img src={image.dataUrl} alt={image.name} />
+        <div className="image-preview-caption">
+          <span title={image.name}>{image.name}</span>
+          <span>{formatBytes(image.size)}</span>
+        </div>
+      </div>
     </div>
   );
 }

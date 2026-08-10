@@ -133,6 +133,34 @@ describe("Chat component (render layer)", () => {
     expect(screen.getByAltText("screen.png")).toBeTruthy();
   });
 
+  it("opens and closes a full-size preview for image attachments", () => {
+    render(<Chat {...makeProps({
+      chat: {
+        timeline: [{
+          kind: "msg",
+          role: "user",
+          content: "see attached",
+          attachments: [{
+            id: "att-1",
+            name: "screen.png",
+            mimeType: "image/png",
+            size: 2048,
+            dataUrl: "data:image/png;base64,abc",
+            kind: "image",
+          }],
+        }],
+        tools: {},
+        toolStart: {},
+        streaming: false,
+      },
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "screen.png" }));
+    expect(screen.getByRole("dialog", { name: "screen.png" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "screen.png" })).toBeNull();
+  });
+
   // C2 fix: render with <Trans> so the tool name appears as plain text instead of [object Object].
   it("chat.needApproval renders the tool name instead of [object Object]", () => {
     const props = makeProps({
