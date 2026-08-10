@@ -106,7 +106,7 @@ const enUS = {
     about: {
       title: "About",
       version: "Version",
-      versionHint: "DeepWork v0.0.1 · local-first",
+      versionHint: "DeepWork v0.2.0 · local-first",
       dataLocation: "Data storage location",
       showInFinder: "Show in Finder",
       source: "Source code",
