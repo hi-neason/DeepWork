@@ -1,4 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChatState } from "../App";
+import type {
+  ArtifactFile,
+  Attachment,
+  ConfiguredModel,
+  DeepWorkEvent,
+  PermissionMode,
+  Skill,
+  TodoItem,
+  TurnStats,
+  UpdateStatus,
+} from "../../../shared/types";
+import { useTranslation, Trans } from "react-i18next";
+import { buildSegments, HIDDEN_TOOLS } from "./chatSegments";
+import type { ActivityEntry, ToolCardData } from "./chatSegments";
+import { CommitRunner } from "./CommitRunner";
+import i18n from "../i18n";
+import { Markdown } from "./Markdown";
 
 /** Brand label shown above assistant messages (replaces plain "AI" text). */
 function DeepWorkLabel() {
@@ -13,22 +31,6 @@ function DeepWorkLabel() {
     </span>
   );
 }
-import type { ChatState } from "../App";
-import type {
-  ArtifactFile,
-  Attachment,
-  ConfiguredModel,
-  DeepWorkEvent,
-  PermissionMode,
-  Skill,
-  TodoItem,
-  TurnStats,
-  UpdateStatus,
-} from "../../../shared/types";
-import { useTranslation, Trans } from "react-i18next";
-import { CommitRunner } from "./CommitRunner";
-import i18n from "../i18n";
-import { Markdown } from "./Markdown";
 
 interface RecentFolder {
   path: string;
@@ -1002,9 +1004,6 @@ function formatBytes(bytes: number): string {
   return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
 
-/** Tools whose calls we don't render as cards (planning/housekeeping). */
-const HIDDEN_TOOLS = new Set(["write_todos", "Task"]);
-
 function prettyToolName(name: string): string {
   const key = `chat.tools.${name}.label`;
   return i18n.exists(key) ? i18n.t(key) : name;
@@ -1090,183 +1089,6 @@ function ApprovalBanner({
       </div>
     </div>
   );
-}
-
-interface ToolCardData {
-  id: string;
-  name: string;
-  argsPreview: string;
-  outputPreview?: string;
-  isError?: boolean;
-  status: "running" | "done";
-  durationMs?: number;
-}
-
-interface ActivityEntry {
-  // command variant
-  tool?: ToolCardData;
-  // thinking variant
-  text?: string;
-  // true while this specific entry is streaming (only the last thinking entry)
-  live?: boolean;
-  // stable key for React reconciliation (timeline index for reasoning, tool id
-  // for commands) so rows keep their expand/collapse state across rebuilds.
-  key?: string;
-}
-
-type Segment =
-  | {
-      id: string;
-      kind: "msg";
-      role: "user" | "assistant";
-      content: string;
-      attachments?: Attachment[];
-      stats?: TurnStats;
-    }
-  | {
-      id: string;
-      kind: "activity";
-      variant: "command" | "thinking";
-      entries: ActivityEntry[];
-      isLast: boolean;
-    };
-
-/** Group consecutive visible tool calls into a single "steps" segment. */
-/**
- * Detects deepagents/internal action markers that leak into assistant content
- * (e.g. "create", "run", "search"). These are short fragments without
- * punctuation that immediately precede a tool call. Normal replies, even short
- * acknowledgements, are kept because they are not raw action verbs.
- */
-const ACTION_MARKERS = new Set([
-  // English markers commonly emitted by deepagents/tool-calling loops
-  "create",
-  "run",
-  "plan",
-  "search",
-  "analyze",
-  "browse",
-  "execute",
-  "fetch",
-  "read",
-  "write",
-  "call",
-  "invoke",
-  "next",
-  "continue",
-  // Chinese markers
-  "子",
-  "规划",
-  "搜索",
-  "分析",
-  "浏览",
-  "执行",
-  "调用",
-  "创建",
-  "开始",
-  "下一步",
-  "继续",
-]);
-function isActionMarker(content: string): boolean {
-  const t = content.trim().toLowerCase();
-  if (t.length === 0) return true;
-  if (/[。！？.?!]/.test(t)) return false;
-  // Only suppress exact known action verbs that leak from the tool-calling
-  // loop. We deliberately do NOT fall back to "any short lowercase word",
-  // which falsely hid normal short replies like "ok", "yes", "note", "fix".
-  return ACTION_MARKERS.has(t);
-}
-
-export function buildSegments(chat: ChatState): Segment[] {
-  const tailIndices: number[] = [];
-  const segments: Segment[] = [];
-  let bufferVariant: "command" | "thinking" | null = null;
-  let buffer: ActivityEntry[] = [];
-  const flush = (): void => {
-    if (buffer.length && bufferVariant) {
-      tailIndices.push(segments.length);
-      // Stable id from the first entry's key (r${timelineIndex} for thinking,
-      // t${toolCallId} for commands). Appending new entries to a streaming group
-      // keeps the first entry unchanged, so the group retains its id — and its
-      // collapsed/expanded state — across every token-driven rebuild.
-      segments.push({
-        id: `a-${buffer[0]?.key ?? segments.length}`,
-        kind: "activity",
-        variant: bufferVariant,
-        entries: buffer,
-        isLast: false,
-      });
-      buffer = [];
-      bufferVariant = null;
-    }
-  };
-  const pushActivity = (variant: "command" | "thinking", entry: ActivityEntry): void => {
-    if (bufferVariant !== variant) {
-      flush();
-      bufferVariant = variant;
-    }
-    buffer.push(entry);
-  };
-  // Always keep the final assistant message so the summary (if any) is visible.
-  let lastAssistantIndex = -1;
-  for (let i = 0; i < chat.timeline.length; i++) {
-    const item = chat.timeline[i];
-    if (item.kind === "msg" && item.role === "assistant") lastAssistantIndex = i;
-  }
-  for (let i = 0; i < chat.timeline.length; i++) {
-    const item = chat.timeline[i];
-    if (item.kind === "msg") {
-      // Suppress internal fragments that sit between activity phases so they
-      // don't split otherwise-consecutive thinking/command groups. This covers:
-      //  - empty assistant messages (content:"") created by stray message_delta
-      //  - short action-marker fragments ("create", "执行", …) that immediately
-      //    precede a tool call or another reasoning phase.
-      // The final assistant message is never suppressed — it may be the summary.
-      const nextKind = chat.timeline[i + 1]?.kind;
-      const suppressed =
-        i !== lastAssistantIndex &&
-        item.role === "assistant" &&
-        isActionMarker(item.content) &&
-        (nextKind === "tool" || nextKind === "reasoning" || item.content.trim().length === 0);
-      if (suppressed) continue;
-      flush();
-      segments.push({
-        id: `m-${i}`,
-        kind: "msg",
-        role: item.role,
-        content: item.content,
-        attachments: item.attachments,
-        stats: item.stats,
-      });
-    } else if (item.kind === "reasoning") {
-      pushActivity("thinking", { text: item.text, key: `r${i}` });
-    } else {
-      const t = chat.tools[item.id];
-      if (!t || HIDDEN_TOOLS.has(t.name)) continue;
-      pushActivity("command", { tool: t, key: `t${item.id}` });
-    }
-  }
-  flush();
-  if (tailIndices.length) {
-    const last = segments[tailIndices[tailIndices.length - 1]];
-    if (last && last.kind === "activity") last.isLast = true;
-  }
-  // Mark the last thinking entry as live while the turn is still streaming and
-  // this is the tail group (so it shows the "Thinking…" label instead of a
-  // char count).
-  // Walk backward to find the tail thinking group rather than only checking the
-  // final segment (which may be a trailing assistant message).
-  if (chat.streaming) {
-    for (let i = segments.length - 1; i >= 0; i--) {
-      const seg = segments[i];
-      if (seg.kind === "activity" && seg.variant === "thinking" && seg.isLast) {
-        const last = seg.entries[seg.entries.length - 1];
-        if (last) last.live = true;
-        break;
-      }
-    }
-  }
-  return segments;
 }
 
 /**
