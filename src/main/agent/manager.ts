@@ -20,6 +20,7 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { createChatModel } from "./model";
 import { listSessionArtifacts } from "./artifacts";
+import { SessionRuntime } from "./sessionRuntime";
 import { createApprovalMiddleware } from "./middleware";
 import { createSanitizeMiddleware, setThreadRoot } from "./sanitize";
 import { createContextMiddleware } from "./context";
@@ -215,12 +216,8 @@ const TITLE_MODEL_CACHE_MAX = 8;
 export class AgentManager {
   private mcp = new McpManager();
   private checkpointer: SqliteSaver | null = null;
-  /**
-   * "Always allow" grants, scoped per session. A global set meant approving a
-   * tool once in one chat silently disarmed the gate in every other chat and
-   * in unattended automations (H-T2).
-   */
-  private sessionAlwaysAllow = new Map<string, Set<string>>();
+  /** Ephemeral per-session workspace, model, permission, and grant state. */
+  private runtime = new SessionRuntime();
   private titledSessions = new Set<string>();
   private building: Promise<void> | null = null;
   private chatModel: ReturnType<typeof createChatModel> | null = null;
@@ -253,18 +250,8 @@ export class AgentManager {
   private aborters = new Map<string, AbortController>();
   /** threadId/sessionId → turnId of the turn currently owning the live stream. */
   private turnByThread = new Map<string, string>();
-  /** First-run timestamp per session — used to bound artifact scanning. */
-  private sessionStartedAt = new Map<string, number>();
-  /** Per-session workspace root. */
-  private sessionWorkspace = new Map<string, string>();
   /** Cache of one LocalShellBackend per workspace root. */
   private backends = new Map<string, LocalShellBackend>();
-  /** Sessions running without an interactive user (scheduled automations). */
-  private unattended = new Set<string>();
-  /** Per-session model override. */
-  private sessionModel = new Map<string, string>();
-  /** Per-session permission mode override (falls back to global setting). */
-  private sessionMode = new Map<string, PermissionMode>();
 
   /** Wire up the renderer sender so title updates can be pushed independently. */
   setSender(send: (channel: string, ...args: unknown[]) => void): void {
@@ -293,7 +280,7 @@ export class AgentManager {
 
   /** Resolve the workspace for a session (session override or settings default). */
   resolveWorkspace(sessionId: string, fallback: string): string {
-    return this.sessionWorkspace.get(sessionId) || fallback;
+    return this.runtime.getWorkspace(sessionId) || fallback;
   }
 
   /** The default (settings) agent. Per-model overrides live in `agents`. */
@@ -357,23 +344,18 @@ export class AgentManager {
     const self = this;
     const approvalMiddleware = createApprovalMiddleware({
       getAlwaysAllow: (threadId?: string) =>
-        (threadId ? this.sessionAlwaysAllow.get(threadId) : undefined) ??
+        (threadId ? this.runtime.getAlwaysAllowed(threadId) : undefined) ??
         EMPTY_ALWAYS_ALLOW,
       onAlwaysAllow: (name, threadId) => {
         // No thread id → we can't scope the grant, so don't persist it at all
         // (fail-closed: the tool still ran once, with explicit approval).
         if (!threadId) return;
-        let set = this.sessionAlwaysAllow.get(threadId);
-        if (!set) {
-          set = new Set<string>();
-          this.sessionAlwaysAllow.set(threadId, set);
-        }
-        set.add(name);
+        this.runtime.allowTool(threadId, name);
       },
       getMode: (threadId?: string) =>
-        (threadId ? this.sessionMode.get(threadId) : undefined) ??
+        (threadId ? this.runtime.getMode(threadId) : undefined) ??
         loadSettings().permissionMode,
-      isUnattended: (threadId) => this.unattended.has(threadId),
+      isUnattended: (threadId) => this.runtime.isUnattended(threadId),
     });
 
     // Auto-compression uses the active request model.
@@ -412,7 +394,7 @@ export class AgentManager {
     const sanitizeMw = createSanitizeMiddleware();
     const contextMw = createContextMiddleware({
       getMode: (threadId?: string) =>
-        (threadId ? this.sessionMode.get(threadId) : undefined) ??
+        (threadId ? this.runtime.getMode(threadId) : undefined) ??
         loadSettings().permissionMode,
     });
     this.shared = {
@@ -507,7 +489,7 @@ export class AgentManager {
     // otherwise repeated rebuilds leak SQLite connections (M-Agent②).
     this.checkpointer = null;
     this.shared = null;
-    this.sessionAlwaysAllow.clear();
+    this.runtime.clearAlwaysAllowed();
     await this.ensureAgent();
   }
 
@@ -575,10 +557,10 @@ export class AgentManager {
     modelId?: string,
     mode?: PermissionMode,
   ): AsyncGenerator<DeepWorkEvent> {
-    this.unattended.add(sessionId);
+    this.runtime.setUnattended(sessionId, true);
     // Make sure the session's workspace context is registered even without an
     // interactive chat:history call.
-    if (!this.sessionWorkspace.has(sessionId)) {
+    if (!this.runtime.hasWorkspace(sessionId)) {
       const s = getSession(sessionId);
       if (s) {
         const picked = hasPickedWorkspace(s.workspaceDir);
@@ -595,7 +577,7 @@ export class AgentManager {
     try {
       yield* this.runTurn(sessionId, instructions, undefined, undefined, modelId, mode);
     } finally {
-      this.unattended.delete(sessionId);
+      this.runtime.setUnattended(sessionId, false);
     }
   }
 
@@ -612,18 +594,17 @@ export class AgentManager {
     isProject?: boolean,
   ): void {
     if (rootDir) {
-      this.sessionWorkspace.set(sessionId, rootDir);
+      this.runtime.setWorkspace(sessionId, rootDir);
       setThreadRoot(sessionId, rootDir, outputDir, isProject);
     } else {
-      this.sessionWorkspace.delete(sessionId);
+      this.runtime.setWorkspace(sessionId);
       setThreadRoot(sessionId, "");
     }
   }
 
   /** Register a session's model override (loaded when the session is selected). */
   setSessionModel(sessionId: string, modelId?: string): void {
-    if (modelId) this.sessionModel.set(sessionId, modelId);
-    else this.sessionModel.delete(sessionId);
+    this.runtime.setModel(sessionId, modelId);
   }
 
   /**
@@ -633,8 +614,7 @@ export class AgentManager {
    * keeping the approval gate open after the user switched back (H-A3).
    */
   setSessionMode(sessionId: string, mode?: PermissionMode): void {
-    if (mode) this.sessionMode.set(sessionId, mode);
-    else this.sessionMode.delete(sessionId);
+    this.runtime.setMode(sessionId, mode);
   }
 
   /** Drop all per-session runtime state (called when a session is deleted). */
@@ -642,17 +622,12 @@ export class AgentManager {
     // Abort any in-flight turn first, then clear its bookkeeping.
     this.cancel(sessionId);
     this.turnByThread.delete(sessionId);
-    this.sessionMode.delete(sessionId);
-    this.sessionModel.delete(sessionId);
-    this.sessionWorkspace.delete(sessionId);
-    this.sessionStartedAt.delete(sessionId);
-    this.sessionAlwaysAllow.delete(sessionId);
-    this.unattended.delete(sessionId);
+    this.runtime.forget(sessionId);
   }
 
   /** Current model id used by a session (override or default), for the UI. */
   modelForSession(sessionId: string): string {
-    return this.sessionModel.get(sessionId) ?? this.modelKey(loadSettings().model);
+    return this.runtime.getModel(sessionId) ?? this.modelKey(loadSettings().model);
   }
 
   /** Run a turn from a new user message. */
@@ -672,16 +647,13 @@ export class AgentManager {
       {
         session: sessionId,
         model: modelId ?? this.modelForSession(sessionId),
-        workspace: workspaceDir ?? this.sessionWorkspace.get(sessionId),
+        workspace: workspaceDir ?? this.runtime.getWorkspace(sessionId),
         inputLen: userText?.length ?? 0,
       },
       sessionId,
     );
-    if (!this.sessionStartedAt.has(sessionId)) {
-      this.sessionStartedAt.set(sessionId, Date.now());
-    }
     if (workspaceDir) {
-      this.sessionWorkspace.set(sessionId, workspaceDir);
+      this.runtime.setWorkspace(sessionId, workspaceDir);
       // Register full workspace context (cwd + output drawer) for the prompt.
       const s = getSession(sessionId);
       const picked = hasPickedWorkspace(s?.workspaceDir);
@@ -690,10 +662,10 @@ export class AgentManager {
         : workspaceDir;
       setThreadRoot(sessionId, workspaceDir, outputDir, picked);
     }
-    if (modelId) this.sessionModel.set(sessionId, modelId);
+    if (modelId) this.runtime.setModel(sessionId, modelId);
     // Clearing on an absent mode is deliberate — see setSessionMode (H-A3).
     this.setSessionMode(sessionId, mode);
-    const ws = this.sessionWorkspace.get(sessionId);
+    const ws = this.runtime.getWorkspace(sessionId);
     const result = yield* this.runStream(
       sessionId,
       {
@@ -948,12 +920,12 @@ export class AgentManager {
       throw e;
     }
     const agent = await this.getAgentForModel(
-      modelId ?? this.sessionModel.get(sessionId),
+      modelId ?? this.runtime.getModel(sessionId),
     );
     logger.debug(
       "agent",
       "model_resolved",
-      { session: sessionId, model: modelId ?? this.sessionModel.get(sessionId) },
+      { session: sessionId, model: modelId ?? this.runtime.getModel(sessionId) },
       sessionId,
     );
 
@@ -1033,7 +1005,7 @@ export class AgentManager {
       logger.info(
         "agent",
         "stream_start",
-        { session: sessionId, model: modelId ?? this.sessionModel.get(sessionId) },
+        { session: sessionId, model: modelId ?? this.runtime.getModel(sessionId) },
         sessionId,
       );
       // Structured view of what we send to the model: per-message role, size and
@@ -1046,7 +1018,7 @@ export class AgentManager {
         "call_input",
         {
           session: sessionId,
-          model: modelId ?? this.sessionModel.get(sessionId),
+          model: modelId ?? this.runtime.getModel(sessionId),
           count: inMessages.length,
           messages: inMessages.map((m: any) => {
             const c = m?.content;
@@ -1191,7 +1163,7 @@ export class AgentManager {
       llmCalls: logHandler.totals.calls,
       durationMs: Date.now() - tStreamStart,
       firstTokenMs,
-      model: modelId ?? this.sessionModel.get(sessionId) ?? "unknown",
+      model: modelId ?? this.runtime.getModel(sessionId) ?? "unknown",
       finishReason: (lastResponseMeta?.finish_reason as string) || undefined,
     };
   }
@@ -1206,7 +1178,7 @@ export class AgentManager {
    */
   async *regenerate(sessionId: string): AsyncGenerator<DeepWorkEvent> {
     await this.ensureAgent();
-    const agent = await this.getAgentForModel(this.sessionModel.get(sessionId));
+    const agent = await this.getAgentForModel(this.runtime.getModel(sessionId));
     const config = { configurable: { thread_id: sessionId } };
     const state: any = await (agent as any).getState(config);
     const messages: any[] = state?.values?.messages ?? [];
@@ -1388,7 +1360,7 @@ export class AgentManager {
     sessionId: string,
   ): Promise<{ timeline: HistoryItem[]; todos: TodoItem[] }> {
     await this.ensureAgent();
-    const agent = await this.getAgentForModel(this.sessionModel.get(sessionId));
+    const agent = await this.getAgentForModel(this.runtime.getModel(sessionId));
     const config = { configurable: { thread_id: sessionId } };
     const state: any = await (agent as any).getState(config);
     const messages: any[] = state?.values?.messages ?? [];
