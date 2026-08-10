@@ -597,13 +597,15 @@ body,
   align-items: flex-start;
 }
 .steps-head {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  max-width: min(85%, 780px);
   background: none;
   border: 0;
   padding: 3px 8px;
-  margin-left: -6px;
+  margin-left: 0;
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
@@ -660,7 +662,7 @@ body,
   border-left: 1px solid var(--border);
   border-radius: 8px;
   width: 100%;
-  max-width: min(70%, 700px);
+  max-width: min(85%, 780px);
 }
 @keyframes steps-spin {
   to {
