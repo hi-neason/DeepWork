@@ -138,51 +138,6 @@ function migrate(d: Database.Database): void {
       created_at INTEGER NOT NULL
     );
   `);
-
-  // Additive column migrations for databases created before a column was
-  // introduced. `CREATE TABLE IF NOT EXISTS` does not alter an existing table,
-  // so an old DB would otherwise hit "no such column" on new queries. Each
-  // check is idempotent and cheap (PRAGMA table_info).
-  ensureColumns(d, "sessions", [
-    { name: "terminal_cwd", decl: "TEXT" },
-    { name: "source", decl: "TEXT NOT NULL DEFAULT 'user'" },
-  ]);
-  ensureColumns(d, "automations", [
-    { name: "schedule_type", decl: "TEXT" },
-    { name: "schedule_config", decl: "TEXT" },
-    { name: "valid_from", decl: "TEXT" },
-    { name: "valid_until", decl: "TEXT" },
-    { name: "permission_mode", decl: "TEXT" },
-    { name: "skills", decl: "TEXT" },
-    { name: "mcp_server_ids", decl: "TEXT" },
-    { name: "model", decl: "TEXT" },
-    { name: "last_fired_slot", decl: "INTEGER" },
-  ]);
-  ensureColumns(d, "memories", [{ name: "source", decl: "TEXT" }]);
-}
-
-interface ColumnDef {
-  name: string;
-  decl: string;
-}
-
-/** Add any missing columns to a table (idempotent). Safe to run on every boot. */
-function ensureColumns(
-  d: Database.Database,
-  table: string,
-  columns: ColumnDef[],
-): void {
-  const existing = new Set(
-    (d.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
-      (c) => c.name,
-    ),
-  );
-  for (const col of columns) {
-    if (!existing.has(col.name)) {
-      d.exec(`ALTER TABLE ${table} ADD COLUMN ${col.name} ${col.decl}`);
-      logger.info("db", "migrated: added column", { table, column: col.name });
-    }
-  }
 }
 
 export function audit(entry: {
