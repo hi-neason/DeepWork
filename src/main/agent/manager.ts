@@ -393,6 +393,10 @@ export class AgentManager {
       getMode: (threadId?: string) =>
         (threadId ? this.runtime.getMode(threadId) : undefined) ??
         loadSettings().permissionMode,
+      getWorkspace: (threadId?: string) =>
+        threadId ? this.runtime.getWorkspace(threadId) : undefined,
+      getProjectWorkspace: (threadId?: string) =>
+        threadId ? this.runtime.getProjectWorkspace(threadId) : undefined,
     });
     this.shared = {
       tools,
@@ -587,7 +591,7 @@ export class AgentManager {
     isProject?: boolean,
   ): void {
     if (rootDir) {
-      this.runtime.setWorkspace(sessionId, rootDir);
+      this.runtime.setWorkspace(sessionId, rootDir, isProject);
       setThreadRoot(sessionId, rootDir, outputDir, isProject);
     } else {
       this.runtime.setWorkspace(sessionId);
@@ -651,10 +655,10 @@ export class AgentManager {
       sessionId,
     );
     if (workspaceDir) {
-      this.runtime.setWorkspace(sessionId, workspaceDir);
       // Register full workspace context (cwd + output drawer) for the prompt.
       const s = getSession(sessionId);
       const picked = hasPickedWorkspace(s?.workspaceDir);
+      this.runtime.setWorkspace(sessionId, workspaceDir, picked);
       const outputDir = picked
         ? sessionArtifactsDir(sessionId, s!.workspaceDir!)
         : workspaceDir;

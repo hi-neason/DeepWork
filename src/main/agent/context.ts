@@ -2,8 +2,9 @@ import { createMiddleware } from "langchain";
 import { loadSettings } from "../storage/settings";
 import { searchMemories } from "../storage/memories";
 import { readRawMemory } from "../storage/user-memory";
+import { readProjectMemory } from "../storage/project-memory";
 import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
-import type { PermissionMode } from "../../shared/types";
+import type { MemoryItem, PermissionMode } from "../../shared/types";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -95,10 +96,21 @@ export function extractLastUserQuery(messages: any[] | undefined): string {
   return "";
 }
 
+/** Explain each retrieved item in the prompt without exposing implementation details. */
+export function formatRetrievedMemories(memories: MemoryItem[]): string[] {
+  return memories.map((memory) => {
+    const type = memory.type ?? "fact";
+    const source = memory.source ? `; source: ${memory.source}` : "";
+    return `- [memory:${memory.id}; ${type}${source}] ${memory.content}`;
+  });
+}
+
 export function createContextMiddleware(deps: {
   getMode: (threadId?: string) => PermissionMode;
+  getWorkspace: (threadId?: string) => string | undefined;
+  getProjectWorkspace: (threadId?: string) => string | undefined;
 }) {
-  const { getMode } = deps;
+  const { getMode, getWorkspace, getProjectWorkspace } = deps;
   return createMiddleware({
     name: "deepwork_context",
     wrapModelCall: async (request: any, handler: any) => {
@@ -122,7 +134,8 @@ export function createContextMiddleware(deps: {
       }
 
       // --- Workspace-scoped memories (SQLite, semantic) ---
-      const scopeKey = settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
+      const workspaceDir = getWorkspace(threadId) || settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR;
+      const scopeKey = workspaceDir;
       const query = extractLastUserQuery(request.messages);
 
       if (query) {
@@ -131,14 +144,27 @@ export function createContextMiddleware(deps: {
           threshold: settings.memory.threshold,
         });
         if (workspaceMemories.length > 0) {
-          const lines = workspaceMemories.map((m) => {
-            const tag = m.type ? ` (${m.type})` : "";
-            return `- ${m.content}${tag}`;
-          });
           parts.push(
             "## Workspace context\n" +
-              "Facts relevant to this project from past sessions:\n" +
-              lines.join("\n"),
+              "Facts relevant to this project from past sessions. Each entry includes its retrieval provenance:\n" +
+              formatRetrievedMemories(workspaceMemories).join("\n"),
+          );
+        }
+      }
+
+      // --- Project memory (daily distilled decisions and work history) ---
+      const projectWorkspace = getProjectWorkspace(threadId);
+      if (projectWorkspace) {
+        const project = path.basename(projectWorkspace);
+        const projectMemory = readProjectMemory(project).trim();
+        if (projectMemory) {
+          // Project memory grows indefinitely; retain the newest portion without
+          // crowding out the live task and semantic retrieval context.
+          const recent = projectMemory.slice(0, 12_000);
+          parts.push(
+            "## Project memory\n" +
+              "Distilled decisions and work history for this project:\n\n" +
+              recent,
           );
         }
       }
@@ -149,7 +175,6 @@ export function createContextMiddleware(deps: {
       }
 
       // --- Project instruction files (AGENTS.md / CLAUDE.md) ---
-      const workspaceDir = settings.model.workspaceDir;
       if (workspaceDir) {
         if (settings.includeAgentsMd) {
           const agentsContent = readProjectMd(path.join(workspaceDir, "AGENTS.md"));

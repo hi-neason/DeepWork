@@ -59,7 +59,10 @@ export function createMemoryTools(scopeKey = ""): ToolInterface[] {
       const items = await searchMemories(scopeKey, query, { topK: topK ?? 10 });
       if (items.length === 0) return "No relevant workspace memories found.";
       return items
-        .map((m) => `- [${m.id}] (${m.type ?? "fact"}) ${m.content}`)
+        .map((m) => {
+          const source = m.source ? `; source: ${m.source}` : "";
+          return `- [${m.id}; ${m.type ?? "fact"}${source}] ${m.content}`;
+        })
         .join("\n");
     },
     {

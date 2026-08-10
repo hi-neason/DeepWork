@@ -14,6 +14,10 @@ describe("SessionRuntime", () => {
     expect(runtime.getMode("a")).toBe("auto");
     expect(runtime.getAlwaysAllowed("a")?.has("write_file")).toBe(true);
     expect(runtime.getAlwaysAllowed("b")).toBeUndefined();
+    expect(runtime.getProjectWorkspace("a")).toBeUndefined();
+
+    runtime.setWorkspace("a", "/project-a", true);
+    expect(runtime.getProjectWorkspace("a")).toBe("/project-a");
   });
 
   it("clears transient state on session deletion and rebuild", () => {

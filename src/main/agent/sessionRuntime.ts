@@ -4,6 +4,7 @@ import type { PermissionMode } from "../../shared/types";
 export class SessionRuntime {
   private readonly alwaysAllowed = new Map<string, Set<string>>();
   private readonly workspace = new Map<string, string>();
+  private readonly projectWorkspace = new Set<string>();
   private readonly model = new Map<string, string>();
   private readonly mode = new Map<string, PermissionMode>();
   private readonly unattended = new Set<string>();
@@ -12,9 +13,19 @@ export class SessionRuntime {
     return this.workspace.get(sessionId);
   }
 
-  setWorkspace(sessionId: string, workspace?: string): void {
-    if (workspace) this.workspace.set(sessionId, workspace);
-    else this.workspace.delete(sessionId);
+  setWorkspace(sessionId: string, workspace?: string, isProject = false): void {
+    if (workspace) {
+      this.workspace.set(sessionId, workspace);
+      if (isProject) this.projectWorkspace.add(sessionId);
+      else this.projectWorkspace.delete(sessionId);
+    } else {
+      this.workspace.delete(sessionId);
+      this.projectWorkspace.delete(sessionId);
+    }
+  }
+
+  getProjectWorkspace(sessionId: string): string | undefined {
+    return this.projectWorkspace.has(sessionId) ? this.workspace.get(sessionId) : undefined;
   }
 
   getModel(sessionId: string): string | undefined {
@@ -68,6 +79,7 @@ export class SessionRuntime {
   forget(sessionId: string): void {
     this.alwaysAllowed.delete(sessionId);
     this.workspace.delete(sessionId);
+    this.projectWorkspace.delete(sessionId);
     this.model.delete(sessionId);
     this.mode.delete(sessionId);
     this.unattended.delete(sessionId);

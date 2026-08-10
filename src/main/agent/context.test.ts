@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractLastUserQuery } from "./context";
+import { extractLastUserQuery, formatRetrievedMemories } from "./context";
 
 describe("agent/context - extractLastUserQuery (C-T4 root cause)", () => {
   it("extracts the last user text from plain objects with role:'user'", () => {
@@ -37,5 +37,18 @@ describe("agent/context - extractLastUserQuery (C-T4 root cause)", () => {
       humanMsg,
     ];
     expect(extractLastUserQuery(msgs as any)).toBe("先看 第二块");
+  });
+
+  it("keeps retrieval provenance in the injected memory context", () => {
+    expect(formatRetrievedMemories([{
+      id: "memory-1",
+      content: "Use pnpm for this project.",
+      scope: "workspace",
+      createdAt: 1,
+      type: "preference",
+      source: "session:abc:turn:2",
+    }])).toEqual([
+      "- [memory:memory-1; preference; source: session:abc:turn:2] Use pnpm for this project.",
+    ]);
   });
 });
