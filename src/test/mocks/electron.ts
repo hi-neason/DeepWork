@@ -83,6 +83,7 @@ export const dialog = {
 export const shell = {
   openExternal: noop(),
   openPath: noop(),
+  showItemInFolder: noop(),
 };
 
 export const clipboard = {

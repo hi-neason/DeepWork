@@ -148,7 +148,7 @@ export function RightPanel({
             onClick={(e) => {
               e.stopPropagation();
               if (artifacts[0]) {
-                window.deepwork.artifacts.reveal(artifacts[0].absolutePath);
+                window.deepwork.artifacts.reveal(sessionId!, artifacts[0].absolutePath);
               }
             }}
           >
@@ -174,7 +174,7 @@ export function RightPanel({
                     </div>
                     <button
                       className="rp-artifact-open"
-                      onClick={() => window.deepwork.artifacts.open(a.absolutePath)}
+                      onClick={() => window.deepwork.artifacts.open(sessionId!, a.absolutePath)}
                       title={t("rightPanel.open")}
                     >
                       {t("rightPanel.open")}

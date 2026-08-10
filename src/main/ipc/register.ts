@@ -1,6 +1,7 @@
 import { ipcMain, type BrowserWindow, dialog, shell, app } from "electron";
 import path from "node:path";
 import fs from "node:fs";
+import type { z } from "zod";
 import { agentManager } from "../agent/manager";
 import { getDb } from "../storage/db";
 import { applyOpenAtLogin, setKeepAwake } from "../system";
@@ -12,6 +13,14 @@ import type { Settings } from "../../shared/types";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
 import { scheduler } from "../automation/scheduler";
 import { terminalManager } from "../terminal/manager";
+import {
+  artifactActionArgsSchema,
+  assertExistingFileWithin,
+  terminalIdArgsSchema,
+  terminalInputArgsSchema,
+  terminalResizeArgsSchema,
+  terminalSpawnArgsSchema,
+} from "./validation";
 
 import {
   listSessions,
@@ -156,6 +165,17 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     });
   };
 
+  /** Parse renderer-controlled arguments before they reach a business service. */
+  const handleValidated = <S extends z.ZodType<unknown>>(
+    channel: string,
+    schema: S,
+    listener: (event: unknown, args: z.infer<S>) => unknown,
+  ): void => {
+    handle(channel, (event: unknown, ...args: unknown[]) =>
+      listener(event, schema.parse(args) as z.infer<S>),
+    );
+  };
+
   // Forward shell output from the terminal manager to the renderer.
   terminalManager.setSender((channel, ...args) =>
     getWin()?.webContents.send(channel, ...args),
@@ -171,7 +191,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   // are hidden from the sidebar and resolved on demand via sessions:get when
   // opened from run history.
   handle("sessions:list", () => listSessions());
-  handle("sessions:get", (_e, id: string) => getSession(id));
+  handleValidated("sessions:get", terminalIdArgsSchema, (_e, [id]) => getSession(id));
   handle(
     "sessions:create",
     (_e, title?: string, workspaceDir?: string, model?: string) =>
@@ -434,12 +454,12 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   handle("artifacts:list", (_e, sessionId: string) =>
     agentManager.listArtifacts(sessionId),
   );
-  handle("artifacts:reveal", (_e, absolutePath: string) => {
-    if (isSafePath(absolutePath)) shell.showItemInFolder(absolutePath);
+  handleValidated("artifacts:reveal", artifactActionArgsSchema, (_e, [sessionId, absolutePath]) => {
+    shell.showItemInFolder(resolveSessionArtifact(sessionId, absolutePath));
   });
-  handle("artifacts:open", (_e, absolutePath: string) => {
-    if (isSafePath(absolutePath)) shell.openPath(absolutePath);
-  });
+  handleValidated("artifacts:open", artifactActionArgsSchema, (_e, [sessionId, absolutePath]) =>
+    shell.openPath(resolveSessionArtifact(sessionId, absolutePath)),
+  );
 
   // ---- automations ----
   scheduler.init({
@@ -511,31 +531,36 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   });
 
   // ---- terminal (interactive PTY accessible from the renderer) ----
-  handle("terminal:spawn", (_e, id: string, cwd: string) =>
-    terminalManager.spawn(id, cwd),
-  );
-  handle("terminal:input", (_e, id: string, data: string) =>
+  handleValidated("terminal:spawn", terminalSpawnArgsSchema, (_e, [id, sessionId]) => {
+    const session = getSession(sessionId);
+    if (!session) throw new Error("Session not found");
+    const cwd = session.terminalCwd ?? sessionRootDir(session.id, session.workspaceDir);
+    terminalManager.spawn(id, cwd);
+  });
+  handleValidated("terminal:input", terminalInputArgsSchema, (_e, [id, data]) =>
     terminalManager.input(id, data),
   );
-  handle("terminal:resize", (_e, id: string, cols: number, rows: number) =>
+  handleValidated("terminal:resize", terminalResizeArgsSchema, (_e, [id, cols, rows]) =>
     terminalManager.resize(id, cols, rows),
   );
-  handle("terminal:kill", (_e, id: string) => terminalManager.kill(id));
+  handleValidated("terminal:kill", terminalIdArgsSchema, (_e, [id]) => terminalManager.kill(id));
 }
 
-/** Guard reveal/open to real files under the user's home directory. */
-function isSafePath(p: string): boolean {
-  if (!p || typeof p !== "string") return false;
-  try {
-    const resolved = path.resolve(p);
-    if (!fs.existsSync(resolved)) return false;
-    const home = path.resolve(app.getPath("home"));
-    // Use path.relative rather than startsWith: `/Users/neason-evil` would
-    // otherwise satisfy `startsWith("/Users/neason")` (L-1). A relative path
-    // that doesn't start with ".." is inside home.
-    const rel = path.relative(home, resolved);
-    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
-  } catch {
-    return false;
-  }
+/** Resolve an artifact against the authoritative workspace of its session. */
+function resolveSessionArtifact(sessionId: string, candidate: string): string {
+  const session = getSession(sessionId);
+  if (!session) throw new Error("Session not found");
+  const allowedRoot = hasPickedWorkspace(session.workspaceDir)
+    ? path.resolve(session.workspaceDir!)
+    : sessionArtifactsDir(session.id, session.workspaceDir);
+  const resolved = assertExistingFileWithin(allowedRoot, candidate);
+  const listed = agentManager.listArtifacts(sessionId).some((artifact) => {
+    try {
+      return fs.realpathSync(artifact.absolutePath) === resolved;
+    } catch {
+      return false;
+    }
+  });
+  if (!listed) throw new Error("File is not a session artifact");
+  return resolved;
 }

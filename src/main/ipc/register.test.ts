@@ -9,11 +9,14 @@
 // and then concrete handlers are pulled from the captured handler Map and
 // invoked directly with assertions.
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 
 vi.mock("better-sqlite3", () => import("../../test/mocks/better-sqlite3"));
 vi.mock("electron", () => import("../../test/mocks/electron"));
-import { __test_getHandlers } from "../../test/mocks/electron";
+import { __test_getHandlers, shell } from "../../test/mocks/electron";
 
 // ---- main-process service mocks ----
 const agent = vi.hoisted(() => {
@@ -34,7 +37,14 @@ const agent = vi.hoisted(() => {
     rebuildSkills: vi.fn(),
     rebuild: vi.fn(),
     getMcpStatus: vi.fn(() => []),
-    listArtifacts: vi.fn(() => []),
+    listArtifacts: vi.fn((_sessionId?: string): Array<{
+      name: string;
+      relativePath: string;
+      absolutePath: string;
+      size: number;
+      modifiedAt: number;
+      ext: string;
+    }> => []),
     runUnattendedTurn: vi.fn(async function* () {}),
     setSender: vi.fn(),
   };
@@ -88,6 +98,8 @@ vi.mock("../storage/sessions", () => ({
   groupForWorkspace: vi.fn(() => "default"),
   touchSession: vi.fn(),
 }));
+import * as sessions from "../storage/sessions";
+import * as configPaths from "../config/paths";
 vi.mock("../storage/timeline-memory", () => ({
   listTimelineDates: vi.fn(() => []),
   readTimelineDate: vi.fn(() => ""),
@@ -288,5 +300,68 @@ describe("ipc/register wiring closure", () => {
 
     await pathHandler({}, "2026-08-08");
     expect(pathSpy).toHaveBeenCalledWith("2026-08-08");
+  });
+
+  it("terminal:spawn derives cwd from the stored session instead of renderer input", async () => {
+    vi.mocked(sessions.getSession).mockReturnValueOnce({
+      id: "sess-pty",
+      title: "Terminal",
+      createdAt: 1,
+      updatedAt: 1,
+      source: "user",
+      group: "Default",
+      terminalCwd: "/trusted/project",
+    });
+    const spawn = __test_getHandlers().get("terminal:spawn")!;
+
+    await spawn({}, "term-1", "sess-pty");
+
+    expect(term.spawn).toHaveBeenCalledWith("term-1", "/trusted/project");
+  });
+
+  it("terminal handlers reject malformed ids and PTY dimensions at the IPC boundary", async () => {
+    const handlers = __test_getHandlers();
+    await expect(handlers.get("terminal:spawn")!({}, "", "sess-1")).rejects.toThrow();
+    await expect(handlers.get("terminal:resize")!({}, "term-1", -1, 24)).rejects.toThrow();
+    expect(term.spawn).not.toHaveBeenCalled();
+    expect(term.resize).not.toHaveBeenCalled();
+  });
+
+  it("artifacts:open requires the file to belong to the supplied session", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-artifact-ipc-"));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-artifact-outside-"));
+    try {
+      const allowed = path.join(root, "report.txt");
+      const forbidden = path.join(outside, "secret.txt");
+      fs.writeFileSync(allowed, "report");
+      fs.writeFileSync(forbidden, "secret");
+      vi.mocked(sessions.getSession).mockReturnValue({
+        id: "sess-art",
+        title: "Artifacts",
+        createdAt: 1,
+        updatedAt: 1,
+        source: "user",
+        group: "Default",
+      });
+      vi.mocked(configPaths.sessionArtifactsDir).mockReturnValue(root);
+      agent.listArtifacts.mockReturnValueOnce([{
+        name: "report.txt",
+        relativePath: "report.txt",
+        absolutePath: allowed,
+        size: 6,
+        modifiedAt: 1,
+        ext: "txt",
+      }]);
+      const openSpy = vi.spyOn(shell, "openPath");
+      const open = __test_getHandlers().get("artifacts:open")!;
+
+      await open({}, "sess-art", allowed);
+      expect(openSpy).toHaveBeenCalledWith(fs.realpathSync(allowed));
+      await expect(open({}, "sess-art", forbidden)).rejects.toThrow(/outside/);
+      expect(openSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

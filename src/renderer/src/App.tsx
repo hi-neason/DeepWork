@@ -655,10 +655,11 @@ export function App(): React.ReactElement {
             className={`rp-resizer ${resizing ? "active" : ""}`}
             onMouseDown={() => setResizing(true)}
           />
-          {terminalOpen ? (
+          {terminalOpen && selectedSession ? (
             <TerminalErrorBoundary onClose={toggleTerminal}>
               <TerminalPanel
-                cwd={selectedSession?.terminalCwd ?? settings?.model?.workspaceDir ?? ""}
+                sessionId={selectedSession.id}
+                cwd={selectedSession.terminalCwd}
                 onClose={toggleTerminal}
               />
             </TerminalErrorBoundary>

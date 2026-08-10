@@ -192,10 +192,10 @@ const api = {
   artifacts: {
     list: (sessionId: string): Promise<ArtifactFile[]> =>
       ipcRenderer.invoke("artifacts:list", sessionId),
-    reveal: (absolutePath: string): Promise<void> =>
-      ipcRenderer.invoke("artifacts:reveal", absolutePath),
-    open: (absolutePath: string): Promise<void> =>
-      ipcRenderer.invoke("artifacts:open", absolutePath),
+    reveal: (sessionId: string, absolutePath: string): Promise<void> =>
+      ipcRenderer.invoke("artifacts:reveal", sessionId, absolutePath),
+    open: (sessionId: string, absolutePath: string): Promise<void> =>
+      ipcRenderer.invoke("artifacts:open", sessionId, absolutePath),
   },
   automations: {
     list: (): Promise<Automation[]> => ipcRenderer.invoke("automations:list"),
@@ -223,8 +223,8 @@ const api = {
     },
   },
   terminal: {
-    spawn: (id: string, cwd: string): Promise<void> =>
-      ipcRenderer.invoke("terminal:spawn", id, cwd),
+    spawn: (id: string, sessionId: string): Promise<void> =>
+      ipcRenderer.invoke("terminal:spawn", id, sessionId),
     input: (id: string, data: string): Promise<void> =>
       ipcRenderer.invoke("terminal:input", id, data),
     resize: (id: string, cols: number, rows: number): Promise<void> =>

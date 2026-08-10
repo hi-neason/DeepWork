@@ -38,9 +38,12 @@ function readTheme(): import("@xterm/xterm").ITheme {
 }
 
 export function TerminalPanel({
+  sessionId,
   cwd,
   onClose,
 }: {
+  sessionId: string;
+  /** Display-only; the main process derives the authoritative cwd from sessionId. */
   cwd?: string;
   onClose: () => void;
 }): React.ReactElement {
@@ -98,7 +101,7 @@ export function TerminalPanel({
         });
         term.onData((d) => void window.deepwork.terminal.input(id, d));
         void window.deepwork.terminal
-          .spawn(id, cwd ?? "")
+          .spawn(id, sessionId)
           .catch((e: unknown) =>
             setError(t("terminal.startFailed", { message: String((e as Error)?.message ?? e) })),
           );
@@ -119,10 +122,9 @@ export function TerminalPanel({
       void window.deepwork.terminal.kill(id);
       term?.dispose();
     };
-    // Re-spawn the terminal when the working directory changes (e.g. the user
-    // switches sessions). The cleanup below kills the old pty before the new
-    // one is created, so the shell always opens in the current session's root.
-  }, [cwd]);
+    // Re-spawn when the selected session changes. The main process resolves
+    // that session's authoritative cwd; cleanup kills the previous PTY first.
+  }, [sessionId]);
 
   if (error) {
     return (
