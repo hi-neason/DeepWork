@@ -6,6 +6,24 @@ import { logger } from "../log/logger";
 
 export type TerminalDataSender = (channel: string, ...args: unknown[]) => void;
 
+/** Keep one noisy PTY read from monopolizing the Electron IPC channel. */
+export const MAX_TERMINAL_OUTPUT_CHUNK_BYTES = 64 * 1024;
+
+export function limitTerminalOutput(data: string): string {
+  if (Buffer.byteLength(data, "utf8") <= MAX_TERMINAL_OUTPUT_CHUNK_BYTES) return data;
+
+  // Slice by UTF-16 code unit only after verifying the encoded byte budget.
+  // This keeps terminal escape sequences and ordinary Unicode output intact
+  // for normal-size chunks while failing safely for pathological output.
+  let end = Math.min(data.length, MAX_TERMINAL_OUTPUT_CHUNK_BYTES);
+  while (end > 0 && Buffer.byteLength(data.slice(0, end), "utf8") > MAX_TERMINAL_OUTPUT_CHUNK_BYTES) {
+    end--;
+  }
+  const last = data.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end--;
+  return data.slice(0, end);
+}
+
 /**
  * Owns the set of interactive PTYs backing the in-app terminal panel.
  *
@@ -54,7 +72,16 @@ class TerminalManager {
       cwd: dir,
       env,
     });
-    term.onData((data) => this.send("terminal:data", id, data));
+    term.onData((data) => {
+      const output = limitTerminalOutput(data);
+      if (output.length !== data.length) {
+        logger.warn("terminal", "output_chunk_truncated", {
+          id,
+          originalBytes: Buffer.byteLength(data, "utf8"),
+        });
+      }
+      this.send("terminal:data", id, output);
+    });
     this.terms.set(id, term);
     logger.info("terminal", "spawn", { id, cwd: dir });
   }
