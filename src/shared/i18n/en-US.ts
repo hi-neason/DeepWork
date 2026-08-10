@@ -165,6 +165,11 @@ const enUS = {
     },
   },
   errors: {
+    preloadMissing: {
+      title: "Open DeepWork from the desktop app",
+      body: "This renderer needs Electron's preload bridge. Start the Electron app instead of opening the Vite URL directly in a browser.",
+      command: "pnpm dev",
+    },
     noApiKey: "No API key configured",
     baseUrlRequired: "A Base URL is required for this provider",
     providerReturned: "Provider returned {{status}}: {{detail}}",

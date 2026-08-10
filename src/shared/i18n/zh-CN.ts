@@ -163,6 +163,11 @@ const zhCN = {
     },
   },
   errors: {
+    preloadMissing: {
+      title: "请从桌面应用打开 DeepWork",
+      body: "这个界面需要 Electron preload bridge。请启动 Electron 应用，而不是直接在浏览器打开 Vite 地址。",
+      command: "pnpm dev",
+    },
     noApiKey: "未配置 API Key",
     baseUrlRequired: "该服务商需要填写 Base URL",
     providerReturned: "服务商返回 {{status}}：{{detail}}",

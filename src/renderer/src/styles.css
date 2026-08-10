@@ -1173,6 +1173,40 @@ body,
   font-weight: 600;
 }
 
+.preload-missing {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+}
+.preload-missing-card {
+  width: min(520px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  padding: 24px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+}
+.preload-missing-card h1 {
+  margin: 0 0 10px;
+  font-size: 1.125rem;
+}
+.preload-missing-card p {
+  margin: 0 0 16px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.preload-missing-card code {
+  display: inline-block;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
 .dino-card {
   margin: 18px auto 0;
   width: 620px;

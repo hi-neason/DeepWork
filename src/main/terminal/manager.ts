@@ -12,13 +12,19 @@ export const MAX_TERMINAL_OUTPUT_CHUNK_BYTES = 64 * 1024;
 export function limitTerminalOutput(data: string): string {
   if (Buffer.byteLength(data, "utf8") <= MAX_TERMINAL_OUTPUT_CHUNK_BYTES) return data;
 
-  // Slice by UTF-16 code unit only after verifying the encoded byte budget.
-  // This keeps terminal escape sequences and ordinary Unicode output intact
-  // for normal-size chunks while failing safely for pathological output.
-  let end = Math.min(data.length, MAX_TERMINAL_OUTPUT_CHUNK_BYTES);
-  while (end > 0 && Buffer.byteLength(data.slice(0, end), "utf8") > MAX_TERMINAL_OUTPUT_CHUNK_BYTES) {
-    end--;
+  // Binary-search the largest UTF-16 prefix within the UTF-8 budget. A linear
+  // shrink loop repeatedly re-encodes large Unicode strings and can stall tests.
+  let lo = 0;
+  let hi = Math.min(data.length, MAX_TERMINAL_OUTPUT_CHUNK_BYTES);
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (Buffer.byteLength(data.slice(0, mid), "utf8") <= MAX_TERMINAL_OUTPUT_CHUNK_BYTES) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
   }
+  let end = lo;
   const last = data.charCodeAt(end - 1);
   if (last >= 0xd800 && last <= 0xdbff) end--;
   return data.slice(0, end);

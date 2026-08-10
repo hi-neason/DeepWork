@@ -170,12 +170,14 @@ export function Chat({
 
   // Load enabled skills for slash command on mount.
   useEffect(() => {
+    if (!window.deepwork) return;
     void window.deepwork.skills.list().then((list) => {
       setSkills(list.filter((s) => s.enabled));
     });
   }, []);
 
   useEffect(() => {
+    if (!window.deepwork) return;
     void window.deepwork.sessions.recentFolders().then(setRecent);
   }, [sessionId]);
 
