@@ -114,63 +114,83 @@ export function Settings({
   const update = (patch: Partial<SettingsType>): void => {
     setSettings({ ...settings, ...patch });
   };
+  const activeTab = TABS.find((entry) => entry.id === tab) ?? TABS[0];
 
   return (
     <div className="settings-shell">
-      <aside className="settings-nav">
+      <aside className="settings-nav" aria-label={t("settings.navigation")}>
         <div className="settings-title-row">
           <span className="settings-title">{t("settings.title")}</span>
           <button
             className="settings-close"
             onClick={onClose}
             title={t("settings.close")}
+            aria-label={t("settings.close")}
           >
             <X aria-hidden="true" />
           </button>
         </div>
-        {TABS.map((tdef) => {
-          const TabIcon = tdef.icon;
-          return (
-            <button
-              key={tdef.id}
-              className={`settings-nav-item ${tab === tdef.id ? "active" : ""}`}
-              onClick={() => setTab(tdef.id)}
-            >
-              <TabIcon className="nav-icon" aria-hidden="true" />
-              {t(tdef.labelKey)}
-              {tdef.wip && <span className="wip-badge">{t("settings.wip")}</span>}
-            </button>
-          );
-        })}
+        <div className="settings-nav-list" role="tablist" aria-orientation="vertical">
+          {TABS.map((tdef) => {
+            const TabIcon = tdef.icon;
+            return (
+              <button
+                key={tdef.id}
+                id={`settings-tab-${tdef.id}`}
+                className={`settings-nav-item ${tab === tdef.id ? "active" : ""}`}
+                onClick={() => setTab(tdef.id)}
+                role="tab"
+                aria-selected={tab === tdef.id}
+                aria-controls={`settings-panel-${tdef.id}`}
+              >
+                <TabIcon className="nav-icon" aria-hidden="true" />
+                <span className="settings-nav-label">{t(tdef.labelKey)}</span>
+                {tdef.wip && <span className="wip-badge">{t("settings.wip")}</span>}
+              </button>
+            );
+          })}
+        </div>
       </aside>
 
       <div className="settings-content">
         <div className="settings-save-bar">
-          {saved && <span style={{ color: "var(--ok)" }}>{t("settings.saved")} ✓</span>}
+          <span className="settings-current-section">{t(activeTab.labelKey)}</span>
+          <span className={`settings-save-state ${saved ? "saved" : ""}`} aria-live="polite">
+            <span className="settings-save-dot" aria-hidden="true" />
+            {saved ? t("settings.saved") : t("settings.autoSave")}
+          </span>
         </div>
 
         <div className="settings-scroll">
-          {tab === "general" && (
-            <GeneralTab
-              settings={settings}
-              onChange={update}
-              onModelChange={updateModel}
-            />
-          )}
-          {tab === "models" && (
-            <ModelsTab
-              settings={settings}
-              onChange={updateModel}
-              onSettingsChange={(patch) => setSettings({ ...settings, ...patch })}
-            />
-          )}
-          {tab === "memory" && <MemoryTab />}
-          {tab === "skills" && <SkillsView settings={settings} />}
-          {tab === "connectors" && (
-            <Connectors settings={settings} onChange={update} />
-          )}
-          {tab === "automations" && <AutomationsView />}
-          {tab === "about" && <AboutTab updateStatus={updateStatus ?? { state: "idle" }} />}
+          <div
+            key={tab}
+            id={`settings-panel-${tab}`}
+            className="settings-panel"
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${tab}`}
+          >
+            {tab === "general" && (
+              <GeneralTab
+                settings={settings}
+                onChange={update}
+                onModelChange={updateModel}
+              />
+            )}
+            {tab === "models" && (
+              <ModelsTab
+                settings={settings}
+                onChange={updateModel}
+                onSettingsChange={(patch) => setSettings({ ...settings, ...patch })}
+              />
+            )}
+            {tab === "memory" && <MemoryTab />}
+            {tab === "skills" && <SkillsView settings={settings} />}
+            {tab === "connectors" && (
+              <Connectors settings={settings} onChange={update} />
+            )}
+            {tab === "automations" && <AutomationsView />}
+            {tab === "about" && <AboutTab updateStatus={updateStatus ?? { state: "idle" }} />}
+          </div>
         </div>
       </div>
     </div>

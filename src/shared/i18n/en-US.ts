@@ -70,6 +70,8 @@ const enUS = {
     title: "Settings",
     close: "Close",
     saved: "Saved",
+    autoSave: "Changes save automatically",
+    navigation: "Settings sections",
     wip: "WIP",
     tabs: {
       general: "General",
@@ -313,6 +315,8 @@ const enUS = {
     },
   },
   sidebar: {
+    primaryNavigation: "Primary navigation",
+    taskViews: "Task views",
     newTask: "New task",
     connectors: "MCP",
     automations: "Automations",

@@ -210,8 +210,9 @@ export function Sidebar({
     <aside className="sidebar">
       <h1>DeepWork</h1>
 
-      <nav className="nav">
-        <div
+      <nav className="nav" aria-label={t("sidebar.primaryNavigation")}>
+        <button
+          type="button"
           className={`nav-item ${activeView === "chat" ? "active" : ""}`}
           onClick={() => {
             onNew();
@@ -220,20 +221,24 @@ export function Sidebar({
         >
           <Plus className="nav-icon" aria-hidden="true" />
           <span>{t("sidebar.newTask")}</span>
-        </div>
+        </button>
       </nav>
 
       <div className="task-section">
-        <div className="section-tabs">
+        <div className="section-tabs" role="tablist" aria-label={t("sidebar.taskViews")}>
           <button
             className={`section-tab ${section === "chats" ? "active" : ""}`}
             onClick={() => setSection("chats")}
+            role="tab"
+            aria-selected={section === "chats"}
           >
             {t("sidebar.taskList")}
           </button>
           <button
             className={`section-tab ${section === "automations" ? "active" : ""}`}
             onClick={() => setSection("automations")}
+            role="tab"
+            aria-selected={section === "automations"}
           >
             {t("sidebar.automations")}
           </button>
@@ -334,15 +339,17 @@ export function Sidebar({
                       ) : (
                         <span className="sidebar-chat-session-title">{s.title}</span>
                       )}
-                      <span
+                      <button
+                        type="button"
                         className="sidebar-chat-delete"
+                        aria-label={`${t("sidebar.delete")} ${s.title}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           onDelete(s.id);
                         }}
                       >
                         <X aria-hidden="true" />
-                      </span>
+                      </button>
                     </div>
                   ))}
               </div>
@@ -370,13 +377,14 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <div
+        <button
+          type="button"
           className={`settings-footer-item ${activeView === "settings" ? "active" : ""}`}
           onClick={() => onOpenView("settings")}
         >
           <Settings2 className="nav-icon" aria-hidden="true" />
           <span>{t("sidebar.settings")}</span>
-        </div>
+        </button>
       </div>
 
       {menu && (
@@ -523,7 +531,10 @@ function AutomationList({
     <div className="sidebar-auto-list">
       {items.map((a) => (
         <div key={a.id} className="sidebar-auto-card">
-          <div className="sidebar-auto-head" onClick={() => onToggle(a.id)}>
+          <div
+            className="sidebar-auto-head"
+            onClick={() => onToggle(a.id)}
+          >
             <span className="sidebar-auto-caret">
               {collapsed.has(a.id)
                 ? <ChevronRight aria-hidden="true" />

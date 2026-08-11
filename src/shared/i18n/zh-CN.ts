@@ -68,6 +68,8 @@ const zhCN = {
     title: "设置",
     close: "关闭",
     saved: "已保存",
+    autoSave: "更改会自动保存",
+    navigation: "设置分类",
     wip: "WIP",
     tabs: {
       general: "通用",
@@ -305,6 +307,8 @@ const zhCN = {
     },
   },
   sidebar: {
+    primaryNavigation: "主导航",
+    taskViews: "任务视图",
     newTask: "新建任务",
     connectors: "MCP",
     automations: "自动化",

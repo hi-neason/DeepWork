@@ -14,18 +14,19 @@ export function GeneralTab({ settings, onChange, onModelChange }: Props): React.
     if (dir) onModelChange({ workspaceDir: dir });
   };
   return (
-    <div className="settings-section">
+    <div className="settings-section settings-section-general">
       <h2>{t("settings.general.title")}</h2>
       <p className="section-desc">{t("settings.general.desc")}</p>
 
       <div className="setting-card">
         <div className="setting-head">{t("settings.general.theme")}</div>
-        <div className="segmented">
+        <div className="segmented" role="group" aria-label={t("settings.general.theme")}>
           {(["light", "dark", "auto"] as const).map((tm) => (
             <button
               key={tm}
               className={settings.theme === tm ? "active" : ""}
               onClick={() => onChange({ theme: tm })}
+              aria-pressed={settings.theme === tm}
             >
               {tm === "light"
                 ? t("settings.general.themeLight")
@@ -70,6 +71,7 @@ export function GeneralTab({ settings, onChange, onModelChange }: Props): React.
               step={0.05}
               value={settings.fontScale}
               onChange={(e) => onChange({ fontScale: Number(e.target.value) })}
+              aria-label={t("settings.general.fontSize")}
             />
             <span>{t("settings.general.fontLarge")}</span>
           </div>
@@ -196,6 +198,7 @@ export function Toggle({
         onClick={() => onChange(!checked)}
         role="switch"
         aria-checked={checked}
+        aria-label={label}
       >
         <span className="knob" />
       </button>
