@@ -19,6 +19,7 @@ import type { ActivityEntry, ToolCardData } from "./chatSegments";
 import { CommitRunner } from "./CommitRunner";
 import i18n from "../i18n";
 import { Markdown } from "./Markdown";
+import { ArrowUpRight, Code2, ListChecks, ScanSearch } from "lucide-react";
 
 /** Brand label shown above assistant messages (replaces plain "AI" text). */
 function DeepWorkLabel() {
@@ -335,6 +336,11 @@ export function Chat({
     if (sessionId) onSetModel(id);
   };
 
+  const chooseStarter = (prompt: string): void => {
+    setInput(prompt);
+    requestAnimationFrame(() => taRef.current?.focus());
+  };
+
   const pickFolder = async (): Promise<void> => {
     const dir = await window.deepwork.settings.pickDirectory();
     if (dir) setPendingWorkspace(dir);
@@ -617,18 +623,43 @@ export function Chat({
           )}
         </div>
       </div>
-      <div className="chat" ref={scrollRef}>
+      <div className={`chat ${!sessionId ? "chat-empty" : ""}`} ref={scrollRef}>
         {!sessionId ? (
           <div className="empty">
-            <div className="empty-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L18 3.06l-2.94-2.94a1.21 1.21 0 0 0-1.72 0l-1.28 1.28a1.2 1.2 0 0 0 0 1.72L14.06 6l-9.7 9.7a1 1 0 0 0-.29.71V19a1 1 0 0 0 1 1h2.59a1 1 0 0 0 .71-.29L18 11.36l2.92 2.92a1.2 1.2 0 0 0 1.72 0Z"/>
-                <path d="M14 6l-4 4"/>
-                <path d="m5 20 4-4"/>
-              </svg>
+            <div className="empty-intro">
+              <div className="empty-eyebrow">
+                <span className="empty-eyebrow-dot" aria-hidden="true" />
+                {t("chat.emptyEyebrow")}
+              </div>
+              <h2>{t("chat.emptyTitle")}</h2>
+              <p>{t("chat.emptyDesc")}</p>
             </div>
-            <h2>DeepWork</h2>
-            <p>{t("chat.emptyDesc")}</p>
+            <div className="starter-grid" aria-label={t("chat.startersLabel")}>
+              <button type="button" className="starter-card" onClick={() => chooseStarter(t("chat.starterBuildPrompt"))}>
+                <span className="starter-icon"><Code2 aria-hidden="true" /></span>
+                <span className="starter-copy">
+                  <strong>{t("chat.starterBuildTitle")}</strong>
+                  <span>{t("chat.starterBuildDesc")}</span>
+                </span>
+                <ArrowUpRight className="starter-arrow" aria-hidden="true" />
+              </button>
+              <button type="button" className="starter-card" onClick={() => chooseStarter(t("chat.starterAnalyzePrompt"))}>
+                <span className="starter-icon"><ScanSearch aria-hidden="true" /></span>
+                <span className="starter-copy">
+                  <strong>{t("chat.starterAnalyzeTitle")}</strong>
+                  <span>{t("chat.starterAnalyzeDesc")}</span>
+                </span>
+                <ArrowUpRight className="starter-arrow" aria-hidden="true" />
+              </button>
+              <button type="button" className="starter-card" onClick={() => chooseStarter(t("chat.starterPlanPrompt"))}>
+                <span className="starter-icon"><ListChecks aria-hidden="true" /></span>
+                <span className="starter-copy">
+                  <strong>{t("chat.starterPlanTitle")}</strong>
+                  <span>{t("chat.starterPlanDesc")}</span>
+                </span>
+                <ArrowUpRight className="starter-arrow" aria-hidden="true" />
+              </button>
+            </div>
             {funMode && <CommitRunner />}
           </div>
         ) : (

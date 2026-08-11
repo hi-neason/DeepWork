@@ -86,6 +86,16 @@ describe("Chat component (render layer)", () => {
     expect(ta).toBeTruthy();
   });
 
+  it("fills the composer from a new-task starter without sending immediately", () => {
+    const onSend = vi.fn();
+    const { container } = render(<Chat {...makeProps({ sessionId: null, onSend })} />);
+
+    fireEvent.click(screen.getByText("chat.starterAnalyzeTitle"));
+
+    expect(container.querySelector("textarea")?.value).toBe("chat.starterAnalyzePrompt");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it("typing text and clicking send calls onSend with the session mode", () => {
     const onSend = vi.fn();
     const { container } = render(<Chat {...makeProps({ onSend })} />);
