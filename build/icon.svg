@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="172" y1="108" x2="850" y2="916" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A3140"/>
+      <stop offset="0.52" stop-color="#171B23"/>
+      <stop offset="1" stop-color="#101319"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="338" y1="692" x2="730" y2="314" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6F8CFF"/>
+      <stop offset="1" stop-color="#9CB1FF"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#05070A" flood-opacity="0.42"/>
+    </filter>
+    <filter id="glow" x="220" y="190" width="620" height="650" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <clipPath id="tile">
+      <rect x="72" y="72" width="880" height="880" rx="214"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="72" width="880" height="880" rx="214" fill="url(#background)"/>
+    <g clip-path="url(#tile)" opacity="0.13" stroke="#AAB8D8" stroke-width="2">
+      <path d="M72 302H952M72 512H952M72 722H952"/>
+      <path d="M302 72V952M512 72V952M722 72V952"/>
+    </g>
+    <rect x="73" y="73" width="878" height="878" rx="213" fill="none" stroke="#59657B" stroke-width="2" opacity="0.68"/>
+  </g>
+
+  <path d="M329 283V741H514C657 741 744 653 744 512C744 371 657 283 514 283H329Z" fill="none" stroke="#7E99FF" stroke-width="72" stroke-linejoin="round" opacity="0.22" filter="url(#glow)"/>
+  <path d="M329 283V741H514C657 741 744 653 744 512C744 371 657 283 514 283H329Z" fill="none" stroke="url(#accent)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M329 283V741" stroke="#F5F7FF" stroke-width="64" stroke-linecap="round"/>
+
+  <g fill="#F5F7FF">
+    <path d="M763 202L779 250L827 266L779 282L763 330L747 282L699 266L747 250L763 202Z"/>
+    <path d="M817 331L826 358L853 367L826 376L817 403L808 376L781 367L808 358L817 331Z" opacity="0.82"/>
+  </g>
+</svg>

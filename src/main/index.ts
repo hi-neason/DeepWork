@@ -32,6 +32,13 @@ process.on("unhandledRejection", (reason) => {
 });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const APP_NAME = "DeepWork";
+
+// Keep Electron's internal identity aligned with the macOS bundle identity.
+// scripts/prepare-electron-dev.mjs brands the development bundle; packaged
+// builds receive the same product name and icon from electron-builder.
+app.setName(APP_NAME);
+if (process.platform === "darwin") process.title = APP_NAME;
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -149,6 +156,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === "darwin" && !app.isPackaged) {
+    const icon = nativeImage.createFromPath(path.resolve(__dirname, "../../build/icon.png"));
+    if (!icon.isEmpty()) app.dock?.setIcon(icon);
+  }
   ensureDirs(); // create ~/DeepWork/{app,skills,workspace}
   getDb(); // initialize DB / migrations
   // Sync the runtime logger config from saved settings.

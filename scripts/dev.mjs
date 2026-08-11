@@ -7,6 +7,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { prepareElectronDevExecutable } from "./prepare-electron-dev.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const bin = path.join(
@@ -16,11 +17,16 @@ const bin = path.join(
   process.platform === "win32" ? "electron-vite.cmd" : "electron-vite",
 );
 const filter = path.join(root, "scripts", "electron-filter.mjs");
+const realElectron = await prepareElectronDevExecutable(root);
 
 const child = spawn(bin, ["dev", ...process.argv.slice(2)], {
   cwd: root,
   stdio: "inherit",
-  env: { ...process.env, ELECTRON_EXEC_PATH: filter },
+  env: {
+    ...process.env,
+    ELECTRON_EXEC_PATH: filter,
+    ELECTRON_REAL_EXEC_PATH: realElectron,
+  },
 });
 
 child.on("error", (err) => {

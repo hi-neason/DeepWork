@@ -106,7 +106,7 @@ const zhCN = {
     about: {
       title: "关于",
       version: "版本",
-      versionHint: "DeepWork v0.2.0 · local-first",
+      versionHint: "DeepWork v0.2.2 · local-first",
       dataLocation: "数据存储位置",
       showInFinder: "在 Finder 中显示",
       source: "开源地址",
