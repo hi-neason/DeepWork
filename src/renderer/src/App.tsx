@@ -224,8 +224,14 @@ export function App(): React.ReactElement {
   // (see `send`, which calls sessions.create when there is no id yet).
   const newSession = (): void => {
     setSessionId(null);
+    setExtraSession(null);
     setTodos([]);
     setArtifacts([]);
+    setApproval(null);
+    setRightCollapsed(true);
+    setTerminalOpen(false);
+    setResizing(false);
+    setHighlightArtifact(null);
     setView("chat");
     dispatch({ type: "reset" });
   };
@@ -385,7 +391,7 @@ export function App(): React.ReactElement {
   }
 
   const showRight =
-    view === "chat" && !rightCollapsed;
+    view === "chat" && sessionId !== null && !rightCollapsed;
   // Narrow the pending approval event for the inline banner (null when none/other type).
   const approvalRequest =
     approval && approval.type === "approval_requested" ? approval : null;
