@@ -402,12 +402,14 @@ export class AutomationScheduler extends EventEmitter {
     if (!fresh || !fresh.enabled) return;
     a = fresh;
     this.running.add(a.id);
+    const settings = loadSettings();
     const session = createSession(
       `⏰ ${a.title}`,
       a.workspaceDir,
       a.model,
       "automation",
-      loadSettings().model.workspaceDir || DEFAULT_WORKSPACE_DIR,
+      settings.model.workspaceDir || DEFAULT_WORKSPACE_DIR,
+      a.permissionMode ?? settings.permissionMode,
     );
     const run = startRun(a.id, session.id);
     this.emit("run:started", { automation: a, run });

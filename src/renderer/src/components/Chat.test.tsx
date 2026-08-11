@@ -39,7 +39,9 @@ function makeProps(overrides: Record<string, any> = {}) {
     sessionModel: undefined,
     enabledModels: [{ id: "m1", label: "M1" }] as any,
     onSend: vi.fn(),
+    sessionMode: "manual",
     defaultMode: "manual",
+    onSetMode: vi.fn(),
     onCancel: vi.fn(),
     onRegenerate: vi.fn(),
     onSetModel: vi.fn(),
@@ -84,7 +86,7 @@ describe("Chat component (render layer)", () => {
     expect(ta).toBeTruthy();
   });
 
-  it("typing text and clicking send calls onSend, passing through text/model/default mode", () => {
+  it("typing text and clicking send calls onSend with the session mode", () => {
     const onSend = vi.fn();
     const { container } = render(<Chat {...makeProps({ onSend })} />);
     const ta = container.querySelector("textarea")!;
@@ -97,16 +99,26 @@ describe("Chat component (render layer)", () => {
     const args = onSend.mock.calls[0];
     expect(args[0]).toBe("hello world"); // text
     expect(args[3]).toBe("m1"); // activeModel comes from enabledModels[0]
-    expect(args[4]).toBeUndefined(); // no per-send mode selected → passes through undefined
+    expect(args[4]).toBe("manual");
   });
 
-  it("per-send mode defaults to undefined (mode passthrough baseline)", () => {
+  it("keeps permission mode isolated when switching sessions", () => {
     const onSend = vi.fn();
-    const { container } = render(<Chat {...makeProps({ onSend })} />);
+    const onSetMode = vi.fn();
+    const { container, rerender } = render(
+      <Chat {...makeProps({ onSend, onSetMode, sessionId: "s1", sessionMode: "manual" })} />,
+    );
+    fireEvent.click(screen.getByTitle("chat.permissionMode"));
+    fireEvent.click(screen.getByText("automations.mode.auto-exec"));
+    expect(onSetMode).toHaveBeenCalledWith("auto-exec");
+
+    rerender(
+      <Chat {...makeProps({ onSend, onSetMode, sessionId: "s2", sessionMode: "plan" })} />,
+    );
     const ta = container.querySelector("textarea")!;
     fireEvent.change(ta, { target: { value: "x" } });
     fireEvent.click(screen.getByRole("button", { name: "chat.send" }));
-    expect(onSend.mock.calls[0][4]).toBeUndefined();
+    expect(onSend.mock.calls[0][4]).toBe("plan");
   });
 
   it("renders attachments that belong to a user message", () => {

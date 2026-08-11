@@ -1,5 +1,11 @@
 import { getDb } from "./db";
-import type { Session, SessionSource } from "../../shared/types";
+import {
+  INTERACTIVE_PERMISSION_MODES,
+  type InteractivePermissionMode,
+  type PermissionMode,
+  type Session,
+  type SessionSource,
+} from "../../shared/types";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
@@ -16,7 +22,7 @@ export const DEFAULT_GROUP = "Default";
 
 /** Columns selected when loading a session row (terminal_cwd is derived). */
 const SESSION_COLUMNS =
-  "id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model, source";
+  "id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model, permission_mode, source";
 
 function toSessionSource(v: string | null): SessionSource {
   return v === "automation" ? "automation" : "user";
@@ -31,7 +37,18 @@ interface SessionRow {
   workspace_dir: string | null;
   root_dir: string | null;
   model: string | null;
+  permission_mode: string | null;
   source: string | null;
+}
+
+/** Map the legacy broad `auto` value to the closest current UI mode. */
+export function normalizeInteractivePermissionMode(
+  mode?: PermissionMode | string | null,
+): InteractivePermissionMode {
+  if (mode === "auto") return "auto-exec";
+  return INTERACTIVE_PERMISSION_MODES.includes(mode as InteractivePermissionMode)
+    ? mode as InteractivePermissionMode
+    : "manual";
 }
 
 /** Group label derived from a workspace folder: its basename. */
@@ -70,6 +87,7 @@ function rowToSession(r: SessionRow): Session {
     rootDir,
     terminalCwd: rootDir,
     model: r.model ?? undefined,
+    permissionMode: normalizeInteractivePermissionMode(r.permission_mode),
   };
 }
 
@@ -100,6 +118,7 @@ export function createSession(
   model?: string,
   source: SessionSource = "user",
   defaultWorkspaceDir = DEFAULT_WORKSPACE_DIR,
+  permissionMode: PermissionMode = "manual",
 ): Session {
   const now = Date.now();
   const id = randomUUID();
@@ -130,11 +149,12 @@ export function createSession(
     rootDir,
     terminalCwd: rootDir,
     model: model || undefined,
+    permissionMode: normalizeInteractivePermissionMode(permissionMode),
   };
   getDb()
     .prepare(
-      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, title, created_at, updated_at, group_name, workspace_dir, root_dir, model, permission_mode, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       s.id,
@@ -145,6 +165,7 @@ export function createSession(
       s.workspaceDir ?? null,
       rootDir,
       model ?? null,
+      s.permissionMode,
       source,
     );
   ensureGroup(group);
@@ -154,6 +175,7 @@ export function createSession(
     group: s.group,
     workspaceDir: projectDir,
     model: s.model,
+    permissionMode: s.permissionMode,
     source,
   });
   return s;
@@ -207,6 +229,12 @@ export function setSessionWorkspace(
 
 export function setSessionModel(id: string, model: string | null): void {
   getDb().prepare("UPDATE sessions SET model = ? WHERE id = ?").run(model, id);
+}
+
+export function setSessionPermissionMode(id: string, mode: PermissionMode): void {
+  getDb()
+    .prepare("UPDATE sessions SET permission_mode = ?, updated_at = ? WHERE id = ?")
+    .run(normalizeInteractivePermissionMode(mode), Date.now(), id);
 }
 
 export function renameGroup(oldName: string, newName: string): void {

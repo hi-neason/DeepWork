@@ -20,7 +20,10 @@ vi.mock("../storage/sessions", () => ({
   createSession: vi.fn((title: string) => ({ id: "sess-" + title })),
 }));
 vi.mock("../storage/settings", () => ({
-  loadSettings: vi.fn(() => ({ model: { workspaceDir: "/configured/default" } })),
+  loadSettings: vi.fn(() => ({
+    model: { workspaceDir: "/configured/default" },
+    permissionMode: "auto-write",
+  })),
 }));
 vi.mock("../log/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -124,6 +127,7 @@ describe("automation/scheduler - tick/fire integration (mock storage)", () => {
       undefined,
       "automation",
       "/configured/default",
+      "auto-write",
     );
   });
 

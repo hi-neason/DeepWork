@@ -249,7 +249,7 @@ const enUS = {
     noFolder: "✕ No folder",
     attachTitle: "Attach image, PDF or text file",
     chooseModel: "Choose model",
-    permissionMode: "Permission mode (applies to this send; empty follows global setting)",
+    permissionMode: "Permission mode for this chat",
     noModels: "No models available yet.",
     addModel: "+ Add model",
     stopGenerating: "Stop generating",

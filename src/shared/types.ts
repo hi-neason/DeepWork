@@ -11,12 +11,20 @@ export type ProviderKind =
   | "openrouter"
   | "custom";
 
+/** The four permission modes exposed by the product UI. */
+export const INTERACTIVE_PERMISSION_MODES = [
+  "manual",
+  "auto-write",
+  "auto-exec",
+  "plan",
+] as const;
+export type InteractivePermissionMode = (typeof INTERACTIVE_PERMISSION_MODES)[number];
+
 /**
- * `auto` is retained for existing saved settings. New UI choices use the
- * narrower modes so users can distinguish automatic file writes from shell
- * execution. It preserves its historical broad behavior for compatibility.
+ * `auto` is retained only for compatibility with settings saved by older
+ * versions. New chats persist one of the four interactive modes above.
  */
-export type PermissionMode = "manual" | "auto" | "auto-write" | "auto-exec" | "plan";
+export type PermissionMode = InteractivePermissionMode | "auto";
 
 /** A model entry configured for a provider (enabled => shown in picker). */
 export interface ConfiguredModel {
@@ -281,6 +289,8 @@ export interface Session {
   terminalCwd?: string;
   /** Per-session model override (provider:model or just model id). */
   model?: string;
+  /** Permission mode owned and persisted by this session. */
+  permissionMode: InteractivePermissionMode;
 }
 
 /** A skill (SKILL.md) managed in the local skills directory. */

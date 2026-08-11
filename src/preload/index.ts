@@ -13,6 +13,7 @@ import type {
   ModelInfo,
   McpServerConfig,
   McpServerStatus,
+  InteractivePermissionMode,
   PermissionMode,
   ProviderKind,
   Session,
@@ -34,8 +35,9 @@ const api = {
       title?: string,
       workspaceDir?: string,
       model?: string,
+      permissionMode?: InteractivePermissionMode,
     ): Promise<Session> =>
-      ipcRenderer.invoke("sessions:create", title, workspaceDir, model),
+      ipcRenderer.invoke("sessions:create", title, workspaceDir, model, permissionMode),
     rename: (id: string, title: string): Promise<void> =>
       ipcRenderer.invoke("sessions:rename", id, title),
     delete: (id: string): Promise<void> => ipcRenderer.invoke("sessions:delete", id),
@@ -45,6 +47,8 @@ const api = {
       ipcRenderer.invoke("sessions:setWorkspace", id, workspaceDir),
     setModel: (id: string, model: string): Promise<void> =>
       ipcRenderer.invoke("sessions:setModel", id, model),
+    setPermissionMode: (id: string, mode: InteractivePermissionMode): Promise<void> =>
+      ipcRenderer.invoke("sessions:setPermissionMode", id, mode),
     groups: (): Promise<string[]> => ipcRenderer.invoke("sessions:groups"),
     recentFolders: (): Promise<{ path: string; name: string }[]> =>
       ipcRenderer.invoke("sessions:recentFolders"),
@@ -120,7 +124,7 @@ const api = {
       attachments?: Attachment[],
       workspaceDir?: string,
       modelId?: string,
-      mode?: PermissionMode,
+      mode?: InteractivePermissionMode,
     ): Promise<void> =>
       ipcRenderer.invoke(
         "chat:send",

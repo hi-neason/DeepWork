@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import type {
   ArtifactFile,
   DeepWorkEvent,
-  PermissionMode,
+  InteractivePermissionMode,
   Session,
   Settings as AppSettings,
   SettingsTab,
@@ -274,7 +274,7 @@ export function App(): React.ReactElement {
     attachments?: File[],
     workspaceDir?: string,
     modelId?: string,
-    mode?: PermissionMode,
+    mode?: InteractivePermissionMode,
   ): Promise<void> => {
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
     try {
@@ -284,6 +284,7 @@ export function App(): React.ReactElement {
           undefined,
           workspaceDir,
           modelId,
+          mode,
         );
         await refreshSessions();
         setSessionId(s.id);
@@ -317,6 +318,15 @@ export function App(): React.ReactElement {
   const setSessionModel = async (modelId: string): Promise<void> => {
     if (sessionId) {
       await window.deepwork.sessions.setModel(sessionId, modelId);
+      await refreshSessions();
+    }
+  };
+
+  const setSessionPermissionMode = async (
+    mode: InteractivePermissionMode,
+  ): Promise<void> => {
+    if (sessionId) {
+      await window.deepwork.sessions.setPermissionMode(sessionId, mode);
       await refreshSessions();
     }
   };
@@ -421,12 +431,14 @@ export function App(): React.ReactElement {
               artifacts={artifacts}
               updateStatus={updateStatus}
               sessionModel={selectedSession?.model}
+              sessionMode={selectedSession?.permissionMode}
               workspaceDir={selectedSession?.workspaceDir}
               enabledModels={enabledModels}
               showReasoning={settings?.showReasoning ?? true}
               funMode={settings?.funMode ?? false}
               onSend={send}
               defaultMode={settings?.permissionMode}
+              onSetMode={setSessionPermissionMode}
               onCancel={cancel}
               onRegenerate={regenerate}
               onSetModel={setSessionModel}

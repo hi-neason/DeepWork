@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatState } from "../App";
+import { INTERACTIVE_PERMISSION_MODES } from "../../../shared/types";
 import type {
   ArtifactFile,
   Attachment,
   ConfiguredModel,
   DeepWorkEvent,
+  InteractivePermissionMode,
   PermissionMode,
   Skill,
   TodoItem,
@@ -61,10 +63,13 @@ interface Props {
     attachments?: File[],
     workspaceDir?: string,
     modelId?: string,
-    mode?: PermissionMode,
+    mode?: InteractivePermissionMode,
   ) => void;
-  /** Global default permission mode (from settings) — highlighted when no per-send override is chosen. */
+  /** Permission mode persisted by the active session. */
+  sessionMode?: InteractivePermissionMode;
+  /** Global default used only while composing a brand-new session. */
   defaultMode?: PermissionMode;
+  onSetMode: (mode: InteractivePermissionMode) => void | Promise<void>;
   onCancel: () => void;
   onRegenerate: () => void;
   onSetModel: (modelId: string) => void;
@@ -95,7 +100,9 @@ export function Chat({
   showReasoning = true,
   funMode = false,
   onSend,
+  sessionMode,
   defaultMode,
+  onSetMode,
   onCancel,
   onRegenerate,
   onSetModel,
@@ -118,8 +125,12 @@ export function Chat({
   // Workspace/model chosen for a brand-new session (before it is created).
   const [pendingWorkspace, setPendingWorkspace] = useState<string | undefined>(undefined);
   const [pendingModel, setPendingModel] = useState<string | undefined>(undefined);
-  // Per-send permission-mode override (undefined = follow global default).
-  const [pendingMode, setPendingMode] = useState<PermissionMode | undefined>(undefined);
+  // Optimistic mode selection is keyed by session so it can never bleed into
+  // another chat during the render before effects run.
+  const [pendingMode, setPendingMode] = useState<{
+    sessionId: string | null;
+    mode: InteractivePermissionMode;
+  } | undefined>(undefined);
   // Dropdown open state for the permission-mode picker.
   const [showModeMenu, setShowModeMenu] = useState(false);
   const modeWrapRef = useRef<HTMLDivElement>(null);
@@ -161,8 +172,13 @@ export function Chat({
   }, [slashOpen, slashQuery, skills]);
 
   const activeModel = sessionModel ?? pendingModel ?? enabledModels[0]?.id;
-  // Effective permission mode for this send (pending override → global default).
-  const currentMode: PermissionMode = pendingMode ?? defaultMode ?? "auto-write";
+  const normalizedDefaultMode: InteractivePermissionMode =
+    defaultMode === "auto" ? "auto-exec" : defaultMode ?? "manual";
+  // Existing chats own their persisted mode; the global value only seeds a new chat.
+  const currentMode: InteractivePermissionMode =
+    (pendingMode?.sessionId === sessionId ? pendingMode.mode : undefined) ??
+    (sessionId ? sessionMode : undefined) ??
+    normalizedDefaultMode;
   const activeModelLabel = useMemo(() => {
     if (!activeModel) return t("chat.noModel");
     const m = enabledModels.find((x) => x.id === activeModel);
@@ -170,6 +186,16 @@ export function Chat({
   }, [activeModel, enabledModels]);
 
   const activeWorkspace = workspaceDir ?? pendingWorkspace;
+
+  useEffect(() => {
+    setShowModeMenu(false);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (pendingMode?.sessionId === sessionId && sessionMode === pendingMode.mode) {
+      setPendingMode(undefined);
+    }
+  }, [sessionId, sessionMode, pendingMode]);
   // Once a session exists its workspace folder is locked and cannot be changed.
   const folderLocked = !!sessionId;
   const folderLabel = useMemo(() => {
@@ -286,7 +312,7 @@ export function Chat({
     // liveness watchdog additionally resets streaming if no terminal event
     // ever arrives (H fix).
     Promise.resolve(
-      onSend(text, files, activeWorkspace, activeModel, pendingMode),
+      onSend(text, files, activeWorkspace, activeModel, currentMode),
     ).catch(() => {
       /* already handled by parent */
     });
@@ -882,13 +908,14 @@ export function Chat({
                 </button>
                 {showModeMenu && (
                   <div className="mode-menu">
-                    {(["manual", "auto-write", "auto-exec", "plan"] as PermissionMode[]).map((m) => (
+                    {INTERACTIVE_PERMISSION_MODES.map((m) => (
                       <div
                         key={m}
                         className={`mode-menu-item ${currentMode === m ? "active" : ""}`}
                         onClick={() => {
-                          setPendingMode(m);
+                          setPendingMode({ sessionId, mode: m });
                           setShowModeMenu(false);
+                          if (sessionId) void onSetMode(m);
                         }}
                       >
                         <span>{t(`automations.mode.${m}`)}</span>

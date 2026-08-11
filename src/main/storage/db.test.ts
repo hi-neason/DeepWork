@@ -58,7 +58,7 @@ describe("storage/db - schema", () => {
     );
   });
 
-  it("the sessions table includes workspace_dir / root_dir / terminal_cwd / model / group_name / source", () => {
+  it("the sessions table includes workspace, model, permission mode, group, and source columns", () => {
     const db = getDb();
     const cols = (db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).map(
       (c) => c.name,
@@ -71,6 +71,7 @@ describe("storage/db - schema", () => {
         "root_dir",
         "terminal_cwd",
         "model",
+        "permission_mode",
         "group_name",
         "source",
       ]),

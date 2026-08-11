@@ -66,6 +66,7 @@ function migrate(d: Database.Database): void {
       root_dir TEXT,
       terminal_cwd TEXT,
       model TEXT,
+      permission_mode TEXT NOT NULL DEFAULT 'manual',
       source TEXT NOT NULL DEFAULT 'user'
     );
 
@@ -144,6 +145,7 @@ function migrate(d: Database.Database): void {
   // additions idempotent so failure safeguards take effect without data loss.
   ensureColumn(d, "automations", "consecutive_failures", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(d, "automations", "auto_paused", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(d, "sessions", "permission_mode", "TEXT NOT NULL DEFAULT 'manual'");
 }
 
 function ensureColumn(d: Database.Database, table: string, column: string, definition: string): void {

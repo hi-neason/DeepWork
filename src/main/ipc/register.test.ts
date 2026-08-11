@@ -33,6 +33,7 @@ const agent = vi.hoisted(() => {
     regenerate,
     setSessionRoot: vi.fn(),
     setSessionModel: vi.fn(),
+    setSessionMode: vi.fn(),
     getHistory: vi.fn(() => []),
     rebuildSkills: vi.fn(),
     rebuild: vi.fn(),
@@ -96,6 +97,8 @@ vi.mock("../config/paths", () => ({
 vi.mock("../storage/sessions", () => ({
   getSession: vi.fn(() => undefined),
   setSessionModel: vi.fn(),
+  setSessionPermissionMode: vi.fn(),
+  normalizeInteractivePermissionMode: vi.fn((mode?: string) => mode === "auto" ? "auto-exec" : mode ?? "manual"),
   listSessions: vi.fn(() => []),
   createSession: vi.fn(),
   renameSession: vi.fn(),
@@ -236,7 +239,7 @@ describe("ipc/register wiring closure", () => {
       model: { workspaceDir: "/configured/default" },
     } as any);
 
-    await __test_getHandlers().get("sessions:create")!({}, undefined, undefined, undefined);
+    await __test_getHandlers().get("sessions:create")!({}, undefined, undefined, undefined, undefined);
 
     expect(sessions.createSession).toHaveBeenCalledWith(
       undefined,
@@ -244,7 +247,18 @@ describe("ipc/register wiring closure", () => {
       undefined,
       "user",
       "/configured/default",
+      "manual",
     );
+  });
+
+  it("sessions:setPermissionMode persists and applies only the addressed session", async () => {
+    const setMode = __test_getHandlers().get("sessions:setPermissionMode")!;
+
+    await setMode({}, "session-A", "plan");
+
+    expect(sessions.setSessionPermissionMode).toHaveBeenCalledWith("session-A", "plan");
+    expect(agent.setSessionMode).toHaveBeenCalledWith("session-A", "plan");
+    expect(sessions.setSessionPermissionMode).not.toHaveBeenCalledWith("session-B", expect.anything());
   });
 
   it("chat:send passes mode through to agentManager.runTurn (locks C-T2 mode wiring closure)", async () => {
@@ -252,14 +266,15 @@ describe("ipc/register wiring closure", () => {
     const send = handlers.get("chat:send")!;
     const { event, sent } = makeEvent();
 
-    await send(event, "sess-1", "do something", undefined, process.cwd(), "claude-x", "auto");
+    vi.mocked(sessions.getSession).mockReturnValueOnce({ permissionMode: "auto-exec" } as any);
+    await send(event, "sess-1", "do something", undefined, process.cwd(), "claude-x", "auto-exec");
 
     // runTurn(sessionId, text, attachments, root, modelId, mode)
     expect(agent.runTurn).toHaveBeenCalledTimes(1);
     const args = agent.runTurn.mock.calls[0] as unknown as any[];
     expect(args[0]).toBe("sess-1");
     expect(args[1]).toBe("do something");
-    expect(args[5]).toBe("auto"); // mode passed through
+    expect(args[5]).toBe("auto-exec");
   });
 
   it("chat:send events carry the correct sessionId (no cross-session mixing)", async () => {
@@ -269,7 +284,7 @@ describe("ipc/register wiring closure", () => {
     const a = makeEvent();
     await send(a.event, "session-A", "hi", undefined, undefined, undefined, "manual");
     const b = makeEvent();
-    await send(b.event, "session-B", "yo", undefined, undefined, undefined, "auto");
+    await send(b.event, "session-B", "yo", undefined, undefined, undefined, "auto-exec");
 
     expect(a.sent.every((s) => s.sessionId === "session-A")).toBe(true);
     expect(b.sent.every((s) => s.sessionId === "session-B")).toBe(true);
@@ -316,9 +331,11 @@ describe("ipc/register wiring closure", () => {
     const handlers = __test_getHandlers();
     const regen = handlers.get("chat:regenerate")!;
     const { event, sent } = makeEvent();
+    vi.mocked(sessions.getSession).mockReturnValueOnce({ permissionMode: "plan" } as any);
 
     await regen(event, "sess-r");
 
+    expect(agent.setSessionMode).toHaveBeenCalledWith("sess-r", "plan");
     expect(agent.regenerate).toHaveBeenCalledWith("sess-r");
     expect(sent.some((s) => s.event.type === "turn_completed")).toBe(true);
   });
@@ -392,6 +409,7 @@ describe("ipc/register wiring closure", () => {
         workspaceDir: project,
         rootDir: sessionWorkspace,
         terminalCwd: sessionWorkspace,
+        permissionMode: "manual",
       });
       vi.mocked(configPaths.hasPickedWorkspace).mockReturnValueOnce(true);
 
@@ -416,6 +434,7 @@ describe("ipc/register wiring closure", () => {
         source: "user",
         group: "Default",
         workspaceDir: "/tmp/dw/default",
+        permissionMode: "manual",
       });
       vi.mocked(configPaths.hasPickedWorkspace).mockReturnValueOnce(false);
       vi.mocked(configPaths.sessionRootDir).mockReturnValueOnce(root);
@@ -452,6 +471,7 @@ describe("ipc/register wiring closure", () => {
         updatedAt: 1,
         source: "user",
         group: "Default",
+        permissionMode: "manual",
       });
       vi.mocked(configPaths.sessionArtifactsDir).mockReturnValue(root);
       agent.listArtifacts.mockReturnValueOnce([{

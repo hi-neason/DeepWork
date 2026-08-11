@@ -13,6 +13,7 @@ const providerSchema = z.enum([
   "minimax", "kimi", "openrouter", "custom",
 ]);
 const permissionModeSchema = z.enum(["manual", "auto", "auto-write", "auto-exec", "plan"]);
+const interactivePermissionModeSchema = z.enum(["manual", "auto-write", "auto-exec", "plan"]);
 const urlStringSchema = z.union([z.literal(""), z.string().url().max(4096)]);
 const boundedString = (max: number) => z.string().max(max).refine(
   (value) => !value.includes("\0"),
@@ -63,6 +64,12 @@ export const sessionCreateArgsSchema = z.tuple([
   boundedString(500).optional(),
   workspacePathSchema.optional(),
   boundedString(500).optional(),
+  interactivePermissionModeSchema.optional(),
+]);
+
+export const sessionPermissionModeArgsSchema = z.tuple([
+  identifierSchema,
+  interactivePermissionModeSchema,
 ]);
 
 export const sessionWorkspaceArgsSchema = z.tuple([
@@ -106,7 +113,7 @@ export const chatSendArgsSchema = z.tuple([
   attachmentsSchema.optional(),
   workspacePathSchema.optional(),
   boundedString(500).optional(),
-  permissionModeSchema.optional(),
+  interactivePermissionModeSchema.optional(),
 ]);
 
 const configuredModelSchema = z.object({

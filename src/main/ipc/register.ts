@@ -29,6 +29,7 @@ import {
   chatSendArgsSchema,
   projectMemoryArgsSchema,
   sessionCreateArgsSchema,
+  sessionPermissionModeArgsSchema,
   sessionWorkspaceArgsSchema,
   settingsArgsSchema,
   terminalIdArgsSchema,
@@ -45,6 +46,8 @@ import {
   setSessionGroup,
   setSessionWorkspace,
   setSessionModel,
+  setSessionPermissionMode,
+  normalizeInteractivePermissionMode,
   getSession,
   renameGroup,
   deleteGroup,
@@ -212,15 +215,17 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   // opened from run history.
   handle("sessions:list", () => listSessions());
   handleValidated("sessions:get", terminalIdArgsSchema, (_e, [id]) => getSession(id));
-  handleValidated("sessions:create", sessionCreateArgsSchema, (_e, [title, workspaceDir, model]) =>
-    createSession(
+  handleValidated("sessions:create", sessionCreateArgsSchema, (_e, [title, workspaceDir, model, mode]) => {
+    const settings = loadSettings();
+    return createSession(
       title,
       workspaceDir,
       model,
       "user",
-      loadSettings().model?.workspaceDir || DEFAULT_WORKSPACE_DIR,
-    ),
-  );
+      settings.model?.workspaceDir || DEFAULT_WORKSPACE_DIR,
+      mode ?? normalizeInteractivePermissionMode(settings.permissionMode),
+    );
+  });
   handle("sessions:rename", (_e, id: string, title: string) =>
     renameSession(id, title),
   );
@@ -245,6 +250,14 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     setSessionModel(id, model);
     agentManager.setSessionModel(id, model);
   });
+  handleValidated(
+    "sessions:setPermissionMode",
+    sessionPermissionModeArgsSchema,
+    (_e, [id, mode]) => {
+      setSessionPermissionMode(id, mode);
+      agentManager.setSessionMode(id, mode);
+    },
+  );
   /** Recently used workspace folders (for the new-task folder picker). */
   handle("sessions:recentFolders", () => {
     const rows = getDb()
@@ -382,6 +395,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       paths?.isProject,
     );
     agentManager.setSessionModel(sessionId, s?.model);
+    agentManager.setSessionMode(sessionId, s?.permissionMode);
     return agentManager.getHistory(sessionId);
   });
   handleValidated("chat:status", terminalIdArgsSchema, (_e, [sessionId]): TurnStatus =>
@@ -398,6 +412,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       };
       try {
         if (modelId) setSessionModel(sessionId, modelId);
+        if (mode) setSessionPermissionMode(sessionId, mode);
         // The agent operates in the session's cwd/sandbox root. For a picked
         // folder that is the folder itself; otherwise the isolated session dir.
         // Derive at runtime so old sessions pick up the new layout.
@@ -415,7 +430,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
           attachments,
           paths?.root,
           modelId,
-          mode,
+          s?.permissionMode ?? normalizeInteractivePermissionMode(loadSettings().permissionMode),
         )) {
           push(e);
         }
@@ -438,6 +453,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
     };
     try {
+      const session = getSession(sessionId);
+      agentManager.setSessionMode(sessionId, session?.permissionMode);
       for await (const e of agentManager.regenerate(sessionId)) {
         push(e);
       }

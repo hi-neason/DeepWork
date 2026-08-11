@@ -7,6 +7,7 @@ import {
   automationUpdateSchema,
   assertExistingFileWithin,
   chatSendArgsSchema,
+  sessionPermissionModeArgsSchema,
   sessionWorkspaceArgsSchema,
   settingsSchema,
   terminalInputArgsSchema,
@@ -79,6 +80,16 @@ describe("IPC validation", () => {
     expect(() => chatSendArgsSchema.parse([
       "s1", "look", Array.from({ length: 11 }, (_, i) => ({ ...image, id: `a${i}` })),
     ])).toThrow();
+    expect(() => chatSendArgsSchema.parse([
+      "s1", "look", undefined, undefined, undefined, "auto",
+    ])).toThrow();
+  });
+
+  it("accepts exactly the four interactive session permission modes", () => {
+    for (const mode of ["manual", "auto-write", "auto-exec", "plan"]) {
+      expect(sessionPermissionModeArgsSchema.parse(["s1", mode])).toEqual(["s1", mode]);
+    }
+    expect(() => sessionPermissionModeArgsSchema.parse(["s1", "auto"])).toThrow();
   });
 
   it("validates automation schedule fields and rejects immutable update keys", () => {

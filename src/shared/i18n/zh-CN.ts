@@ -247,7 +247,7 @@ const zhCN = {
     noFolder: "✕ 不使用文件夹",
     attachTitle: "附加图片、PDF 或文本文件",
     chooseModel: "选择模型",
-    permissionMode: "权限模式（本次发送生效，留空则跟随全局设置）",
+    permissionMode: "当前会话的权限模式",
     noModels: "还没有可用模型。",
     addModel: "+ 新增模型",
     stopGenerating: "停止生成",
