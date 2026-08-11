@@ -2,6 +2,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ArtifactFile, TodoItem } from "../../../shared/types";
 import { formatBytes } from "../lib/format";
+import {
+  Archive,
+  Braces,
+  CheckCircle2,
+  Circle,
+  CircleDotDashed,
+  ChevronDown,
+  ChevronRight,
+  File,
+  FileCode2,
+  FileSpreadsheet,
+  FileText,
+  FileType2,
+  FolderOpen,
+  Globe2,
+  Image,
+  RefreshCw,
+  TerminalSquare,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 interface Props {
   sessionId: string | null;
@@ -13,28 +34,28 @@ interface Props {
   highlightArtifact?: { path: string; n: number } | null;
 }
 
-const ICONS: Record<string, string> = {
-  md: "📝",
-  txt: "📄",
-  pdf: "📕",
-  doc: "📘",
-  docx: "📘",
-  xls: "📊",
-  xlsx: "📊",
-  csv: "📊",
-  png: "🖼",
-  jpg: "🖼",
-  jpeg: "🖼",
-  gif: "🖼",
-  svg: "🖼",
-  html: "🌐",
-  htm: "🌐",
-  json: "⚙️",
-  js: "⚙️",
-  ts: "⚙️",
-  py: "🐍",
-  sh: "⌨️",
-  zip: "🗜",
+const ICONS: Record<string, LucideIcon> = {
+  md: FileText,
+  txt: FileText,
+  pdf: FileType2,
+  doc: FileText,
+  docx: FileText,
+  xls: FileSpreadsheet,
+  xlsx: FileSpreadsheet,
+  csv: FileSpreadsheet,
+  png: Image,
+  jpg: Image,
+  jpeg: Image,
+  gif: Image,
+  svg: Image,
+  html: Globe2,
+  htm: Globe2,
+  json: Braces,
+  js: FileCode2,
+  ts: FileCode2,
+  py: FileCode2,
+  sh: TerminalSquare,
+  zip: Archive,
 };
 
 function timeLabel(ms: number): string {
@@ -89,7 +110,9 @@ export function RightPanel({
       <div className="rp-topbar">
         <span className="rp-title">{t("rightPanel.title")}</span>
         {onClose && (
-          <button className="rp-close" onClick={onClose} title={t("common.close")}>✕</button>
+          <button className="rp-close" onClick={onClose} title={t("common.close")}>
+            <X aria-hidden="true" />
+          </button>
         )}
       </div>
       {hasSession && hasTasks && (
@@ -98,96 +121,108 @@ export function RightPanel({
             className="rp-head"
             onClick={() => setProgressOpen((v) => !v)}
           >
-            <span className="rp-caret">{progressOpen ? "▾" : "▸"}</span>
+            <span className="rp-caret">
+              {progressOpen
+                ? <ChevronDown aria-hidden="true" />
+                : <ChevronRight aria-hidden="true" />}
+            </span>
             <span>{t("rightPanel.tasks")}</span>
             <span className="rp-count">{todos.length}</span>
           </button>
           {progressOpen && (
             <ul className="rp-tasks">
-              {todos.map((t, i) => (
-                <li key={i} className={`rp-task ${t.status}`}>
-                  <span className="rp-task-icon">
-                    {t.status === "completed"
-                      ? "✓"
-                      : t.status === "in_progress"
-                        ? "◐"
-                        : "○"}
-                  </span>
-                  <span className="rp-task-label">{t.content}</span>
-                </li>
-              ))}
+              {todos.map((t, i) => {
+                const StatusIcon = t.status === "completed"
+                  ? CheckCircle2
+                  : t.status === "in_progress"
+                    ? CircleDotDashed
+                    : Circle;
+                return (
+                  <li key={i} className={`rp-task ${t.status}`}>
+                    <StatusIcon className="rp-task-icon" aria-hidden="true" />
+                    <span className="rp-task-label">{t.content}</span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
       )}
 
       {hasSession && (
-      <section className="rp-section">
-        <button
-          className="rp-head"
-          onClick={() => setArtifactsOpen((v) => !v)}
-        >
-          <span className="rp-caret">{artifactsOpen ? "▾" : "▸"}</span>
-          <span>{t("rightPanel.artifacts")}</span>
-          {hasArtifacts && <span className="rp-count">{artifacts.length}</span>}
-          <span
-            className="rp-refresh"
-            role="button"
-            title={t("rightPanel.refresh")}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRefreshArtifacts();
-            }}
+        <section className="rp-section">
+          <button
+            className="rp-head"
+            onClick={() => setArtifactsOpen((v) => !v)}
           >
-            ↻
-          </span>
-          <span
-            className="rp-open-folder"
-            role="button"
-            title={t("rightPanel.showInFinder")}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (artifacts[0]) {
-                window.deepwork.artifacts.reveal(sessionId!, artifacts[0].absolutePath);
-              }
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-          </span>
-        </button>
-        {artifactsOpen && (
-          <>
-            {hasArtifacts ? (
-              <ul className="rp-artifacts" ref={listRef}>
-                {artifacts.map((a) => (
-                  <li key={a.absolutePath} className="rp-artifact" data-path={a.absolutePath}>
-                    <div className="rp-artifact-main">
-                      <span className="rp-artifact-icon">{ICONS[a.ext] ?? "📄"}</span>
-                      <div className="rp-artifact-meta">
-                        <div className="rp-artifact-name" title={a.relativePath}>
-                          {a.name}
+            <span className="rp-caret">
+              {artifactsOpen
+                ? <ChevronDown aria-hidden="true" />
+                : <ChevronRight aria-hidden="true" />}
+            </span>
+            <span>{t("rightPanel.artifacts")}</span>
+            {hasArtifacts && <span className="rp-count">{artifacts.length}</span>}
+            <span
+              className="rp-refresh"
+              role="button"
+              title={t("rightPanel.refresh")}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRefreshArtifacts();
+              }}
+            >
+              <RefreshCw aria-hidden="true" />
+            </span>
+            <span
+              className="rp-open-folder"
+              role="button"
+              title={t("rightPanel.showInFinder")}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (artifacts[0]) {
+                  window.deepwork.artifacts.reveal(sessionId!, artifacts[0].absolutePath);
+                }
+              }}
+            >
+              <FolderOpen aria-hidden="true" />
+            </span>
+          </button>
+          {artifactsOpen && (
+            <>
+              {hasArtifacts ? (
+                <ul className="rp-artifacts" ref={listRef}>
+                  {artifacts.map((a) => {
+                    const ArtifactIcon = ICONS[a.ext] ?? File;
+                    return (
+                      <li key={a.absolutePath} className="rp-artifact" data-path={a.absolutePath}>
+                        <div className="rp-artifact-main">
+                          <ArtifactIcon className="rp-artifact-icon" aria-hidden="true" />
+                          <div className="rp-artifact-meta">
+                            <div className="rp-artifact-name" title={a.relativePath}>
+                              {a.name}
+                            </div>
+                            <div className="rp-artifact-sub">
+                              {formatBytes(a.size)} · {timeLabel(a.modifiedAt)}
+                            </div>
+                          </div>
                         </div>
-                        <div className="rp-artifact-sub">
-                          {formatBytes(a.size)} · {timeLabel(a.modifiedAt)}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      className="rp-artifact-open"
-                      onClick={() => window.deepwork.artifacts.open(sessionId!, a.absolutePath)}
-                      title={t("rightPanel.open")}
-                    >
-                      {t("rightPanel.open")}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="rp-empty">{t("rightPanel.emptyArtifacts")}</p>
-            )}
-          </>
-        )}
-      </section>
+                        <button
+                          className="rp-artifact-open"
+                          onClick={() => window.deepwork.artifacts.open(sessionId!, a.absolutePath)}
+                          title={t("rightPanel.open")}
+                        >
+                          {t("rightPanel.open")}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="rp-empty">{t("rightPanel.emptyArtifacts")}</p>
+              )}
+            </>
+          )}
+        </section>
       )}
     </aside>
   );

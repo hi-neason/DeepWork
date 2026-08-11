@@ -13,6 +13,17 @@ import { Connectors } from "./Connectors";
 import { AutomationsView } from "./AutomationsView";
 import { SkillsView } from "./SkillsView";
 import { applyAppearance } from "../lib/theme";
+import {
+  BrainCircuit,
+  CircleHelp,
+  Clock3,
+  Cpu,
+  PlugZap,
+  Settings2,
+  Sparkles,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -21,14 +32,14 @@ interface Props {
   onSaved?: () => void;
 }
 
-const TABS: Array<{ id: SettingsTab; labelKey: string; icon: string; wip?: boolean }> = [
-  { id: "general", labelKey: "settings.tabs.general", icon: "⚙" },
-  { id: "models", labelKey: "settings.tabs.models", icon: "◇" },
-  { id: "memory", labelKey: "settings.tabs.memory", icon: "🧠" },
-  { id: "skills", labelKey: "settings.tabs.skills", icon: "✨" },
-  { id: "connectors", labelKey: "settings.tabs.connectors", icon: "🧩" },
-  { id: "automations", labelKey: "settings.tabs.automations", icon: "⏰" },
-  { id: "about", labelKey: "settings.tabs.about", icon: "ⓘ" },
+const TABS: Array<{ id: SettingsTab; labelKey: string; icon: LucideIcon; wip?: boolean }> = [
+  { id: "general", labelKey: "settings.tabs.general", icon: Settings2 },
+  { id: "models", labelKey: "settings.tabs.models", icon: Cpu },
+  { id: "memory", labelKey: "settings.tabs.memory", icon: BrainCircuit },
+  { id: "skills", labelKey: "settings.tabs.skills", icon: Sparkles },
+  { id: "connectors", labelKey: "settings.tabs.connectors", icon: PlugZap },
+  { id: "automations", labelKey: "settings.tabs.automations", icon: Clock3 },
+  { id: "about", labelKey: "settings.tabs.about", icon: CircleHelp },
 ];
 
 // Debounce window for auto-saving settings changes to disk.
@@ -114,20 +125,23 @@ export function Settings({
             onClick={onClose}
             title={t("settings.close")}
           >
-            ✕
+            <X aria-hidden="true" />
           </button>
         </div>
-        {TABS.map((tdef) => (
-          <button
-            key={tdef.id}
-            className={`settings-nav-item ${tab === tdef.id ? "active" : ""}`}
-            onClick={() => setTab(tdef.id)}
-          >
-            <span className="nav-icon">{tdef.icon}</span>
-            {t(tdef.labelKey)}
-            {tdef.wip && <span className="wip-badge">{t("settings.wip")}</span>}
-          </button>
-        ))}
+        {TABS.map((tdef) => {
+          const TabIcon = tdef.icon;
+          return (
+            <button
+              key={tdef.id}
+              className={`settings-nav-item ${tab === tdef.id ? "active" : ""}`}
+              onClick={() => setTab(tdef.id)}
+            >
+              <TabIcon className="nav-icon" aria-hidden="true" />
+              {t(tdef.labelKey)}
+              {tdef.wip && <span className="wip-badge">{t("settings.wip")}</span>}
+            </button>
+          );
+        })}
       </aside>
 
       <div className="settings-content">

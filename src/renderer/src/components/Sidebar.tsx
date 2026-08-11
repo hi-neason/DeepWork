@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AutomationWithRuns, Session, SessionSort } from "../../../shared/types";
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Folder,
+  Plus,
+  Settings2,
+  Timer,
+  Trash2,
+  X,
+} from "lucide-react";
 
 export type ViewKey = "chat" | "settings";
 
@@ -207,7 +218,7 @@ export function Sidebar({
             onOpenView("chat");
           }}
         >
-              <span className="nav-icon">✚</span>
+          <Plus className="nav-icon" aria-hidden="true" />
           <span>{t("sidebar.newTask")}</span>
         </div>
       </nav>
@@ -258,7 +269,11 @@ export function Sidebar({
                     setMenu({ kind: "group", target: g.name, x: e.clientX, y: e.clientY });
                   }}
                 >
-                  <span className="sidebar-chat-caret">{collapsed.has(g.name) ? "▸" : "▾"}</span>
+                  <span className="sidebar-chat-caret">
+                    {collapsed.has(g.name)
+                      ? <ChevronRight aria-hidden="true" />
+                      : <ChevronDown aria-hidden="true" />}
+                  </span>
                   {editingGroup === g.name ? (
                     <input
                       ref={editRef}
@@ -278,7 +293,7 @@ export function Sidebar({
                     />
                   ) : (
                     <span className="sidebar-chat-group-name">
-                      <span className="sidebar-chat-icon">📁</span>
+                      <Folder className="sidebar-chat-icon" aria-hidden="true" />
                       <span className="sidebar-chat-group-title">
                         {g.name === DEFAULT_GROUP ? t("sidebar.defaultGroup") : g.name}
                       </span>
@@ -326,7 +341,7 @@ export function Sidebar({
                           onDelete(s.id);
                         }}
                       >
-                        ✕
+                        <X aria-hidden="true" />
                       </span>
                     </div>
                   ))}
@@ -359,7 +374,7 @@ export function Sidebar({
           className={`settings-footer-item ${activeView === "settings" ? "active" : ""}`}
           onClick={() => onOpenView("settings")}
         >
-          <span className="nav-icon">⚙</span>
+          <Settings2 className="nav-icon" aria-hidden="true" />
           <span>{t("sidebar.settings")}</span>
         </div>
       </div>
@@ -499,7 +514,7 @@ function AutomationList({
   if (items.length === 0) {
     return (
       <div className="sidebar-auto-empty">
-        <span className="sidebar-auto-empty-icon">⏱</span>
+        <Timer className="sidebar-auto-empty-icon" aria-hidden="true" />
         <span>{t(isFiltering ? "sidebar.noAutomationMatches" : "sidebar.noAutomations")}</span>
       </div>
     );
@@ -509,8 +524,12 @@ function AutomationList({
       {items.map((a) => (
         <div key={a.id} className="sidebar-auto-card">
           <div className="sidebar-auto-head" onClick={() => onToggle(a.id)}>
-            <span className="sidebar-auto-caret">{collapsed.has(a.id) ? "▸" : "▾"}</span>
-            <span className="sidebar-auto-icon">⏰</span>
+            <span className="sidebar-auto-caret">
+              {collapsed.has(a.id)
+                ? <ChevronRight aria-hidden="true" />
+                : <ChevronDown aria-hidden="true" />}
+            </span>
+            <Clock3 className="sidebar-auto-icon" aria-hidden="true" />
             <span className="sidebar-auto-title">
               {a.title}
             </span>
@@ -525,7 +544,7 @@ function AutomationList({
                   onDeleteRuns(a.id);
                 }}
               >
-                🗑
+                <Trash2 aria-hidden="true" />
               </button>
             )}
           </div>
@@ -551,7 +570,7 @@ function AutomationList({
                       onDeleteRun(r.id);
                     }}
                   >
-                    ✕
+                    <X aria-hidden="true" />
                   </button>
                 </div>
               ))}
