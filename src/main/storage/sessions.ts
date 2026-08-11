@@ -7,7 +7,6 @@ import {
   DEFAULT_WORKSPACE_DIR,
   sessionRootDir,
   sessionArtifactsDir,
-  hasPickedWorkspace,
 } from "../config/paths";
 import { logger } from "../log/logger";
 
@@ -43,6 +42,23 @@ export function groupForWorkspace(workspaceDir?: string | null): string {
 }
 
 function rowToSession(r: SessionRow): Session {
+  // Versions before 0.2 stored the built-in default workspace as though the
+  // user had explicitly selected it. Normalize that legacy representation.
+  const projectDir =
+    r.workspace_dir && path.resolve(r.workspace_dir) !== path.resolve(DEFAULT_WORKSPACE_DIR)
+      ? r.workspace_dir
+      : undefined;
+  const storedRoot = r.root_dir ? path.resolve(r.root_dir) : undefined;
+  const storedRootIsSessionDir = Boolean(
+    storedRoot &&
+    path.basename(storedRoot) === r.id &&
+    path.basename(path.dirname(storedRoot)) === "sessions",
+  );
+  const rootDir = projectDir
+    ? sessionRootDir(r.id, projectDir)
+    : storedRootIsSessionDir
+      ? storedRoot
+      : sessionRootDir(r.id);
   return {
     id: r.id,
     title: r.title,
@@ -50,22 +66,11 @@ function rowToSession(r: SessionRow): Session {
     updatedAt: r.updated_at,
     source: toSessionSource(r.source),
     group: r.group_name || groupForWorkspace(r.workspace_dir),
-    workspaceDir: r.workspace_dir ?? undefined,
-    rootDir: r.root_dir ?? undefined,
-    terminalCwd: terminalCwdFor(r.id, r.workspace_dir),
+    workspaceDir: projectDir,
+    rootDir,
+    terminalCwd: rootDir,
     model: r.model ?? undefined,
   };
-}
-
-/**
- * Resolve the terminal's working directory. When a real project folder was
- * picked we open the terminal there; otherwise we fall back to the isolated
- * per-session folder ~/DeepWork/workspace/sessions/<sessionId> so each chat has
- * its own scratch space instead of the shared DeepWork internal directory.
- */
-function terminalCwdFor(id: string, workspaceDir?: string | null): string {
-  if (hasPickedWorkspace(workspaceDir)) return workspaceDir as string;
-  return sessionRootDir(id);
 }
 
 /**
@@ -94,13 +99,16 @@ export function createSession(
   workspaceDir?: string,
   model?: string,
   source: SessionSource = "user",
+  defaultWorkspaceDir = DEFAULT_WORKSPACE_DIR,
 ): Session {
   const now = Date.now();
   const id = randomUUID();
-  const base = workspaceDir && workspaceDir.trim() ? workspaceDir : DEFAULT_WORKSPACE_DIR;
-  const rootDir = sessionRootDir(id, base);
-  const artifactsDir = sessionArtifactsDir(id, base);
-  const group = groupForWorkspace(base);
+  const projectDir = workspaceDir && workspaceDir.trim()
+    ? path.resolve(workspaceDir)
+    : undefined;
+  const rootDir = sessionRootDir(id, projectDir, defaultWorkspaceDir);
+  const artifactsDir = sessionArtifactsDir(id, projectDir, defaultWorkspaceDir);
+  const group = groupForWorkspace(projectDir);
   // Each session gets its own output drawer. For a picked folder it lives under
   // <base>/.deepwork/sessions/<id>/; otherwise it is the isolated root itself.
   try {
@@ -118,9 +126,9 @@ export function createSession(
     updatedAt: now,
     source,
     group,
-    workspaceDir: base,
+    workspaceDir: projectDir,
     rootDir,
-    terminalCwd: terminalCwdFor(id, base),
+    terminalCwd: rootDir,
     model: model || undefined,
   };
   getDb()
@@ -144,7 +152,7 @@ export function createSession(
     id: s.id,
     title: s.title,
     group: s.group,
-    workspaceDir: base,
+    workspaceDir: projectDir,
     model: s.model,
     source,
   });
@@ -172,12 +180,18 @@ export function setSessionGroup(id: string, group: string): void {
   ensureGroup(g);
 }
 
-export function setSessionWorkspace(id: string, workspaceDir: string): void {
-  const base = workspaceDir && workspaceDir.trim() ? workspaceDir : DEFAULT_WORKSPACE_DIR;
-  const rootDir = sessionRootDir(id, base);
-  const artifactsDir = sessionArtifactsDir(id, base);
-  const group = groupForWorkspace(base);
-  const terminalCwd = terminalCwdFor(id, base);
+export function setSessionWorkspace(
+  id: string,
+  workspaceDir: string,
+  defaultWorkspaceDir = DEFAULT_WORKSPACE_DIR,
+): void {
+  const projectDir = workspaceDir && workspaceDir.trim()
+    ? path.resolve(workspaceDir)
+    : undefined;
+  const rootDir = sessionRootDir(id, projectDir, defaultWorkspaceDir);
+  const artifactsDir = sessionArtifactsDir(id, projectDir, defaultWorkspaceDir);
+  const group = groupForWorkspace(projectDir);
+  const terminalCwd = rootDir;
   try {
     fs.mkdirSync(artifactsDir, { recursive: true });
   } catch (err) {
@@ -187,7 +201,7 @@ export function setSessionWorkspace(id: string, workspaceDir: string): void {
     .prepare(
       "UPDATE sessions SET workspace_dir = ?, root_dir = ?, terminal_cwd = ?, group_name = ?, updated_at = ? WHERE id = ?",
     )
-    .run(base, rootDir, terminalCwd, group, Date.now(), id);
+    .run(projectDir ?? null, rootDir, terminalCwd, group, Date.now(), id);
   ensureGroup(group);
 }
 

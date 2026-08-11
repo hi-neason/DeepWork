@@ -32,18 +32,25 @@ export const TIMELINE_MEMORY_DIR = path.join(MEMORY_ROOT, "timeline_memory");
 export const PROJECT_MEMORY_DIR = path.join(MEMORY_ROOT, "project_memory");
 
 /**
- * The session's working directory = the agent's cwd AND the fs-tool sandbox
- * root. When the user picked a folder, that folder itself is the root so the
- * agent can read the project's source; without a pick we fall back to an
- * isolated per-session folder under the default workspace.
+ * The session-owned workspace used by artifacts and the embedded terminal.
+ * A selected project keeps session output under its private .deepwork drawer;
+ * without a selection the configured default workspace owns a sessions folder.
  *
- *   picked:  <base>/                         (the chosen project folder)
- *   default: ~/DeepWork/workspace/sessions/<sessionId>/
+ *   picked:  <project>/.deepwork/sessions/<sessionId>/
+ *   default: <defaultWorkspace>/sessions/<sessionId>/
  */
-export function sessionRootDir(sessionId: string, base?: string): string {
-  const picked = base && base.trim();
-  if (picked) return path.resolve(picked);
-  return path.join(DEFAULT_WORKSPACE_DIR, "sessions", sessionId);
+export function sessionRootDir(
+  sessionId: string,
+  projectDir?: string,
+  defaultWorkspaceDir = DEFAULT_WORKSPACE_DIR,
+): string {
+  if (hasPickedWorkspace(projectDir)) {
+    return path.join(path.resolve(projectDir!), ".deepwork", "sessions", sessionId);
+  }
+  const base = defaultWorkspaceDir?.trim()
+    ? path.resolve(defaultWorkspaceDir)
+    : DEFAULT_WORKSPACE_DIR;
+  return path.join(base, "sessions", sessionId);
 }
 
 /**
@@ -52,20 +59,21 @@ export function sessionRootDir(sessionId: string, base?: string): string {
  * isolated inside the chosen project while the source tree stays readable.
  * Without a pick the artifacts dir equals the isolated root dir.
  */
-export function sessionArtifactsDir(sessionId: string, base?: string): string {
-  const picked = base && base.trim();
-  if (picked) return path.join(path.resolve(picked), ".deepwork", "sessions", sessionId);
-  return path.join(DEFAULT_WORKSPACE_DIR, "sessions", sessionId);
+export function sessionArtifactsDir(
+  sessionId: string,
+  projectDir?: string,
+  defaultWorkspaceDir = DEFAULT_WORKSPACE_DIR,
+): string {
+  return sessionRootDir(sessionId, projectDir, defaultWorkspaceDir);
 }
 
 /**
  * Whether a workspace base was explicitly chosen (vs. the default fallback).
- * createSession persists DEFAULT_WORKSPACE_DIR even when nothing was picked, so
- * we compare against the resolved default to detect a real project folder.
+ * New sessions persist only an explicitly selected project here. Legacy rows
+ * that stored DEFAULT_WORKSPACE_DIR are normalized by the session store.
  */
 export function hasPickedWorkspace(base?: string | null): boolean {
-  if (!base || !base.trim()) return false;
-  return path.resolve(base) !== path.resolve(DEFAULT_WORKSPACE_DIR);
+  return Boolean(base?.trim());
 }
 
 /** Ensure all the standard directories exist. Safe to call at startup. */

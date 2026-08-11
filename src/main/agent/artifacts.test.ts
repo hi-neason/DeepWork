@@ -1,8 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { scanArtifacts } from "./artifacts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const sessionStorage = vi.hoisted(() => ({ getSession: vi.fn() }));
+vi.mock("../storage/sessions", () => sessionStorage);
+
+import { listSessionArtifacts, scanArtifacts } from "./artifacts";
 
 const dirs: string[] = [];
 
@@ -14,6 +18,7 @@ function fixtureDir(): string {
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  sessionStorage.getSession.mockReset();
 });
 
 describe("artifact scanning", () => {
@@ -41,5 +46,26 @@ describe("artifact scanning", () => {
     fs.writeFileSync(path.join(root, "node_modules", "pkg.js"), "dependency");
 
     expect(scanArtifacts(root, true).map((item) => item.name)).toEqual(["deliverable.pdf"]);
+  });
+
+  it("lists only the selected project's per-session output drawer", () => {
+    const project = fixtureDir();
+    const outputDir = path.join(project, ".deepwork", "sessions", "session-project");
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, "index.html"), "<h1>Hello</h1>");
+    fs.writeFileSync(path.join(project, "unrelated.pdf"), "not produced by this session");
+    sessionStorage.getSession.mockReturnValue({
+      id: "session-project",
+      workspaceDir: project,
+    });
+
+    expect(listSessionArtifacts("session-project").map((item) => item.relativePath)).toEqual([
+      "index.html",
+    ]);
+  });
+
+  it("returns no artifacts for an unknown session", () => {
+    sessionStorage.getSession.mockReturnValue(null);
+    expect(listSessionArtifacts("missing")).toEqual([]);
   });
 });

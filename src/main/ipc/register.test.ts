@@ -231,6 +231,22 @@ describe("ipc/register wiring closure", () => {
     vi.clearAllMocks();
   });
 
+  it("sessions:create uses the configured default workspace when no project is selected", async () => {
+    vi.mocked(settingsStorage.loadSettings).mockReturnValueOnce({
+      model: { workspaceDir: "/configured/default" },
+    } as any);
+
+    await __test_getHandlers().get("sessions:create")!({}, undefined, undefined, undefined);
+
+    expect(sessions.createSession).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      "user",
+      "/configured/default",
+    );
+  });
+
   it("chat:send passes mode through to agentManager.runTurn (locks C-T2 mode wiring closure)", async () => {
     const handlers = __test_getHandlers();
     const send = handlers.get("chat:send")!;
@@ -363,20 +379,54 @@ describe("ipc/register wiring closure", () => {
   });
 
   it("terminal:spawn derives cwd from the stored session instead of renderer input", async () => {
-    vi.mocked(sessions.getSession).mockReturnValueOnce({
-      id: "sess-pty",
-      title: "Terminal",
-      createdAt: 1,
-      updatedAt: 1,
-      source: "user",
-      group: "Default",
-      terminalCwd: "/trusted/project",
-    });
-    const spawn = __test_getHandlers().get("terminal:spawn")!;
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-project-ipc-"));
+    const sessionWorkspace = path.join(project, ".deepwork", "sessions", "sess-pty");
+    try {
+      vi.mocked(sessions.getSession).mockReturnValueOnce({
+        id: "sess-pty",
+        title: "Terminal",
+        createdAt: 1,
+        updatedAt: 1,
+        source: "user",
+        group: "Default",
+        workspaceDir: project,
+        rootDir: sessionWorkspace,
+        terminalCwd: sessionWorkspace,
+      });
+      vi.mocked(configPaths.hasPickedWorkspace).mockReturnValueOnce(true);
 
-    await spawn({}, "term-1", "sess-pty");
+      await __test_getHandlers().get("terminal:spawn")!({}, "term-1", "sess-pty");
 
-    expect(term.spawn).toHaveBeenCalledWith("term-1", "/trusted/project");
+      expect(fs.statSync(sessionWorkspace).isDirectory()).toBe(true);
+      expect(term.spawn).toHaveBeenCalledWith("term-1", sessionWorkspace);
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+    }
+  });
+
+  it("terminal:spawn repairs an older default session directory before opening the PTY", async () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-terminal-ipc-"));
+    const root = path.join(base, "sessions", "sess-old");
+    try {
+      vi.mocked(sessions.getSession).mockReturnValueOnce({
+        id: "sess-old",
+        title: "Legacy terminal",
+        createdAt: 1,
+        updatedAt: 1,
+        source: "user",
+        group: "Default",
+        workspaceDir: "/tmp/dw/default",
+      });
+      vi.mocked(configPaths.hasPickedWorkspace).mockReturnValueOnce(false);
+      vi.mocked(configPaths.sessionRootDir).mockReturnValueOnce(root);
+
+      await __test_getHandlers().get("terminal:spawn")!({}, "term-old", "sess-old");
+
+      expect(fs.statSync(root).isDirectory()).toBe(true);
+      expect(term.spawn).toHaveBeenCalledWith("term-old", root);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
   });
 
   it("terminal handlers reject malformed ids and PTY dimensions at the IPC boundary", async () => {

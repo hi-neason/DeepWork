@@ -5,11 +5,11 @@ import type { z } from "zod";
 import { agentManager } from "../agent/manager";
 import { getDb } from "../storage/db";
 import { applyOpenAtLogin, setKeepAwake } from "../system";
-import { DEEPWORK_ROOT, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
+import { DEEPWORK_ROOT, DEFAULT_WORKSPACE_DIR, sessionRootDir, sessionArtifactsDir, hasPickedWorkspace } from "../config/paths";
 import { approvals } from "../security/approvals";
 import { verifyModelConfig } from "../agent/model";
 import { assertConfiguredEndpoint } from "../tools/webGuard";
-import type { Settings } from "../../shared/types";
+import type { Session, Settings } from "../../shared/types";
 import { MODEL_CATALOG, PROVIDER_PRESETS } from "../../shared/providers";
 import { scheduler } from "../automation/scheduler";
 import { terminalManager } from "../terminal/manager";
@@ -213,7 +213,13 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   handle("sessions:list", () => listSessions());
   handleValidated("sessions:get", terminalIdArgsSchema, (_e, [id]) => getSession(id));
   handleValidated("sessions:create", sessionCreateArgsSchema, (_e, [title, workspaceDir, model]) =>
-    createSession(title, workspaceDir, model),
+    createSession(
+      title,
+      workspaceDir,
+      model,
+      "user",
+      loadSettings().model?.workspaceDir || DEFAULT_WORKSPACE_DIR,
+    ),
   );
   handle("sessions:rename", (_e, id: string, title: string) =>
     renameSession(id, title),
@@ -229,7 +235,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   );
   handle("sessions:groups", () => listGroups());
   handleValidated("sessions:setWorkspace", sessionWorkspaceArgsSchema, (_e, [id, workspaceDir]) =>
-    setSessionWorkspace(id, workspaceDir),
+    setSessionWorkspace(
+      id,
+      workspaceDir,
+      loadSettings().model?.workspaceDir || DEFAULT_WORKSPACE_DIR,
+    ),
   );
   handle("sessions:setModel", (_e, id: string, model: string) => {
     setSessionModel(id, model);
@@ -364,10 +374,13 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     const s = getSession(sessionId);
     // Derive the cwd/sandbox root and output drawer at runtime (works for old
     // sessions whose stored root_dir predates the .deepwork layout).
-    const root = s ? sessionRootDir(s.id, s.workspaceDir) : undefined;
-    const picked = hasPickedWorkspace(s?.workspaceDir);
-    const outputDir = s && picked ? sessionArtifactsDir(s.id, s.workspaceDir!) : root;
-    agentManager.setSessionRoot(sessionId, root, outputDir, picked);
+    const paths = s ? resolveSessionRuntimePaths(s) : undefined;
+    agentManager.setSessionRoot(
+      sessionId,
+      paths?.root,
+      paths?.outputDir,
+      paths?.isProject,
+    );
     agentManager.setSessionModel(sessionId, s?.model);
     return agentManager.getHistory(sessionId);
   });
@@ -389,15 +402,18 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
         // folder that is the folder itself; otherwise the isolated session dir.
         // Derive at runtime so old sessions pick up the new layout.
         const s = getSession(sessionId);
-        const root = s ? sessionRootDir(s.id, s.workspaceDir) : undefined;
-        const picked = hasPickedWorkspace(s?.workspaceDir);
-        const outputDir = s && picked ? sessionArtifactsDir(s.id, s.workspaceDir!) : root;
-        agentManager.setSessionRoot(sessionId, root, outputDir, picked);
+        const paths = s ? resolveSessionRuntimePaths(s) : undefined;
+        agentManager.setSessionRoot(
+          sessionId,
+          paths?.root,
+          paths?.outputDir,
+          paths?.isProject,
+        );
         for await (const e of agentManager.runTurn(
           sessionId,
           text,
           attachments,
-          root,
+          paths?.root,
           modelId,
           mode,
         )) {
@@ -583,8 +599,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   handleValidated("terminal:spawn", terminalSpawnArgsSchema, (_e, [id, sessionId]) => {
     const session = getSession(sessionId);
     if (!session) throw new Error("Session not found");
-    const cwd = session.terminalCwd ?? sessionRootDir(session.id, session.workspaceDir);
-    terminalManager.spawn(id, cwd);
+    const { sessionWorkspace } = resolveSessionRuntimePaths(session);
+    terminalManager.spawn(id, sessionWorkspace);
   });
   handleValidated("terminal:input", terminalInputArgsSchema, (_e, [id, data]) =>
     terminalManager.input(id, data),
@@ -595,13 +611,32 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   handleValidated("terminal:kill", terminalIdArgsSchema, (_e, [id]) => terminalManager.kill(id));
 }
 
+/**
+ * Resolve the authoritative paths shared by the agent, artifact panel, and
+ * terminal. Older default sessions may not have their isolated folder because
+ * previous versions accidentally created a sibling .deepwork directory. The
+ * resulting path is always a main-process-derived session drawer, never a raw
+ * renderer-supplied mkdir target.
+ */
+function resolveSessionRuntimePaths(session: Session): {
+  root: string;
+  outputDir: string;
+  sessionWorkspace: string;
+  isProject: boolean;
+} {
+  const isProject = hasPickedWorkspace(session.workspaceDir);
+  const sessionWorkspace =
+    session.rootDir ?? sessionRootDir(session.id, session.workspaceDir);
+  const root = isProject ? path.resolve(session.workspaceDir!) : sessionWorkspace;
+  fs.mkdirSync(sessionWorkspace, { recursive: true });
+  return { root, outputDir: sessionWorkspace, sessionWorkspace, isProject };
+}
+
 /** Resolve an artifact against the authoritative workspace of its session. */
 function resolveSessionArtifact(sessionId: string, candidate: string): string {
   const session = getSession(sessionId);
   if (!session) throw new Error("Session not found");
-  const allowedRoot = hasPickedWorkspace(session.workspaceDir)
-    ? path.resolve(session.workspaceDir!)
-    : sessionArtifactsDir(session.id, session.workspaceDir);
+  const allowedRoot = session.rootDir ?? sessionArtifactsDir(session.id, session.workspaceDir);
   const resolved = assertExistingFileWithin(allowedRoot, candidate);
   const listed = agentManager.listArtifacts(sessionId).some((artifact) => {
     try {

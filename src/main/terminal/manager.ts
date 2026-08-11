@@ -30,6 +30,18 @@ export function limitTerminalOutput(data: string): string {
   return data.slice(0, end);
 }
 
+/** Resolve a trusted session cwd without ever silently falling back to HOME. */
+export function resolveTerminalCwd(cwd: string): string {
+  if (!cwd?.trim()) throw new Error("Terminal workspace is not configured");
+  const dir = path.resolve(cwd);
+  try {
+    if (fs.statSync(dir).isDirectory()) return dir;
+  } catch {
+    // Translate missing/inaccessible paths into one stable user-facing error.
+  }
+  throw new Error(`Terminal workspace is unavailable: ${dir}`);
+}
+
 /**
  * Owns the set of interactive PTYs backing the in-app terminal panel.
  *
@@ -58,19 +70,10 @@ class TerminalManager {
     // removed by Homebrew (e.g. _brew_services) and emit "no such file" errors
     // on the first line. A clean rebuild scans the current fpath and skips them.
     env.ZSH_COMPDUMP = path.join(os.tmpdir(), `deepwork-zcompdump-${id}`);
-    // Only use a requested cwd if it already exists. Session scratch dirs are
-    // created by the storage layer and user-picked folders exist by definition;
-    // we deliberately do NOT mkdir an arbitrary renderer-supplied path here,
-    // since a compromised renderer could otherwise create directories anywhere
-    // the user can write (e.g. ~/Library/LaunchAgents).
-    let dir: string = process.env.HOME || process.cwd();
-    if (cwd && cwd.trim()) {
-      try {
-        if (fs.existsSync(cwd) && fs.statSync(cwd).isDirectory()) dir = cwd;
-      } catch {
-        // Fall through to the home fallback below.
-      }
-    }
+    // The IPC layer derives this path from the stored session and creates only
+    // DeepWork-owned default session folders. Never hide a broken workspace by
+    // opening a shell in HOME: the header and real shell cwd must always agree.
+    const dir = resolveTerminalCwd(cwd);
     const term = ptySpawn(shell, [], {
       name: "xterm-256color",
       cols: 80,

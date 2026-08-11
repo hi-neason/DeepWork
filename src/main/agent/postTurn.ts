@@ -6,7 +6,7 @@ import { loadSettings } from "../storage/settings";
 import { appendToRecent, readRawMemory } from "../storage/user-memory";
 import { appendTimelineEntry, todayStr } from "../storage/timeline-memory";
 import { appendProjectMemoryEntry } from "../storage/project-memory";
-import { DEFAULT_WORKSPACE_DIR, hasPickedWorkspace } from "../config/paths";
+import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
 
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -50,9 +50,10 @@ export class PostTurnService {
     userText: string,
     replyText: string,
     ws?: string,
+    projectWs?: string,
   ): void {
-    this.maybeExtractMemory(sessionId, userText, ws);
-    this.maybeAppendTimeline(sessionId, userText, replyText, ws);
+    this.maybeExtractMemory(sessionId, userText, projectWs);
+    this.maybeAppendTimeline(sessionId, userText, replyText, projectWs);
   }
 
   private maybeExtractMemory(sessionId: string, userText: string, ws?: string): void {
@@ -177,7 +178,7 @@ export class PostTurnService {
 
       if (points.length === 0) return;
       appendTimelineEntry({ project, points });
-      if (ws && hasPickedWorkspace(ws)) {
+      if (ws) {
         appendProjectMemoryEntry({ project, date: todayStr(), points });
       }
       logger.info("timeline", "capture_done", { session: sessionId, project, pointsCount: points.length });

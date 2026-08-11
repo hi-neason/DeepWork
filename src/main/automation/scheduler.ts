@@ -14,6 +14,8 @@ import {
 } from "../storage/automations";
 import type { Automation, AutomationRun, AutomationScheduleConfig, PermissionMode } from "../../shared/types";
 import { logger } from "../log/logger";
+import { loadSettings } from "../storage/settings";
+import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
 import { wallClockParts, zonedWallToEpoch, zonedDateTimeToEpoch, systemTimeZone } from "./timezone";
 
 /** Effective schedule timezone: stored IANA zone, else system local. */
@@ -400,7 +402,13 @@ export class AutomationScheduler extends EventEmitter {
     if (!fresh || !fresh.enabled) return;
     a = fresh;
     this.running.add(a.id);
-    const session = createSession(`⏰ ${a.title}`, a.workspaceDir, a.model, "automation");
+    const session = createSession(
+      `⏰ ${a.title}`,
+      a.workspaceDir,
+      a.model,
+      "automation",
+      loadSettings().model.workspaceDir || DEFAULT_WORKSPACE_DIR,
+    );
     const run = startRun(a.id, session.id);
     this.emit("run:started", { automation: a, run });
     logger.info("automation", "run started", {

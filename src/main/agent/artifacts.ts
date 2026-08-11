@@ -1,20 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ArtifactFile } from "../../shared/types";
-import { sessionArtifactsDir, hasPickedWorkspace, DEFAULT_WORKSPACE_DIR } from "../config/paths";
+import { sessionArtifactsDir } from "../config/paths";
 import { getSession } from "../storage/sessions";
-import { loadSettings } from "../storage/settings";
 
 /** List safe, user-facing files produced within one session's workspace. */
 export function listSessionArtifacts(sessionId: string): ArtifactFile[] {
   const session = getSession(sessionId);
-  if (session && hasPickedWorkspace(session.workspaceDir)) {
-    return scanArtifacts(path.resolve(session.workspaceDir!), true);
-  }
-  const root = sessionArtifactsDir(sessionId, session?.workspaceDir);
-  if (root) return scanArtifacts(root, false);
-  const fallback = loadSettings().model.workspaceDir || DEFAULT_WORKSPACE_DIR;
-  return fallback ? scanArtifacts(fallback, false) : [];
+  if (!session) return [];
+  const root = session.rootDir ?? sessionArtifactsDir(sessionId, session.workspaceDir);
+  return scanArtifacts(root, false);
 }
 
 /**

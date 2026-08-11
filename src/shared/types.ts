@@ -273,13 +273,11 @@ export interface Session {
   /** Group/folder this task belongs to (default group id: "Default"; the
    *  display label is localized via the sidebar.defaultGroup i18n key). */
   group: string;
-  /** Base workspace folder chosen for the task (groups sessions by name). */
+  /** Explicit project folder chosen for the task; absent uses the configured default workspace. */
   workspaceDir?: string;
-  /** Per-session working directory: <workspaceDir>/<sessionId>. */
+  /** Private per-session workspace containing generated artifacts. */
   rootDir?: string;
-  /** Working directory for the embedded terminal: the chosen project folder
-   * when one is picked, otherwise the isolated per-session folder
-   * ~/DeepWork/workspace/sessions/<sessionId>. */
+  /** Working directory for the embedded terminal; always the private session workspace. */
   terminalCwd?: string;
   /** Per-session model override (provider:model or just model id). */
   model?: string;

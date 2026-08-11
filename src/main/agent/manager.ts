@@ -230,13 +230,13 @@ export class AgentManager {
       const s = getSession(sessionId);
       if (s) {
         const picked = hasPickedWorkspace(s.workspaceDir);
-        const root = sessionRootDir(s.id, s.workspaceDir);
-        // Deliverables always land in the per-session output drawer so each
-        // chat's artifacts stay isolated — inside the project for picked
-        // folders, and under ~/DeepWork/workspace/.deepwork for the default
-        // workspace. (Using the shared default workspace as outputDir would
-        // make every session show the same artifacts.)
-        const outputDir = sessionArtifactsDir(s.id, s.workspaceDir!);
+        const sessionWorkspace =
+          s.rootDir ?? sessionRootDir(s.id, s.workspaceDir);
+        const root = picked ? s.workspaceDir! : sessionWorkspace;
+        // Deliverables always land in the private session workspace: under
+        // <project>/.deepwork for selected projects, or under the configured
+        // default workspace for sessions without a project.
+        const outputDir = sessionWorkspace;
         this.setSessionRoot(sessionId, root, outputDir, picked);
       }
     }
@@ -329,9 +329,7 @@ export class AgentManager {
       const s = getSession(sessionId);
       const picked = hasPickedWorkspace(s?.workspaceDir);
       this.runtime.setWorkspace(sessionId, workspaceDir, picked);
-      const outputDir = picked
-        ? sessionArtifactsDir(sessionId, s!.workspaceDir!)
-        : workspaceDir;
+      const outputDir = s?.rootDir ?? sessionArtifactsDir(sessionId, s?.workspaceDir);
       setThreadRoot(sessionId, workspaceDir, outputDir, picked);
     }
     if (modelId) this.runtime.setModel(sessionId, modelId);
@@ -365,7 +363,13 @@ export class AgentManager {
       ...(result.firstTokenMs !== undefined ? { firstTokenMs: result.firstTokenMs } : {}),
       ...(result.finishReason ? { finishReason: result.finishReason } : {}),
     };
-    this.postTurn.afterSuccessfulTurn(sessionId, userText, result.replyText, ws);
+    this.postTurn.afterSuccessfulTurn(
+      sessionId,
+      userText,
+      result.replyText,
+      ws,
+      this.runtime.getProjectWorkspace(sessionId),
+    );
     // Unlock the input immediately after a successful turn finishes.
     yield { type: "turn_completed" };
     logger.info(
