@@ -30,7 +30,8 @@ export async function prepareElectronDevExecutable(root) {
     .slice(0, 12);
 
   const cacheRoot = path.join(root, "node_modules", ".cache", "deepwork-electron");
-  const targetApp = path.join(cacheRoot, `DeepWork-${electronVersion}-${fingerprint}.app`);
+  const cacheKey = `${electronVersion}-${fingerprint}`;
+  const targetApp = path.join(cacheRoot, cacheKey, "DeepWork.app");
   const targetExecutable = path.join(targetApp, "Contents", "MacOS", "DeepWork");
   try {
     const executableStat = await stat(targetExecutable);
@@ -40,7 +41,9 @@ export async function prepareElectronDevExecutable(root) {
   }
 
   await mkdir(cacheRoot, { recursive: true });
-  const stagingApp = path.join(cacheRoot, `.preparing-${process.pid}-${Date.now()}.app`);
+  const targetDir = path.dirname(targetApp);
+  await mkdir(targetDir, { recursive: true });
+  const stagingApp = path.join(targetDir, `.preparing-${process.pid}-${Date.now()}.app`);
   execFileSync("/usr/bin/ditto", [sourceApp, stagingApp], { stdio: "inherit" });
 
   const stagingContents = path.join(stagingApp, "Contents");
