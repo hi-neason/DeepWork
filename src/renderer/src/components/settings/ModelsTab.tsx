@@ -417,7 +417,10 @@ function ModelEditor({
                   if (hasStoredKey) setHasStoredKey(false);
                 }}
                 onFocus={() => {
-                  if (hasStoredKey && !apiKey) setShowKey(true);
+                  // Stored credentials are intentionally never loaded into the
+                  // renderer. Keep the mask visible on focus; showing an empty
+                  // text input made a valid stored key look as if it vanished.
+                  if (!hasStoredKey) setShowKey(true);
                 }}
                 placeholder={hasStoredKey ? "" : preset.keyPlaceholder}
                 autoComplete="off"

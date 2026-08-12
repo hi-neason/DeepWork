@@ -34,6 +34,9 @@ describe("AutomationsView list toggle", () => {
         automations: {
           list: vi.fn(async () => [automation]),
           update,
+          create: vi.fn(async () => automation),
+          delete: vi.fn(async () => undefined),
+          runNow: vi.fn(async () => undefined),
         },
         settings: {
           get: vi.fn(async () => ({ mcpServers: [], configuredModels: [] })),
@@ -76,5 +79,27 @@ describe("AutomationsView list toggle", () => {
 
     fireEvent.click(formToggle);
     expect(formToggle.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("rolls back an optimistic toggle and reports update failures", async () => {
+    vi.mocked(window.deepwork.automations.update).mockRejectedValueOnce(new Error("database locked"));
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    render(<AutomationsView />);
+
+    const toggle = await screen.findByRole("switch", { name: "Toggle Morning brief" });
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining("database locked"));
+  });
+
+  it("validates required create fields before calling the backend", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    render(<AutomationsView />);
+    fireEvent.click(await screen.findByText("automations.new"));
+    fireEvent.click(screen.getByText("common.save"));
+
+    expect(alertSpy).toHaveBeenCalledWith("automations.formIncomplete");
+    expect(window.deepwork.automations.create).not.toHaveBeenCalled();
   });
 });

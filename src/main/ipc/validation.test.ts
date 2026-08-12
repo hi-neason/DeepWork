@@ -5,10 +5,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   automationCreateSchema,
   automationUpdateSchema,
+  approvalResponseArgsSchema,
   assertExistingFileWithin,
   chatSendArgsSchema,
+  groupNameArgsSchema,
+  memoryAddArgsSchema,
+  memoriesSearchArgsSchema,
+  modelVerifyArgsSchema,
+  providerKeyArgsSchema,
   sessionPermissionModeArgsSchema,
   sessionWorkspaceArgsSchema,
+  skillCreateArgsSchema,
+  skillUpdateArgsSchema,
   settingsSchema,
   terminalInputArgsSchema,
   terminalResizeArgsSchema,
@@ -152,5 +160,33 @@ describe("IPC validation", () => {
       mcpServers: [{ id: "m1", label: "Local", transport: "stdio", enabled: true }],
     })).toThrow(/command/);
     expect(() => settingsSchema.parse({ ...settings, fontScale: 99 })).toThrow();
+  });
+
+  it.each([
+    ["empty identifier", () => approvalResponseArgsSchema.parse(["", "allow"])],
+    ["unknown approval decision", () => approvalResponseArgsSchema.parse(["a1", "later"])],
+    ["empty group name", () => groupNameArgsSchema.parse(["   "])],
+    ["unknown provider", () => providerKeyArgsSchema.parse(["forged", "secret"])],
+    ["oversized key", () => providerKeyArgsSchema.parse(["openai", "x".repeat(65 * 1024)])],
+    ["empty memory", () => memoryAddArgsSchema.parse([""])],
+    ["invalid memory type", () => memoryAddArgsSchema.parse(["fact", "unknown"])],
+    ["zero search limit", () => memoriesSearchArgsSchema.parse(["scope", "query", 0])],
+    ["excessive search limit", () => memoriesSearchArgsSchema.parse(["scope", "query", 101])],
+    ["unsafe skill name", () => skillCreateArgsSchema.parse([{ name: "../escape" }])],
+    ["forged skill patch", () => skillUpdateArgsSchema.parse(["valid-skill", { files: [] }])],
+    ["relative model workspace", () => modelVerifyArgsSchema.parse([{
+      provider: "openai", model: "gpt", workspaceDir: "relative",
+    }])],
+  ])("rejects %s", (_name, parse) => {
+    expect(parse).toThrow();
+  });
+
+  it("accepts boundary values for common renderer-controlled inputs", () => {
+    expect(groupNameArgsSchema.parse(["x".repeat(500)])[0]).toHaveLength(500);
+    expect(memoriesSearchArgsSchema.parse(["", "", 1])).toEqual(["", "", 1]);
+    expect(memoriesSearchArgsSchema.parse(["scope", "query", 100])).toEqual([
+      "scope", "query", 100,
+    ]);
+    expect(providerKeyArgsSchema.parse(["openai", ""])).toEqual(["openai", ""]);
   });
 });

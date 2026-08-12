@@ -8,7 +8,7 @@ const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const MAX_ATTACHMENTS = 10;
 const MAX_DATA_URL_LENGTH = Math.ceil(MAX_ATTACHMENT_BYTES * 4 / 3) + 4096;
 
-const providerSchema = z.enum([
+export const providerSchema = z.enum([
   "anthropic", "openai", "ollama", "deepseek", "qwen",
   "minimax", "kimi", "openrouter", "custom",
 ]);
@@ -59,6 +59,14 @@ export const terminalResizeArgsSchema = z.tuple([
 ]);
 
 export const terminalIdArgsSchema = z.tuple([identifierSchema]);
+export const twoIdentifierArgsSchema = z.tuple([identifierSchema, identifierSchema]);
+export const identifierAndTextArgsSchema = z.tuple([
+  identifierSchema,
+  boundedString(16 * 1024),
+]);
+export const groupNameSchema = boundedString(500).trim().min(1);
+export const groupNameArgsSchema = z.tuple([groupNameSchema]);
+export const groupRenameArgsSchema = z.tuple([groupNameSchema, groupNameSchema]);
 
 export const sessionCreateArgsSchema = z.tuple([
   boundedString(500).optional(),
@@ -116,13 +124,28 @@ export const chatSendArgsSchema = z.tuple([
   interactivePermissionModeSchema.optional(),
 ]);
 
-const configuredModelSchema = z.object({
+export const configuredModelSchema = z.object({
   id: boundedString(500).min(1),
   provider: providerSchema,
   enabled: z.boolean(),
   isDefault: z.boolean().optional(),
   baseUrl: urlStringSchema.optional(),
 }).strict();
+
+export const modelConfigSchema = z.object({
+  provider: providerSchema,
+  model: boundedString(500).min(1),
+  baseUrl: urlStringSchema.optional(),
+  workspaceDir: workspacePathSchema,
+}).strict();
+
+export const modelVerifyArgsSchema = z.tuple([modelConfigSchema]);
+export const providerArgsSchema = z.tuple([providerSchema]);
+export const providerKeyArgsSchema = z.tuple([
+  providerSchema,
+  boundedString(64 * 1024),
+]);
+export const booleanArgsSchema = z.tuple([z.boolean()]);
 
 const mcpServerSchema = z.object({
   id: identifierSchema,
@@ -240,6 +263,71 @@ export const automationCreateSchema = z.object(automationMutableShape).strict().
 export const automationUpdateSchema = z.object(automationMutableShape).partial().strict().superRefine(validateSchedule);
 export const automationCreateArgsSchema = z.tuple([automationCreateSchema]);
 export const automationUpdateArgsSchema = z.tuple([identifierSchema, automationUpdateSchema]);
+
+const skillNameSchema = boundedString(255)
+  .trim()
+  .min(1)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Skill name must be a kebab-case slug");
+const skillPatchSchema = z.object({
+  description: boundedString(16 * 1024).optional(),
+  body: boundedString(2 * 1024 * 1024).optional(),
+  enabled: z.boolean().optional(),
+  license: boundedString(1024).optional(),
+  compatibility: boundedString(16 * 1024).optional(),
+  metadata: z.record(boundedString(255), boundedString(16 * 1024)).optional(),
+  allowedTools: z.array(boundedString(255)).max(500).optional(),
+}).strict();
+export const skillCreateArgsSchema = z.tuple([z.object({
+  name: skillNameSchema,
+  description: boundedString(16 * 1024).optional(),
+  body: boundedString(2 * 1024 * 1024).optional(),
+}).strict()]);
+export const skillUpdateArgsSchema = z.tuple([skillNameSchema, skillPatchSchema]);
+export const skillNameArgsSchema = z.tuple([skillNameSchema]);
+export const skillRenameArgsSchema = z.tuple([skillNameSchema, skillNameSchema]);
+export const skillImportArgsSchema = z.tuple([
+  workspacePathSchema,
+  skillNameSchema.optional(),
+]);
+export const skillExportArgsSchema = z.tuple([skillNameSchema, workspacePathSchema]);
+
+export const approvalResponseArgsSchema = z.tuple([
+  identifierSchema,
+  z.enum(["allow", "always_allow", "deny"]),
+]);
+
+export const memoryTypeSchema = z.enum(["preference", "fact", "event"]);
+export const memoriesListArgsSchema = z.tuple([z.boolean().optional()]);
+export const memoriesByScopeArgsSchema = z.tuple([
+  boundedString(16 * 1024),
+  memoryTypeSchema.optional(),
+]);
+export const memoriesSearchArgsSchema = z.tuple([
+  boundedString(16 * 1024),
+  boundedString(2 * 1024 * 1024),
+  z.number().int().min(1).max(100).optional(),
+]);
+export const memoryAddArgsSchema = z.tuple([
+  boundedString(2 * 1024 * 1024).min(1),
+  memoryTypeSchema.optional(),
+  boundedString(16 * 1024).optional(),
+]);
+export const memoryEditArgsSchema = z.tuple([
+  identifierSchema,
+  boundedString(2 * 1024 * 1024).min(1),
+]);
+
+export const userMemorySectionsArgsSchema = z.tuple([
+  z.record(boundedString(255), boundedString(2 * 1024 * 1024)),
+]);
+export const userMemoryAppendArgsSchema = z.tuple([
+  boundedString(2 * 1024 * 1024).min(1),
+  boundedString(2000).optional(),
+]);
+export const markdownArgsSchema = z.tuple([boundedString(8 * 1024 * 1024)]);
+export const timelineDateArgsSchema = z.tuple([
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+]);
 
 /** Return whether candidate is contained by root, including root itself. */
 export function isPathWithin(root: string, candidate: string): boolean {

@@ -22,20 +22,44 @@ import {
 } from "../security/mcpTrust";
 import {
   artifactActionArgsSchema,
+  approvalResponseArgsSchema,
   automationCreateArgsSchema,
   automationCreateSchema,
   automationUpdateArgsSchema,
   assertExistingFileWithin,
+  booleanArgsSchema,
   chatSendArgsSchema,
+  groupNameArgsSchema,
+  groupRenameArgsSchema,
+  identifierAndTextArgsSchema,
+  markdownArgsSchema,
+  memoriesByScopeArgsSchema,
+  memoriesListArgsSchema,
+  memoriesSearchArgsSchema,
+  memoryAddArgsSchema,
+  memoryEditArgsSchema,
+  modelVerifyArgsSchema,
   projectMemoryArgsSchema,
+  providerArgsSchema,
+  providerKeyArgsSchema,
   sessionCreateArgsSchema,
   sessionPermissionModeArgsSchema,
   sessionWorkspaceArgsSchema,
   settingsArgsSchema,
+  skillCreateArgsSchema,
+  skillExportArgsSchema,
+  skillImportArgsSchema,
+  skillNameArgsSchema,
+  skillRenameArgsSchema,
+  skillUpdateArgsSchema,
   terminalIdArgsSchema,
   terminalInputArgsSchema,
   terminalResizeArgsSchema,
   terminalSpawnArgsSchema,
+  timelineDateArgsSchema,
+  twoIdentifierArgsSchema,
+  userMemoryAppendArgsSchema,
+  userMemorySectionsArgsSchema,
 } from "./validation";
 
 import {
@@ -226,16 +250,16 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       mode ?? normalizeInteractivePermissionMode(settings.permissionMode),
     );
   });
-  handle("sessions:rename", (_e, id: string, title: string) =>
+  handleValidated("sessions:rename", identifierAndTextArgsSchema, (_e, [id, title]) =>
     renameSession(id, title),
   );
-  handle("sessions:delete", (_e, id: string) => {
+  handleValidated("sessions:delete", terminalIdArgsSchema, (_e, [id]) => {
     // Abort any in-flight turn and drop per-session runtime state before the
     // row is removed, so a deleted session can't leave a turn/emitter behind.
     agentManager.forgetSession(id);
     return deleteSession(id);
   });
-  handle("sessions:setGroup", (_e, id: string, group: string) =>
+  handleValidated("sessions:setGroup", identifierAndTextArgsSchema, (_e, [id, group]) =>
     setSessionGroup(id, group),
   );
   handle("sessions:groups", () => listGroups());
@@ -246,7 +270,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       loadSettings().model?.workspaceDir || DEFAULT_WORKSPACE_DIR,
     ),
   );
-  handle("sessions:setModel", (_e, id: string, model: string) => {
+  handleValidated("sessions:setModel", identifierAndTextArgsSchema, (_e, [id, model]) => {
     setSessionModel(id, model);
     agentManager.setSessionModel(id, model);
   });
@@ -270,36 +294,40 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       .all() as Array<{ workspace_dir: string }>;
     return rows.map((r) => ({ path: r.workspace_dir, name: groupForWorkspace(r.workspace_dir) }));
   });
-  handle("sessions:renameGroup", (_e, oldName: string, newName: string) =>
+  handleValidated("sessions:renameGroup", groupRenameArgsSchema, (_e, [oldName, newName]) =>
     renameGroup(oldName, newName),
   );
-  handle("sessions:deleteGroup", (_e, name: string) => deleteGroup(name));
-  handle("sessions:createGroup", (_e, name: string) => createGroup(name));
+  handleValidated("sessions:deleteGroup", groupNameArgsSchema, (_e, [name]) => deleteGroup(name));
+  handleValidated("sessions:createGroup", groupNameArgsSchema, (_e, [name]) => createGroup(name));
 
   // ---- skills ----
   handle("skills:list", () => listSkills());
-  handle(
+  handleValidated(
     "skills:create",
-    (_e, input: { name: string; description?: string; body?: string }) =>
+    skillCreateArgsSchema,
+    (_e, [input]) =>
       createSkill(input),
   );
-  handle(
+  handleValidated(
     "skills:update",
-    (_e, name: string, patch: Record<string, unknown>) =>
-      updateSkill(name, patch as Parameters<typeof updateSkill>[1]),
+    skillUpdateArgsSchema,
+    (_e, [name, patch]) => updateSkill(name, patch),
   );
-  handle("skills:delete", (_e, name: string) => deleteSkill(name));
-  handle(
+  handleValidated("skills:delete", skillNameArgsSchema, (_e, [name]) => deleteSkill(name));
+  handleValidated(
     "skills:rename",
-    (_e, oldName: string, newName: string) => renameSkill(oldName, newName),
+    skillRenameArgsSchema,
+    (_e, [oldName, newName]) => renameSkill(oldName, newName),
   );
-  handle(
+  handleValidated(
     "skills:import",
-    async (_e, sourceDir: string, newName?: string) => importSkill(sourceDir, newName),
+    skillImportArgsSchema,
+    async (_e, [sourceDir, newName]) => importSkill(sourceDir, newName),
   );
-  handle(
+  handleValidated(
     "skills:export",
-    async (_e, name: string, targetDir: string) => exportSkill(name, targetDir),
+    skillExportArgsSchema,
+    async (_e, [name, targetDir]) => exportSkill(name, targetDir),
   );
   handle("skills:rebuild", () => agentManager.rebuildSkills());
 
@@ -347,8 +375,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     saveMcpTrustGrants(settings.mcpServers, approved, grants);
     saveSettings(settings);
   });
-  handle("settings:getKey", (_e, provider: ProviderKind) => getApiKey(provider));
-  handle("settings:setKey", (_e, provider: ProviderKind, key: string) =>
+  handleValidated("settings:getKey", providerArgsSchema, (_e, [provider]) => getApiKey(provider));
+  handleValidated("settings:setKey", providerKeyArgsSchema, (_e, [provider, key]) =>
     setApiKey(provider, key),
   );
   handle("settings:pickDirectory", async () => {
@@ -359,7 +387,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     return res.canceled ? null : res.filePaths[0];
   });
   handle("settings:rebuildAgent", () => agentManager.rebuild());
-  handle("settings:setOnboarded", (_e, onboarded: boolean) => {
+  handleValidated("settings:setOnboarded", booleanArgsSchema, (_e, [onboarded]) => {
     const s = loadSettings();
     s.onboarded = onboarded;
     saveSettings(s);
@@ -378,7 +406,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   // ---- model catalog / verification ----
   handle("models:catalog", (): ModelInfo[] => MODEL_CATALOG);
   handle("models:providers", () => PROVIDER_PRESETS);
-  handle("models:verify", (_e, cfg): Promise<VerifyResult> =>
+  handleValidated("models:verify", modelVerifyArgsSchema, (_e, [cfg]): Promise<VerifyResult> =>
     verifyModelConfig(cfg),
   );
 
@@ -443,11 +471,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     },
   );
 
-  handle("chat:cancel", (_e, sessionId: string) => {
+  handleValidated("chat:cancel", terminalIdArgsSchema, (_e, [sessionId]) => {
     agentManager.cancel(sessionId);
   });
 
-  handle("chat:regenerate", async (event, sessionId: string) => {
+  handleValidated("chat:regenerate", terminalIdArgsSchema, async (event, [sessionId]) => {
     const sender = event.sender;
     const push = (e: DeepWorkEvent) => {
       if (!sender.isDestroyed()) sender.send("chat:event", sessionId, e);
@@ -467,35 +495,36 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   });
 
   // ---- approvals ----
-  handle(
+  handleValidated(
     "approval:respond",
-    (_e, id: string, decision: ApprovalDecision) => {
+    approvalResponseArgsSchema,
+    (_e, [id, decision]) => {
       approvals.respond(id, decision);
     },
   );
 
   // ---- memories ----
-  handle("memories:list", (_e, includeInvalid?: boolean) => listAllMemories(includeInvalid === true));
-  handle("memories:listByScope", (_e, scopeKey: string, type?: string) =>
-    listMemoriesByScope(scopeKey, asMemoryType(type)),
+  handleValidated("memories:list", memoriesListArgsSchema, (_e, [includeInvalid]) => listAllMemories(includeInvalid === true));
+  handleValidated("memories:listByScope", memoriesByScopeArgsSchema, (_e, [scopeKey, type]) =>
+    listMemoriesByScope(scopeKey, type),
   );
-  handle("memories:search", (_e, scopeKey: string, query: string, topK?: number) =>
+  handleValidated("memories:search", memoriesSearchArgsSchema, (_e, [scopeKey, query, topK]) =>
     searchMemories(scopeKey, query, { topK }),
   );
-  handle("memories:add", (_e, content: string, type?: string, scopeKey?: string) =>
-    addMemory(content, scopeKey ?? "", { type: asMemoryType(type) }),
+  handleValidated("memories:add", memoryAddArgsSchema, (_e, [content, type, scopeKey]) =>
+    addMemory(content, scopeKey ?? "", { type }),
   );
-  handle("memories:edit", (_e, id: string, content: string) => editMemory(id, content));
-  handle("memories:remove", (_e, id: string) => removeMemory(id));
-  handle("memories:invalidate", (_e, id: string) => invalidateMemory(id));
-  handle("memories:restore", (_e, id: string) => restoreMemory(id));
+  handleValidated("memories:edit", memoryEditArgsSchema, (_e, [id, content]) => editMemory(id, content));
+  handleValidated("memories:remove", terminalIdArgsSchema, (_e, [id]) => removeMemory(id));
+  handleValidated("memories:invalidate", terminalIdArgsSchema, (_e, [id]) => invalidateMemory(id));
+  handleValidated("memories:restore", terminalIdArgsSchema, (_e, [id]) => restoreMemory(id));
 
   // ---- user memory (MD file) ----
   handle("userMemory:read", () => {
     const sections = readUserMemory();
     return Object.fromEntries(sections);
   });
-  handle("userMemory:save", (_e, sections: Record<string, string>) => {
+  handleValidated("userMemory:save", userMemorySectionsArgsSchema, (_e, [sections]) => {
     const map = new Map<MemorySectionId, string>();
     for (const [k, v] of Object.entries(sections)) {
       if (MEMORY_SECTIONS.includes(k as MemorySectionId)) {
@@ -504,21 +533,19 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
     }
     saveUserMemory(map);
   });
-  handle("userMemory:append", (_e, content: string, source?: string) =>
+  handleValidated("userMemory:append", userMemoryAppendArgsSchema, (_e, [content, source]) =>
     appendToRecent(content, source),
   );
   handle("userMemory:raw", () => readRawMemory());
-  handle("userMemory:saveRaw", (_e, markdown: string) => saveRawMemory(markdown));
+  handleValidated("userMemory:saveRaw", markdownArgsSchema, (_e, [markdown]) => saveRawMemory(markdown));
   handle("userMemory:path", () => MEMORY_FILE);
 
   // ---- timeline memory (per-day markdown) ----
   handle("timeline:list", () => listTimelineDates());
-  handle("timeline:read", (_e, date: string) => {
-    assertTimelineDate(date);
+  handleValidated("timeline:read", timelineDateArgsSchema, (_e, [date]) => {
     return readTimelineDate(date);
   });
-  handle("timeline:path", (_e, date: string) => {
-    assertTimelineDate(date);
+  handleValidated("timeline:path", timelineDateArgsSchema, (_e, [date]) => {
     return timelinePath(date);
   });
 
@@ -528,7 +555,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   handleValidated("projectMemory:path", projectMemoryArgsSchema, (_e, [project]) => projectMemoryPath(project));
 
   // ---- artifacts ----
-  handle("artifacts:list", (_e, sessionId: string) =>
+  handleValidated("artifacts:list", terminalIdArgsSchema, (_e, [sessionId]) =>
     agentManager.listArtifacts(sessionId),
   );
   handleValidated("artifacts:reveal", artifactActionArgsSchema, (_e, [sessionId, absolutePath]) => {
@@ -563,11 +590,11 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
       // consecutiveFailures/autoPaused into the strict mutable schema.
       updateAutomation(id, patch);
   });
-  handle("automations:delete", (_e, id: string) => deleteAutomation(id));
-  handle("automations:runs", (_e, id: string) => listRuns(id));
-  handle("automations:deleteRun", (_e, runId: string) => deleteRun(runId));
-  handle("automations:deleteRuns", (_e, automationId: string) => deleteRuns(automationId));
-  handle("automations:runNow", async (_e, id: string) => {
+  handleValidated("automations:delete", terminalIdArgsSchema, (_e, [id]) => deleteAutomation(id));
+  handleValidated("automations:runs", terminalIdArgsSchema, (_e, [id]) => listRuns(id));
+  handleValidated("automations:deleteRun", terminalIdArgsSchema, (_e, [runId]) => deleteRun(runId));
+  handleValidated("automations:deleteRuns", terminalIdArgsSchema, (_e, [automationId]) => deleteRuns(automationId));
+  handleValidated("automations:runNow", terminalIdArgsSchema, async (_e, [id]) => {
     const a = listAutomations().find((x) => x.id === id);
     if (a) await scheduler.runNow(a);
   });

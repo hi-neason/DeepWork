@@ -594,4 +594,38 @@ describe("ipc/register wiring closure", () => {
     await expect(read({}, "x".repeat(256))).rejects.toThrow();
     expect(projectMemory.readProjectMemory).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["sessions:rename", ["", "title"]],
+    ["sessions:createGroup", ["   "]],
+    ["sessions:setModel", ["session-1", "x".repeat(17 * 1024)]],
+    ["skills:create", [{ name: "../escape" }]],
+    ["skills:update", ["valid-skill", { files: [] }]],
+    ["settings:getKey", ["forged-provider"]],
+    ["settings:setKey", ["openai", "x".repeat(65 * 1024)]],
+    ["settings:setOnboarded", ["true"]],
+    ["approval:respond", ["request-1", "later"]],
+    ["memories:search", ["scope", "query", 101]],
+    ["memories:add", ["", "fact"]],
+    ["userMemory:saveRaw", ["x".repeat(9 * 1024 * 1024)]],
+    ["automations:delete", [""]],
+    ["terminal:input", ["", "data"]],
+  ])("rejects malformed renderer input for %s before business logic", async (channel, args) => {
+    const handler = __test_getHandlers().get(channel)!;
+    await expect(handler({}, ...args)).rejects.toThrow();
+  });
+
+  it("propagates dependency failures without converting them into success", async () => {
+    vi.mocked(settingsStorage.setApiKey).mockImplementationOnce(() => {
+      throw new Error("keychain unavailable");
+    });
+    await expect(__test_getHandlers().get("settings:setKey")!({}, "openai", "secret"))
+      .rejects.toThrow("keychain unavailable");
+
+    vi.mocked(automationStorage.deleteAutomation).mockImplementationOnce(() => {
+      throw new Error("database locked");
+    });
+    await expect(__test_getHandlers().get("automations:delete")!({}, "a1"))
+      .rejects.toThrow("database locked");
+  });
 });
