@@ -259,7 +259,10 @@ function validateSchedule(
   }
 }
 
-export const automationCreateSchema = z.object(automationMutableShape).strict().superRefine(validateSchedule);
+export const automationCreateSchema = z.object({
+  ...automationMutableShape,
+  enabled: z.boolean().default(true),
+}).strict().superRefine(validateSchedule);
 export const automationUpdateSchema = z.object(automationMutableShape).partial().strict().superRefine(validateSchedule);
 export const automationCreateArgsSchema = z.tuple([automationCreateSchema]);
 export const automationUpdateArgsSchema = z.tuple([identifierSchema, automationUpdateSchema]);

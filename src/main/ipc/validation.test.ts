@@ -109,6 +109,11 @@ describe("IPC validation", () => {
       enabled: true,
     };
     expect(automationCreateSchema.parse(daily)).toEqual(daily);
+    const { enabled: _enabled, ...withoutEnabled } = daily;
+    expect(automationCreateSchema.parse(withoutEnabled)).toEqual({
+      ...withoutEnabled,
+      enabled: true,
+    });
     expect(() => automationCreateSchema.parse({
       ...daily,
       scheduleType: "weekly",

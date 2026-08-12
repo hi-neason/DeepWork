@@ -79,6 +79,17 @@ describe("storage/memories - CRUD and semantic/keyword retrieval", () => {
     expect(listed).not.toContain(item.id);
   });
 
+  it("editing content preserves existing type and importance when metadata is omitted", async () => {
+    const item = mem.addMemory("before", "", { type: "preference", importance: 0.8 });
+    await mem.editMemory(item.id, "after");
+    expect(mem.listAllMemories()).toContainEqual(expect.objectContaining({
+      id: item.id,
+      content: "after",
+      type: "preference",
+      importance: 0.8,
+    }));
+  });
+
   it("editMemory updates content and reactivates the entry", async () => {
     const item = mem.addMemory("旧内容", "ws-edit");
     mem.invalidateMemory(item.id);

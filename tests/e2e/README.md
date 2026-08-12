@@ -28,7 +28,12 @@ never reads or writes the developer's actual DeepWork data.
 ## Coverage
 
 - [x] Renderer → preload → validated session IPC create/list/delete flow
+- [x] Session metadata mutations through preload and SQLite
+- [x] Settings persistence across an Electron restart
+- [x] Automation create/update/list/runs/delete lifecycle
+- [x] Real PTY spawn/input/output/kill lifecycle
+- [x] Invalid renderer payload rejection by real IPC validation
+- [x] Memory add/edit/invalidate/restore/remove lifecycle
 - [ ] `chat:send` → `chat:event` event delivery (requires a deterministic test model)
 - [ ] `chat:cancel` affects only the active session
-- [ ] Settings persistence after reload
-- [ ] User memory and timeline operations
+- [ ] User-memory Markdown and timeline file operations

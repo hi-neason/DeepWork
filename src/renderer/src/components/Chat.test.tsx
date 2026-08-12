@@ -291,4 +291,66 @@ describe("Chat component (render layer)", () => {
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(unhandled).toHaveLength(0);
   });
+
+  it("does not send empty input or submit again while streaming", () => {
+    const onSend = vi.fn();
+    const { container, rerender } = render(<Chat {...makeProps({ onSend })} />);
+    expect(screen.getByRole("button", { name: "chat.send" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.keyDown(container.querySelector("textarea")!, { key: "Enter" });
+    expect(onSend).not.toHaveBeenCalled();
+    rerender(<Chat {...makeProps({ onSend, chat: { timeline: [], tools: {}, toolStart: {}, streaming: true } })} />);
+    fireEvent.change(container.querySelector("textarea")!, { target: { value: "ignored" } });
+    fireEvent.keyDown(container.querySelector("textarea")!, { key: "Enter" });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("cancels a streaming response from the stop control", () => {
+    const onCancel = vi.fn();
+    render(<Chat {...makeProps({ onCancel, chat: { timeline: [], tools: {}, toolStart: {}, streaming: true } })} />);
+    fireEvent.click(screen.getByTitle("chat.stopGenerating"));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["chat.allowOnce", "allow"],
+    ["chat.alwaysAllow", "always_allow"],
+    ["chat.deny", "deny"],
+  ])("responds to approval action %s", (label, decision) => {
+    const onRespondApproval = vi.fn();
+    render(<Chat {...makeProps({
+      onRespondApproval,
+      approval: { id: "approval-1", type: "approval_requested", name: "execute", risk: "exec", argsPreview: "{}" },
+    })} />);
+    fireEvent.click(screen.getByText(label));
+    expect(onRespondApproval).toHaveBeenCalledWith(decision);
+  });
+
+  it("selects models, adds models, and refreshes the catalog", () => {
+    const onSetModel = vi.fn();
+    const onRefreshModels = vi.fn();
+    const onAddModel = vi.fn();
+    render(<Chat {...makeProps({
+      onSetModel, onRefreshModels, onAddModel,
+      enabledModels: [{ id: "m1", label: "One" }, { id: "m2", label: "Two" }],
+    })} />);
+    fireEvent.click(screen.getByTitle("chat.chooseModel"));
+    expect(onRefreshModels).toHaveBeenCalled();
+    fireEvent.click(screen.getByText("m2"));
+    expect(onSetModel).toHaveBeenCalledWith("m2");
+    fireEvent.click(screen.getByTitle("chat.chooseModel"));
+    fireEvent.click(screen.getByText("chat.addModel"));
+    expect(onAddModel).toHaveBeenCalled();
+  });
+
+  it("chooses a workspace for a new task and passes it to send", async () => {
+    vi.mocked(window.deepwork.settings.pickDirectory).mockResolvedValueOnce("/tmp/project");
+    const onSend = vi.fn();
+    const { container } = render(<Chat {...makeProps({ sessionId: null, onSend })} />);
+    fireEvent.click(screen.getByTitle("chat.chooseFolderOptional"));
+    fireEvent.click(screen.getByText("chat.browse"));
+    await screen.findByText("project");
+    fireEvent.change(container.querySelector("textarea")!, { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "chat.send" }));
+    expect(onSend.mock.calls[0][2]).toBe("/tmp/project");
+  });
 });

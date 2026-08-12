@@ -50,16 +50,25 @@ classification/read failures, Settings debounce and failed-save rollback,
 RightPanel artifact actions, and preload invocation/event subscription
 forwarding and cleanup.
 
+The fourth cross-process batch raised the suite to 357 unit/integration tests
+and 7 real Electron E2E tests. It covers session and metadata persistence,
+settings across an application restart, automation CRUD and run history, PTY
+input/output/termination, forged IPC rejection, and the structured-memory
+lifecycle through preload, main, and SQLite. CI now enforces typecheck, unit
+tests, production build, and headless Electron E2E. These journeys also exposed
+and fixed omitted automation `enabled` defaults and memory edits clearing
+existing type/importance metadata.
+
 | Surface | Current | Required functional coverage gaps |
 | --- | --- | --- |
 | App shell and navigation | Partial | Initial load failure, new/open/delete task, view switching, update events, onboarding routing, persisted panel state, event cleanup |
 | Onboarding | Missing | Provider/model variants, key-required and keyless providers, verification success/failure, directory cancel, save/rebuild failure, completion persistence |
 | Sidebar: conversations | Missing | Empty/grouped lists, search, select, rename, delete, group CRUD, recent changes, context-menu dismissal, IPC failures |
 | Sidebar: automation runs | Missing | Empty/loading/error, filter, expand/collapse, select run, delete one/all runs, failed run indicators |
-| Chat composer | Partial | Empty/large text, every attachment kind and limit, folder/model/mode menus, slash skills, send/cancel failure, double submit, keyboard behavior |
+| Chat composer | Partial | Large text, every attachment kind and limit, folder/mode menus, slash skills, send/cancel failure, keyboard behavior; empty input, streaming double-submit guard, cancellation, model refresh/select/add, and new-task workspace selection are covered |
 | Chat timeline | Partial | All event/segment types, reasoning visibility, tool/approval states, copy/regenerate, malformed Markdown, untrusted links/content, long streams |
 | Image preview | Missing | Open/close/escape/backdrop, missing data, accessible labeling |
-| Approval card | Missing | Allow/always allow/deny, unavailable decisions, repeated response, IPC failure |
+| Approval card | Partial | Unavailable decisions, repeated response, IPC failure; allow/always allow/deny are covered through Chat |
 | Right panel | Partial | Empty/loading/error artifacts, refresh, reveal/open failures, progress states, stale session changes |
 | Terminal panel | Missing | Spawn/input/resize/data/kill, spawn failure, unmount cleanup, session change, resize storm, error boundary recovery |
 | Settings shell | Partial | Load/save/apply/rebuild failure, debounce races, close while saving, reload after failure, every tab route |
@@ -151,7 +160,7 @@ mentions in a test.
 | `memories:listByScope` | — | H,E,B,I,D; every type |
 | `memories:search` | — | H,E,B,I,D; topK boundaries |
 | `memories:add` | — | H,E,B,I,D; every type/scope |
-| `memories:edit` | — | H,E,B,I,N,D |
+| `memories:edit` | H,P | E,B,I,N,D; existing type/importance preservation is covered |
 | `memories:remove` | — | H,I,N,D |
 | `memories:invalidate` | — | H,I,N,D; repeated operation |
 | `memories:restore` | — | H,I,N,D; repeated operation |
@@ -177,7 +186,7 @@ mentions in a test.
 | `artifacts:open` | H,I | N,D; symlink and sibling-prefix escapes |
 | `automations:list` | — | H,E,D |
 | `automations:listWithRuns` | — | H,E,D; mixed statuses |
-| `automations:create` | — | H,E,B,I,D; every schedule type |
+| `automations:create` | H,E,P | B,I,D; every schedule type (omitted enabled defaults to true) |
 | `automations:update` | H,I | E,B,N,D,C; every mutable field |
 | `automations:delete` | — | H,I,N,D,C |
 | `automations:runs` | — | H,E,I,N,D |
@@ -196,7 +205,7 @@ mentions in a test.
 | macOS development bundle | Assert returned executable is inside a bundle whose basename is exactly `DeepWork.app`; cache hit/miss; icon/version fingerprint change; signing/copy failure; non-macOS passthrough |
 | Safe Storage | Encryption unavailable; encrypt/decrypt failure; malformed envelope; old ciphertext; overwrite/delete; no secret in logs/settings blob |
 | Scheduler | All schedule types/timezones/DST, overlap lock, retry boundaries, event failures, auto-pause/re-enable, restart deduplication |
-| Logger | Custom/default path, disabled state, global/session paths, mkdir/write failure, redaction, serialization limits, write ordering |
+| Logger | Custom/default path, global/session paths, mkdir failure, serialization limits; disabled state, write failure recovery, metadata redaction, and write ordering are covered |
 | Preload event subscriptions | Session filtering, any-session delivery, unsubscribe, duplicate listeners, malformed event payload |
 
 ## Enforcement plan
@@ -205,10 +214,11 @@ mentions in a test.
    work complete.
 2. Convert renderer-controlled raw IPC handlers to validated handlers and add
    parameterized H/E/B/I/N/D tests for each endpoint.
-3. Add Electron E2E journeys for onboarding, model/key configuration,
-   conversation lifecycle, automation lifecycle, settings restart persistence,
-   terminal lifecycle, and artifacts.
-4. Run `pnpm typecheck`, `pnpm test`, and `pnpm test:e2e` in CI. E2E must no
-   longer be an optional local-only suite.
+3. Extend the existing Electron E2E journeys with onboarding, model/key
+   configuration, model-backed conversation streaming, and artifact shell
+   integration. Session, automation, memory, settings restart, terminal, and
+   invalid-IPC journeys are now enforced.
+4. Keep `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm test:e2e`
+   mandatory in CI; Electron E2E is no longer an optional local-only suite.
 5. Require every bug fix to include a regression test that fails on the parent
    revision, plus adjacent boundary and dependency-failure cases.

@@ -206,7 +206,8 @@ export async function editMemory(
   getDb()
     .prepare(
       `UPDATE memories
-       SET content = ?, type = ?, importance = ?, embedding = ?, status = 'active', invalid_at = NULL
+       SET content = ?, type = COALESCE(?, type), importance = COALESCE(?, importance),
+           embedding = ?, status = 'active', invalid_at = NULL
        WHERE id = ?`,
     )
     .run(
