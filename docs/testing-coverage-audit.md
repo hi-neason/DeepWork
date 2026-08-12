@@ -38,6 +38,18 @@ settings keys, models, approvals, memories, artifacts, automations, and terminal
 operations behind Zod validation. Rows below intentionally retain remaining
 gaps until every listed scenario is implemented.
 
+The second page-focused batch raised the suite to 47 files / 325 tests and
+added direct coverage for Sidebar conversations and automation runs, Skills,
+Connectors, Terminal lifecycle and its error boundary, plus Markdown rendering
+and raw-HTML safety. Production build and Electron E2E were rerun after both
+batches.
+
+The third lifecycle/boundary batch raised the suite to 50 files / 346 tests.
+It covers CommitRunner animation cleanup and input guards, browser attachment
+classification/read failures, Settings debounce and failed-save rollback,
+RightPanel artifact actions, and preload invocation/event subscription
+forwarding and cleanup.
+
 | Surface | Current | Required functional coverage gaps |
 | --- | --- | --- |
 | App shell and navigation | Partial | Initial load failure, new/open/delete task, view switching, update events, onboarding routing, persisted panel state, event cleanup |

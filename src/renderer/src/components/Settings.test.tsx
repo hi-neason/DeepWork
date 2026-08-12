@@ -7,7 +7,11 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("./settings/GeneralTab", () => ({ GeneralTab: () => <div>general-panel</div> }));
+vi.mock("./settings/GeneralTab", () => ({
+  GeneralTab: ({ onChange }: { onChange: (patch: { theme: string }) => void }) => (
+    <button onClick={() => onChange({ theme: "dark" })}>change-general</button>
+  ),
+}));
 vi.mock("./settings/ModelsTab", () => ({ ModelsTab: () => <div>models-panel</div> }));
 vi.mock("./settings/MemoryTab", () => ({ MemoryTab: () => <div>memory-panel</div> }));
 vi.mock("./settings/AboutTab", () => ({ AboutTab: () => <div>about-panel</div> }));
@@ -34,7 +38,10 @@ describe("Settings accessibility", () => {
     });
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("connects vertical tabs to the active settings panel", async () => {
     render(<Settings onClose={vi.fn()} />);
@@ -58,5 +65,30 @@ describe("Settings accessibility", () => {
 
     expect(await screen.findByRole("button", { name: "settings.close" })).toBeTruthy();
     expect(screen.getByText("settings.autoSave").getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("debounces persistence and applies runtime changes", async () => {
+    vi.useFakeTimers();
+    const onSaved = vi.fn();
+    render(<Settings onClose={vi.fn()} onSaved={onSaved} />);
+    await vi.waitFor(() => expect(screen.getByText("change-general")).toBeTruthy());
+    fireEvent.click(screen.getByText("change-general"));
+    expect(window.deepwork.settings.save).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.waitFor(() => expect(window.deepwork.settings.save).toHaveBeenCalledWith(expect.objectContaining({ theme: "dark" })));
+    expect(window.deepwork.settings.applySystem).toHaveBeenCalled();
+    expect(window.deepwork.settings.rebuildAgent).toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("reloads persisted settings when auto-save fails", async () => {
+    vi.useFakeTimers();
+    vi.mocked(window.deepwork.settings.save).mockRejectedValueOnce(new Error("denied"));
+    render(<Settings onClose={vi.fn()} />);
+    await vi.waitFor(() => expect(screen.getByText("change-general")).toBeTruthy());
+    fireEvent.click(screen.getByText("change-general"));
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.waitFor(() => expect(window.deepwork.settings.get).toHaveBeenCalledTimes(2));
+    expect(window.deepwork.settings.applySystem).not.toHaveBeenCalled();
   });
 });
