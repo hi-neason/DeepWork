@@ -2,6 +2,14 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { startTestModelServer } from "./modelServer";
+
+function launchOptions(home: string): Parameters<typeof electron.launch>[0] {
+  return {
+    args: [".", `--user-data-dir=${path.join(home, "electron")}`],
+    env: { ...process.env, HOME: home },
+  };
+}
 
 test("renderer reaches validated session IPC handlers", async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-e2e-"));
@@ -178,6 +186,157 @@ test("memory lifecycle persists through preload, IPC, and SQLite", async () => {
     expect(result.invalid).toMatchObject({ content: "Edited memory", status: "invalid", type: "fact" });
     expect(result.restored).toMatchObject({ content: "Edited memory", status: "active" });
     expect(result.removed).toBe(true);
+  } finally {
+    await app?.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("API keys are encrypted, used for verification, and survive restart", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-e2e-"));
+  const modelServer = await startTestModelServer();
+  let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  const secret = `sk-e2e-${Date.now()}-must-not-appear-in-sqlite`;
+  try {
+    app = await electron.launch(launchOptions(home));
+    let page = await app.firstWindow();
+    const result = await page.evaluate(async ({ baseUrl, key }) => {
+      await window.deepwork.settings.setKey("openai", key);
+      const restored = await window.deepwork.settings.getKey("openai");
+      const verified = await window.deepwork.models.verify({
+        provider: "openai", model: "deepwork-e2e-model", baseUrl, workspaceDir: "",
+      });
+      return { restored, verified };
+    }, { baseUrl: modelServer.baseUrl, key: secret });
+    expect(result.restored).toBe(secret);
+    expect(result.verified).toMatchObject({ ok: true, models: ["deepwork-e2e-model"] });
+    expect(modelServer.authorizationHeaders).toContain(`Bearer ${secret}`);
+
+    await app.close();
+    app = undefined;
+    const database = fs.readFileSync(path.join(home, "DeepWork", "app", "deepwork.db"));
+    expect(database.includes(Buffer.from(secret))).toBe(false);
+
+    app = await electron.launch(launchOptions(home));
+    page = await app.firstWindow();
+    expect(await page.evaluate(() => window.deepwork.settings.getKey("openai"))).toBe(secret);
+  } finally {
+    await app?.close();
+    await modelServer.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("onboarding configures and verifies a model through the visible UI", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-e2e-"));
+  const modelServer = await startTestModelServer();
+  let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    const workspace = path.join(home, "workspace");
+    fs.mkdirSync(workspace);
+    app = await electron.launch(launchOptions(home));
+    const page = await app.firstWindow();
+    const card = page.locator(".onboarding-card");
+    await expect(card).toBeVisible();
+    await card.locator("select").first().selectOption("openai");
+    const inputs = card.locator("input");
+    await inputs.nth(0).fill("deepwork-e2e-model");
+    await inputs.nth(1).fill(modelServer.baseUrl);
+    await inputs.nth(2).fill("onboarding-secret");
+    await inputs.nth(3).fill(workspace);
+    await card.locator(".onboarding-actions button").first().click();
+    await expect(card.locator(".verify-result")).toBeVisible({ timeout: 20_000 });
+    await expect(card.locator(".verify-result.ok")).toContainText("deepwork-e2e-model");
+    await card.locator(".onboarding-actions button").nth(1).click();
+    await expect(card).toBeHidden();
+    const saved = await page.evaluate(async () => ({
+      settings: await window.deepwork.settings.get(),
+      key: await window.deepwork.settings.getKey("openai"),
+    }));
+    expect(saved.settings).toMatchObject({
+      onboarded: true,
+      model: { provider: "openai", model: "deepwork-e2e-model", baseUrl: modelServer.baseUrl },
+    });
+    expect(saved.key).toBe("onboarding-secret");
+  } finally {
+    await app?.close();
+    await modelServer.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("model response streams from a real local HTTP server through chat events", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-e2e-"));
+  const modelServer = await startTestModelServer();
+  let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    app = await electron.launch(launchOptions(home));
+    const page = await app.firstWindow();
+    const events = await page.evaluate(async ({ baseUrl }) => {
+      const settings = await window.deepwork.settings.get();
+      await window.deepwork.settings.setKey("openai", "stream-secret");
+      await window.deepwork.settings.save({
+        ...settings, onboarded: true,
+        model: { provider: "openai", model: "deepwork-e2e-model", baseUrl, workspaceDir: "" },
+      });
+      await window.deepwork.settings.rebuildAgent();
+      const session = await window.deepwork.sessions.create("Streaming E2E");
+      return new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+        const received: Array<Record<string, unknown>> = [];
+        const timer = setTimeout(() => reject(new Error(JSON.stringify(received))), 20_000);
+        const off = window.deepwork.chat.onEvent(session.id, (event) => {
+          received.push(event as unknown as Record<string, unknown>);
+          if (event.type === "turn_completed" || event.type === "turn_error") {
+            clearTimeout(timer);
+            off();
+            resolve(received);
+          }
+        });
+        void window.deepwork.chat.send(session.id, "Reply without tools", undefined, undefined, undefined, "plan");
+      });
+    }, { baseUrl: modelServer.baseUrl });
+    expect(events.filter((event) => event.type === "message_delta").map((event) => event.text)).toEqual(["E2E ", "stream ", "complete"]);
+    expect(events.some((event) => event.type === "turn_completed")).toBe(true);
+    expect(events.some((event) => event.type === "turn_error")).toBe(false);
+  } finally {
+    await app?.close();
+    await modelServer.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("artifact open and reveal reach Electron shell with a validated session file", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "deepwork-e2e-"));
+  let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    app = await electron.launch(launchOptions(home));
+    await app.evaluate(({ shell }) => {
+      const state = globalThis as typeof globalThis & { __deepworkE2eShellCalls?: Array<{ action: string; file: string }> };
+      state.__deepworkE2eShellCalls = [];
+      shell.openPath = async (file: string) => { state.__deepworkE2eShellCalls!.push({ action: "open", file }); return ""; };
+      shell.showItemInFolder = (file: string) => { state.__deepworkE2eShellCalls!.push({ action: "reveal", file }); };
+    });
+    const page = await app.firstWindow();
+    const file = await page.evaluate(async () => {
+      const session = await window.deepwork.sessions.create("Artifact shell E2E");
+      return { sessionId: session.id, rootDir: session.rootDir };
+    });
+    const artifactPath = path.join(file.rootDir, "report.txt");
+    fs.mkdirSync(file.rootDir, { recursive: true });
+    fs.writeFileSync(artifactPath, "artifact");
+    await page.evaluate(async ({ sessionId, artifactPath }) => {
+      await window.deepwork.artifacts.open(sessionId, artifactPath);
+      await window.deepwork.artifacts.reveal(sessionId, artifactPath);
+    }, { sessionId: file.sessionId, artifactPath });
+    const shellCalls = await app.evaluate(() => {
+      const state = globalThis as typeof globalThis & { __deepworkE2eShellCalls?: Array<{ action: string; file: string }> };
+      return state.__deepworkE2eShellCalls ?? [];
+    });
+    const canonicalArtifactPath = fs.realpathSync(artifactPath);
+    expect(shellCalls).toEqual([
+      { action: "open", file: canonicalArtifactPath },
+      { action: "reveal", file: canonicalArtifactPath },
+    ]);
   } finally {
     await app?.close();
     fs.rmSync(home, { recursive: true, force: true });

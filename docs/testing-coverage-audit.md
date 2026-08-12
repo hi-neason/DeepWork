@@ -59,10 +59,18 @@ tests, production build, and headless Electron E2E. These journeys also exposed
 and fixed omitted automation `enabled` defaults and memory edits clearing
 existing type/importance metadata.
 
+The fifth environment-boundary batch adds four Electron journeys backed by a
+deterministic local OpenAI-compatible HTTP/SSE server. It verifies encrypted
+API-key persistence without plaintext SQLite leakage, visible onboarding and
+model verification, incremental model streaming through `chat:event`, and
+validated artifact open/reveal calls at Electron's system-shell boundary. It
+also fixes onboarding verification getting permanently stuck after an IPC or
+network exception.
+
 | Surface | Current | Required functional coverage gaps |
 | --- | --- | --- |
 | App shell and navigation | Partial | Initial load failure, new/open/delete task, view switching, update events, onboarding routing, persisted panel state, event cleanup |
-| Onboarding | Missing | Provider/model variants, key-required and keyless providers, verification success/failure, directory cancel, save/rebuild failure, completion persistence |
+| Onboarding | Partial | Keyless providers, directory cancel, rebuild failure, and provider matrix; OpenAI key/model/workspace verification, exception recovery, save failure, and completion persistence are covered |
 | Sidebar: conversations | Missing | Empty/grouped lists, search, select, rename, delete, group CRUD, recent changes, context-menu dismissal, IPC failures |
 | Sidebar: automation runs | Missing | Empty/loading/error, filter, expand/collapse, select run, delete one/all runs, failed run indicators |
 | Chat composer | Partial | Large text, every attachment kind and limit, folder/mode menus, slash skills, send/cancel failure, keyboard behavior; empty input, streaming double-submit guard, cancellation, model refresh/select/add, and new-task workspace selection are covered |
@@ -112,7 +120,7 @@ mentions in a test.
 | `sessions:createGroup` | — | H,E,B,I,D |
 | `chat:history` | — | H,E,I,N,D,C |
 | `chat:status` | H | I,N,D |
-| `chat:send` | H,I,D | E,B,N,C; attachment matrix; all event types |
+| `chat:send` | H,I,D,P | E,B,N,C; attachment matrix and tool events; real HTTP/SSE message deltas and completion are covered |
 | `chat:cancel` | H | I,N,C,D |
 | `chat:regenerate` | H,D | I,N,C; all event types |
 | `approval:respond` | — | H,I,N,D,C; every decision |
@@ -123,15 +131,15 @@ mentions in a test.
 | --- | --- | --- |
 | `settings:get` | — | H,D,P; corrupt/legacy settings |
 | `settings:save` | H,I,D | E,B,C,P; every provider/MCP combination |
-| `settings:getKey` | — | H,E,I,D,P; unavailable/decrypt failure |
-| `settings:setKey` | — | H,E,B,I,D,P; overwrite and explicit delete |
+| `settings:getKey` | H,P | E,I,D; unavailable/decrypt failure and real restart restore are covered |
+| `settings:setKey` | H,P | E,B,I,D; overwrite and explicit delete; real safeStorage encryption and plaintext absence are covered |
 | `settings:pickDirectory` | — | H,E,D; window unavailable |
 | `settings:rebuildAgent` | — | H,D,C |
 | `settings:setOnboarded` | — | H,I,D,P |
 | `settings:applySystem` | — | H,D; all preference combinations |
 | `models:catalog` | — | H,E; schema invariants and unique IDs |
 | `models:providers` | — | H; preset completeness and endpoint validity |
-| `models:verify` | — | H,E,B,I,D; every provider/auth/status/timeout |
+| `models:verify` | H,P | E,B,I,D; provider/auth/status/timeout matrix; real OpenAI-compatible request and bearer credential are covered |
 | `app:dataPath` | — | H |
 | `app:revealData` | — | H,D |
 | `app:version` | — | H |
@@ -183,7 +191,7 @@ mentions in a test.
 | --- | --- | --- |
 | `artifacts:list` | — | H,E,I,N,D |
 | `artifacts:reveal` | I | H,N,D; symlink and sibling-prefix escapes |
-| `artifacts:open` | H,I | N,D; symlink and sibling-prefix escapes |
+| `artifacts:open` | H,I | N,D; symlink and sibling-prefix escapes; real IPC-to-Electron-shell boundary is covered |
 | `automations:list` | — | H,E,D |
 | `automations:listWithRuns` | — | H,E,D; mixed statuses |
 | `automations:create` | H,E,P | B,I,D; every schedule type (omitted enabled defaults to true) |

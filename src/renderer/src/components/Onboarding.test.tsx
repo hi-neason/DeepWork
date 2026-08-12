@@ -43,4 +43,13 @@ describe("Onboarding", () => {
     expect(await screen.findByText(/disk full/)).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
   });
+
+  it("recovers from verification failures instead of remaining disabled", async () => {
+    vi.mocked(window.deepwork.models.verify).mockRejectedValueOnce(new Error("network unavailable"));
+    render(<Onboarding settings={settings} onDone={vi.fn()} />);
+    fireEvent.click(screen.getByText("common.test"));
+    expect(await screen.findByText(/network unavailable/)).toBeTruthy();
+    expect((screen.getByText("common.test") as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByText("onboarding.continue") as HTMLButtonElement).disabled).toBe(false);
+  });
 });

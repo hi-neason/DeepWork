@@ -42,15 +42,23 @@ export function Onboarding({ settings, onDone }: Props): React.ReactElement {
   const verify = async (): Promise<void> => {
     setVerifying(true);
     setResult(null);
-    const cfg: ModelConfig = {
-      provider,
-      model: model || preset.defaultModel,
-      baseUrl: baseUrl || preset.baseUrl,
-      workspaceDir: workspace,
-    };
-    if (needsKey) await window.deepwork.settings.setKey(provider, key.trim());
-    setResult(await window.deepwork.models.verify(cfg));
-    setVerifying(false);
+    try {
+      const cfg: ModelConfig = {
+        provider,
+        model: model || preset.defaultModel,
+        baseUrl: baseUrl || preset.baseUrl,
+        workspaceDir: workspace,
+      };
+      if (needsKey) await window.deepwork.settings.setKey(provider, key.trim());
+      setResult(await window.deepwork.models.verify(cfg));
+    } catch (err) {
+      setResult({
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const saveAndFinish = async (): Promise<void> => {

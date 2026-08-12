@@ -17,7 +17,7 @@ import { test, expect, _electron as electron } from "@playwright/test";
 test("chat:send receives streamed chat:event messages", async () => {
   const app = await electron.launch({ args: ["."] });
   const page = await app.firstWindow();
-  // 监听渲染进程事件并断言
+  // Subscribe in the renderer and assert events from the main process.
   await app.close();
 });
 ```
@@ -34,6 +34,9 @@ never reads or writes the developer's actual DeepWork data.
 - [x] Real PTY spawn/input/output/kill lifecycle
 - [x] Invalid renderer payload rejection by real IPC validation
 - [x] Memory add/edit/invalidate/restore/remove lifecycle
-- [ ] `chat:send` → `chat:event` event delivery (requires a deterministic test model)
+- [x] Encrypted API-key save, verification use, restart restore, and plaintext absence
+- [x] Visible onboarding model/key/workspace verification and completion
+- [x] `chat:send` → `chat:event` streaming through a deterministic local HTTP/SSE model
+- [x] Validated artifact open/reveal calls reaching Electron's system shell boundary
 - [ ] `chat:cancel` affects only the active session
 - [ ] User-memory Markdown and timeline file operations
