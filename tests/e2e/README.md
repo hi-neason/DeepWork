@@ -25,6 +25,12 @@ test("chat:send receives streamed chat:event messages", async () => {
 Each test launches Electron against a fresh temporary HOME directory, so it
 never reads or writes the developer's actual DeepWork data.
 
+Headless Linux CI has no desktop keyring. The E2E launcher therefore selects
+Electron's `basic_text` password backend only on Linux test processes. The
+API-key test asserts that this backend is active before exercising
+`safeStorage`; production startup flags and its fail-closed secret policy are
+unchanged.
+
 ## Coverage
 
 - [x] Renderer → preload → validated session IPC create/list/delete flow

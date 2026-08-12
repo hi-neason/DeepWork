@@ -5,8 +5,9 @@ import path from "node:path";
 import { startTestModelServer } from "./modelServer";
 
 function launchOptions(home: string): Parameters<typeof electron.launch>[0] {
+  const linuxPasswordStore = process.platform === "linux" ? ["--password-store=basic"] : [];
   return {
-    args: [".", `--user-data-dir=${path.join(home, "electron")}`],
+    args: [".", `--user-data-dir=${path.join(home, "electron")}`, ...linuxPasswordStore],
     env: { ...process.env, HOME: home },
   };
 }
@@ -200,6 +201,12 @@ test("API keys are encrypted, used for verification, and survive restart", async
   try {
     app = await electron.launch(launchOptions(home));
     let page = await app.firstWindow();
+    const storage = await app.evaluate(({ safeStorage }) => ({
+      available: safeStorage.isEncryptionAvailable(),
+      backend: process.platform === "linux" ? safeStorage.getSelectedStorageBackend() : undefined,
+    }));
+    expect(storage.available).toBe(true);
+    if (process.platform === "linux") expect(storage.backend).toBe("basic_text");
     const result = await page.evaluate(async ({ baseUrl, key }) => {
       await window.deepwork.settings.setKey("openai", key);
       const restored = await window.deepwork.settings.getKey("openai");
