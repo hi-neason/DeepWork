@@ -12,7 +12,7 @@ import {
   setLastFiredSlot,
   getLastFiredSlot,
 } from "../storage/automations";
-import type { Automation, AutomationRun, AutomationScheduleConfig, PermissionMode } from "../../shared/types";
+import type { Automation, AutomationRun, AutomationScheduleConfig, DeepWorkEvent, PermissionMode } from "../../shared/types";
 import { logger } from "../log/logger";
 import { loadSettings } from "../storage/settings";
 import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
@@ -233,7 +233,7 @@ export interface SchedulerHandlers {
   runAutomationTurn: (
     sessionId: string,
     instructions: string,
-    onEvent: (e: unknown) => void,
+    onEvent: (e: DeepWorkEvent) => void,
     model?: string,
     mode?: PermissionMode,
   ) => Promise<void>;
@@ -426,13 +426,25 @@ export class AutomationScheduler extends EventEmitter {
       let lastError: unknown;
       for (let attempt = 1; attempt <= AutomationScheduler.MAX_RUN_ATTEMPTS; attempt++) {
         try {
+          let eventFailure: Error | undefined;
           await this.handlers.runAutomationTurn(
             session.id,
             a.instructions,
-            (event) => this.emit("run:event", { automationId: a.id, sessionId: session.id, event }),
+            (event) => {
+              this.emit("run:event", { automationId: a.id, sessionId: session.id, event });
+              if (event.type === "turn_error") {
+                eventFailure = new Error(event.message);
+              } else if (event.type === "turn_aborted") {
+                eventFailure = new Error("Automation turn was aborted");
+              }
+            },
             a.model,
             a.permissionMode,
           );
+          // Agent turns report provider failures as stream events so the chat
+          // can render them without crashing. For unattended runs those events
+          // must still fail the scheduler outcome, retry, and auto-pause logic.
+          if (eventFailure) throw eventFailure;
           lastError = undefined;
           break;
         } catch (err) {

@@ -155,6 +155,42 @@ describe("automation/scheduler - tick/fire integration (mock storage)", () => {
     expect(automations.recordAutomationOutcome).toHaveBeenCalledWith("a1", "error");
   });
 
+  it("treats turn_error events as failed runs", async () => {
+    const a = auto({ scheduleType: "daily", scheduleConfig: { time: "09:00" } });
+    vi.mocked(automations.getAutomation).mockReturnValue(a);
+    handler.mockImplementation(async (_sessionId, _instructions, onEvent) => {
+      onEvent({ type: "turn_error", message: "Model authentication failed" });
+    });
+
+    await s.runNow(a);
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(automations.finishRun).toHaveBeenCalledWith(
+      "run-1",
+      "error",
+      "Model authentication failed",
+    );
+    expect(automations.markAutomationRun).toHaveBeenCalledWith("a1", "error", expect.any(Number));
+    expect(automations.recordAutomationOutcome).toHaveBeenCalledWith("a1", "error");
+  });
+
+  it("treats turn_aborted events as failed runs", async () => {
+    const a = auto({ scheduleType: "daily", scheduleConfig: { time: "09:00" } });
+    vi.mocked(automations.getAutomation).mockReturnValue(a);
+    handler.mockImplementation(async (_sessionId, _instructions, onEvent) => {
+      onEvent({ type: "turn_aborted" });
+    });
+
+    await s.runNow(a);
+
+    expect(automations.finishRun).toHaveBeenCalledWith(
+      "run-1",
+      "error",
+      "Automation turn was aborted",
+    );
+    expect(automations.recordAutomationOutcome).toHaveBeenCalledWith("a1", "error");
+  });
+
   it("an automation that is not due is not triggered", async () => {
     const a = auto({ scheduleType: "daily", scheduleConfig: { time: "03:33" } });
     vi.mocked(automations.listAutomations).mockReturnValue([a]);

@@ -522,6 +522,17 @@ describe("ipc/register wiring closure", () => {
     expect(automationStorage.updateAutomation).not.toHaveBeenCalled();
   });
 
+  it("forwards only the validated automation patch", async () => {
+    const update = __test_getHandlers().get("automations:update")!;
+
+    await update({}, "a1", { enabled: false });
+
+    expect(automationStorage.getAutomation).not.toHaveBeenCalled();
+    expect(automationStorage.updateAutomation).toHaveBeenCalledWith("a1", {
+      enabled: false,
+    });
+  });
+
   it("rejects malformed settings before persistence", async () => {
     const save = __test_getHandlers().get("settings:save")!;
     await expect(save({}, { permissionMode: "root" })).rejects.toThrow();

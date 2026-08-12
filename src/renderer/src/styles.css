@@ -2331,17 +2331,20 @@ select:focus-visible,
   padding: 14px; background: var(--bg-elev);
 }
 .auto-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.auto-head .switch {
-  display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.875rem;
-  flex: 1; min-width: 0;
+.auto-title-group {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
 }
-.auto-head .switch input[type="checkbox"] { flex-shrink: 0; }
-.auto-head .switch span {
-  min-width: 0; overflow: hidden;
-  white-space: nowrap; text-overflow: ellipsis;
+.auto-title {
+  min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-weight: 600; font-size: 0.875rem;
 }
-.auto-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.auto-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .auto-actions .btn { white-space: nowrap; }
+.auto-list-toggle {
+  display: inline-flex; align-items: center; gap: 7px; margin-right: 4px;
+  color: var(--text-dim); font-size: 0.75rem; white-space: nowrap;
+}
+.auto-list-toggle .switch:disabled { cursor: wait; opacity: 0.55; }
 .auto-instructions {
   font-size: 0.8125rem; color: var(--text-dim); margin: 10px 0;
   white-space: pre-wrap; line-height: 1.5;
@@ -2401,14 +2404,14 @@ select:focus-visible,
 }
 .auto-banner-icon { font-weight: 700; color: var(--accent); }
 .auto-enabled-row {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
   background: var(--bg-elev2);
 }
-.auto-enabled-row .switch {
-  display: flex; align-items: center; gap: 8px; font-size: 0.8125rem; font-weight: 500;
+.auto-enabled-copy {
+  display: flex; align-items: baseline; gap: 10px; min-width: 0;
 }
-.auto-enabled-row .switch input[type="checkbox"] { flex-shrink: 0; }
+.auto-enabled-label { flex-shrink: 0; font-size: 0.8125rem; font-weight: 600; color: var(--text); }
 .auto-enabled-hint { font-size: 0.75rem; color: var(--text-dim); }
 .auto-paused-badge {
   flex-shrink: 0; font-size: 0.6875rem; font-weight: 600;

@@ -556,15 +556,13 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   handleValidated("automations:create", automationCreateArgsSchema, (_e, [automation]) =>
     createAutomation(automation),
   );
-  handleValidated("automations:update", automationUpdateArgsSchema, (_e, [id, patch]) =>
-    {
-      const existing = getAutomation(id);
-      if (!existing) return;
-      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt,
-        lastRunAt: _lastRunAt, lastStatus: _lastStatus, ...mutable } = existing;
-      updateAutomation(id, automationCreateSchema.parse({ ...mutable, ...patch }));
-    },
-  );
+  handleValidated("automations:update", automationUpdateArgsSchema, (_e, [id, patch]) => {
+      // `handleValidated` has already narrowed this to the mutable partial
+      // schema. Persist only the renderer-supplied patch: merging the complete
+      // stored Automation here also pulled system-owned fields such as
+      // consecutiveFailures/autoPaused into the strict mutable schema.
+      updateAutomation(id, patch);
+  });
   handle("automations:delete", (_e, id: string) => deleteAutomation(id));
   handle("automations:runs", (_e, id: string) => listRuns(id));
   handle("automations:deleteRun", (_e, runId: string) => deleteRun(runId));

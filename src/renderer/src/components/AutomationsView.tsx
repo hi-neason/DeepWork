@@ -145,6 +145,7 @@ export function AutomationsView(): React.ReactElement {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [mcpServers, setMcpServers] = useState<{ id: string; label: string }[]>([]);
   const [skills, setSkills] = useState<{ name: string; description: string }[]>([]);
@@ -274,8 +275,24 @@ export function AutomationsView(): React.ReactElement {
   };
 
   const toggle = async (a: Automation): Promise<void> => {
-    await window.deepwork.automations.update(a.id, { enabled: !a.enabled });
-    await refresh();
+    const enabled = !a.enabled;
+    setTogglingId(a.id);
+    setItems((current) =>
+      current.map((item) => (item.id === a.id ? { ...item, enabled } : item)),
+    );
+    try {
+      await window.deepwork.automations.update(a.id, { enabled });
+      await refresh();
+    } catch (err) {
+      setItems((current) =>
+        current.map((item) => (item.id === a.id ? { ...item, enabled: a.enabled } : item)),
+      );
+      window.alert(
+        `${t("automations.toggleError")}\n${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const remove = async (id: string): Promise<void> => {
@@ -347,12 +364,26 @@ export function AutomationsView(): React.ReactElement {
         {items.map((a) => (
           <div key={a.id} className="auto-card">
             <div className="auto-head">
-              <label className="switch">
-                <input type="checkbox" checked={a.enabled} onChange={() => toggle(a)} />
-                <span>{a.title}</span>
-              </label>
-              {!a.enabled && <span className="auto-paused-badge">{t(a.autoPaused ? "automations.autoPausedBadge" : "automations.pausedBadge")}</span>}
+              <div className="auto-title-group">
+                <span className="auto-title">{a.title}</span>
+                {!a.enabled && <span className="auto-paused-badge">{t(a.autoPaused ? "automations.autoPausedBadge" : "automations.pausedBadge")}</span>}
+              </div>
               <div className="auto-actions">
+                <div className="auto-list-toggle">
+                  <span>{t(a.enabled ? "automations.enabledOn" : "automations.enabledOff")}</span>
+                  <button
+                    type="button"
+                    className={`switch small ${a.enabled ? "on" : ""}`}
+                    role="switch"
+                    aria-checked={a.enabled}
+                    aria-label={t("automations.toggleLabel", { title: a.title })}
+                    title={t(a.enabled ? "automations.disableAction" : "automations.enableAction")}
+                    onClick={() => void toggle(a)}
+                    disabled={togglingId === a.id}
+                  >
+                    <span className="knob" aria-hidden="true" />
+                  </button>
+                </div>
                 <button
                   className="btn small"
                   onClick={() => runNow(a.id)}
@@ -418,17 +449,25 @@ export function AutomationsView(): React.ReactElement {
             </div>
 
             <div className="auto-enabled-row">
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={form.enabled}
-                  onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-                />
-                <span>{form.enabled ? t("automations.enabledOn") : t("automations.enabledOff")}</span>
-              </label>
-              <span className="auto-enabled-hint">
-                {form.enabled ? t("automations.enabledHintOn") : t("automations.enabledHintOff")}
-              </span>
+              <div className="auto-enabled-copy">
+                <span className="auto-enabled-label">
+                  {form.enabled ? t("automations.enabledOn") : t("automations.enabledOff")}
+                </span>
+                <span className="auto-enabled-hint">
+                  {form.enabled ? t("automations.enabledHintOn") : t("automations.enabledHintOff")}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={`switch ${form.enabled ? "on" : ""}`}
+                role="switch"
+                aria-checked={form.enabled}
+                aria-label={t("automations.formToggleLabel")}
+                title={t(form.enabled ? "automations.disableAction" : "automations.enableAction")}
+                onClick={() => setForm((current) => ({ ...current, enabled: !current.enabled }))}
+              >
+                <span className="knob" aria-hidden="true" />
+              </button>
             </div>
 
             <label className="auto-field-label">{t("automations.titleLabel")}</label>
