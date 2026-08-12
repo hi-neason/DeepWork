@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_WORKSPACE_DIR } from "../config/paths";
 
 export type LogLevel = "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR";
 
@@ -30,8 +31,8 @@ let warnedNoWorkspace = false;
 /** Called by settings save / app start to refresh the active log config. */
 export function configureLogger(opts: { enabled: boolean; workspaceDir: string }): void {
   cachedEnabled = !!opts.enabled;
-  cachedWorkspace = opts.workspaceDir?.trim() ?? "";
-  if (cachedWorkspace) warnedNoWorkspace = false;
+  cachedWorkspace = opts.workspaceDir?.trim() || DEFAULT_WORKSPACE_DIR;
+  warnedNoWorkspace = false;
 }
 
 function isLikelySecret(key: string): boolean {
@@ -87,9 +88,8 @@ function ensure(dir: string): Promise<void> {
 
 /**
  * Write one structured log line (JSONL) to <workspace>/sessions/<session>/deepwork.log.
- * Gated by cachedEnabled (the settings toggle). When no workspace is set, only
- * ERROR-level lines fall back to the app-data dir so fatal crashes are never lost;
- * all other levels are suppressed with a one-time console warning.
+ * Gated by cachedEnabled (the settings toggle). An empty configured workspace
+ * resolves to the built-in default workspace in configureLogger().
  */
 export function log(
   level: LogLevel,
