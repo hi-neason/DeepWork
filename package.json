@@ -2,7 +2,7 @@
   "name": "deepwork",
   "version": "0.2.2",
   "description": "A local-first personal desktop AI agent with MCP plugins and GUI fallback.",
-  "main": "./out/main/index.js",
+  "main": "./out/main/index.cjs",
   "author": "DeepWork contributors",
   "license": "MIT",
   "type": "module",

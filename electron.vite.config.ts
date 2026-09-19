@@ -8,9 +8,13 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, "src/main/index.ts") },
+        // Emit CJS with a .cjs extension (same as preload). With "type":
+        // "module" in package.json an ESM .js output would be loaded as an ES
+        // module by Electron, breaking named imports from "electron" (e.g.
+        // BrowserWindow). better-sqlite3 / nut.js stay external.
+        output: { format: "cjs", entryFileNames: "[name].cjs" },
       },
     },
-    // better-sqlite3 and nut.js are native modules; externalizeDepsPlugin keeps them external.
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
